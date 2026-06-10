@@ -1,95 +1,57 @@
-import React, { useState } from 'react';
+import React, { useMemo } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
+  ActivityIndicator,
   ScrollView,
+  StyleSheet,
+  Text,
   TextInput,
   TouchableOpacity,
-  FlatList,
-  Alert,
+  View,
 } from 'react-native';
+import { useDailyTotals } from '../../hooks/useDailyTotals';
+import { MealLog, MealType } from '../../services/mealLogService';
+import { useMealLogger, MealLogFields } from '../../hooks/useMealLogger';
 import { Colors, FontFamily } from '../../theme';
-import { useMacroStore } from '../../store/macroStore';
-import { useUserStore } from '../../store/userStore';
-import { DINING_HALL_MENU } from '../../data/mockData';
-import { DiningHallItem, MealLog } from '../../types';
-import FloatingXP from '../../components/FloatingXP';
 
-type TabType = 'scan' | 'search' | 'dining';
+const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
+
+type FieldConfig = {
+  key: keyof MealLogFields;
+  label: string;
+  placeholder: string;
+  keyboardType?: 'default' | 'numeric' | 'decimal-pad';
+};
+
+const FIELD_CONFIGS: FieldConfig[] = [
+  { key: 'freeText', label: 'Food name', placeholder: 'Chicken rice bowl' },
+  { key: 'calories', label: 'Calories', placeholder: '520', keyboardType: 'decimal-pad' },
+  { key: 'proteinG', label: 'Protein', placeholder: '38', keyboardType: 'decimal-pad' },
+  { key: 'carbsG', label: 'Carbs', placeholder: '62', keyboardType: 'decimal-pad' },
+  { key: 'fatG', label: 'Fat', placeholder: '14', keyboardType: 'decimal-pad' },
+  { key: 'quantity', label: 'Quantity', placeholder: '1', keyboardType: 'decimal-pad' },
+];
+
+function formatMacro(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+function formatGoal(value: number | null | undefined, unit: string): string {
+  return value === null || value === undefined ? 'No goal' : `${value}${unit}`;
+}
+
+function formatMealTime(eatenAt: string): string {
+  return new Date(eatenAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
 
 export default function MealLoggerScreen() {
-  const [activeTab, setActiveTab] = useState<TabType>('dining');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [scanning, setScanning] = useState(false);
-  const [scanResult, setScanResult] = useState<DiningHallItem | null>(null);
-  const [xpToast, setXpToast] = useState(false);
-  const [showFloatingXP, setShowFloatingXP] = useState(false);
-  const [scanMealType, setScanMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>('lunch');
+  const today = useMemo(() => new Date(), []);
+  const logger = useMealLogger();
+  const daily = useDailyTotals(today);
 
-  const addMeal = useMacroStore((s) => s.addMeal);
-  const addXp = useUserStore((s) => s.addXp);
-  const addPoints = useUserStore((s) => s.addPoints);
-  const incrementMealsLogged = useUserStore((s) => s.incrementMealsLogged);
-
-  const [selectedCategory, setSelectedCategory] = useState<'breakfast' | 'lunch' | 'dinner'>('lunch');
-
-  const filteredMenu = DINING_HALL_MENU.filter(
-    (item) =>
-      item.category === selectedCategory &&
-      (searchQuery === '' || item.name.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
-
-  function logItem(item: DiningHallItem, source: MealLog['source'] = 'dining_hall') {
-    const meal: MealLog = {
-      id: `ml-${Date.now()}`,
-      userId: 'demo-001',
-      mealName: item.name,
-      calories: item.calories,
-      protein: item.protein,
-      carbs: item.carbs,
-      fats: item.fats,
-      loggedAt: new Date().toISOString(),
-      photoUrl: null,
-      source,
-      mealType: item.category === 'breakfast' ? 'breakfast' : item.category === 'lunch' ? 'lunch' : 'dinner',
-    };
-    addMeal(meal);
-    addXp(50);
-    addPoints(10);
-    incrementMealsLogged();
-    triggerFeedback();
+  async function handleSubmit(): Promise<void> {
+    await logger.submit();
+    daily.refresh();
   }
-
-  function triggerFeedback() {
-    setXpToast(true);
-    setShowFloatingXP(true);
-    setTimeout(() => setXpToast(false), 2500);
-  }
-
-  function handleScan() {
-    setScanning(true);
-    // Simulate AI scan
-    setTimeout(() => {
-      setScanning(false);
-      setScanResult({
-        id: 'scan-result',
-        name: 'Grilled Chicken Salad',
-        category: 'lunch',
-        calories: 420,
-        protein: 45,
-        carbs: 22,
-        fats: 16,
-        diningHall: 'AI Scan',
-      });
-    }, 2000);
-  }
-
-  const tabs: { key: TabType; label: string; icon: string }[] = [
-    { key: 'scan', label: 'Photo Scan', icon: '📷' },
-    { key: 'search', label: 'Search', icon: '🔍' },
-    { key: 'dining', label: 'Rutgers Dining', icon: '🍽️' },
-  ];
 
   return (
     <View style={styles.container}>
@@ -97,292 +59,204 @@ export default function MealLoggerScreen() {
         <Text style={styles.title}>LOG A MEAL</Text>
       </View>
 
-      {/* Tab Switcher */}
-      <View style={styles.tabRow}>
-        {tabs.map((tab) => (
-          <TouchableOpacity
-            key={tab.key}
-            style={[styles.tab, activeTab === tab.key && styles.tabActive]}
-            onPress={() => setActiveTab(tab.key)}
-          >
-            <Text style={styles.tabIcon}>{tab.icon}</Text>
-            <Text style={[styles.tabLabel, activeTab === tab.key && styles.tabLabelActive]}>
-              {tab.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Floating XP Animation */}
-      <FloatingXP amount={50} visible={showFloatingXP} onDone={() => setShowFloatingXP(false)} />
-
-      {/* XP Toast */}
-      {xpToast && (
-        <View style={styles.xpToast}>
-          <Text style={styles.xpToastText}>+50 XP  ·  Meal logged! 🎉</Text>
-        </View>
-      )}
-
-      {/* Scan Tab */}
-      {activeTab === 'scan' && (
-        <ScrollView style={styles.tabContent} contentContainerStyle={styles.tabContentInner}>
-          <View style={styles.scanArea}>
-            {scanning ? (
-              <View style={styles.scanLoading}>
-                <Text style={styles.scanEmoji}>🔄</Text>
-                <Text style={styles.scanText}>Analyzing your meal...</Text>
-              </View>
-            ) : scanResult ? (
-              <View>
-                <Text style={styles.scanResultTitle}>{scanResult.name}</Text>
-                <View style={styles.scanMacros}>
-                  <MacroPill label="Cal" value={scanResult.calories} color={Colors.primary} />
-                  <MacroPill label="Protein" value={scanResult.protein} color={Colors.primary} />
-                  <MacroPill label="Carbs" value={scanResult.carbs} color={Colors.accent} />
-                  <MacroPill label="Fats" value={scanResult.fats} color={Colors.gold} />
-                </View>
-                {/* Meal Type Selector */}
-                <View style={styles.mealTypeRow}>
-                  {(['breakfast', 'lunch', 'dinner', 'snack'] as const).map((mt) => (
-                    <TouchableOpacity
-                      key={mt}
-                      style={[styles.mealTypeBtn, scanMealType === mt && styles.mealTypeBtnActive]}
-                      onPress={() => setScanMealType(mt)}
-                    >
-                      <Text style={[styles.mealTypeText, scanMealType === mt && styles.mealTypeTextActive]}>
-                        {mt.charAt(0).toUpperCase() + mt.slice(1)}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                <TouchableOpacity
-                  style={styles.confirmBtn}
-                  onPress={() => {
-                    const adjusted = { ...scanResult, category: scanMealType as any };
-                    logItem(adjusted, 'ai_scan');
-                    setScanResult(null);
-                  }}
-                >
-                  <Text style={styles.confirmBtnText}>CONFIRM & LOG</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => setScanResult(null)}>
-                  <Text style={styles.retakeText}>Retake Photo</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={styles.scanPlaceholder}>
-                <Text style={{ fontSize: 64 }}>📷</Text>
-                <Text style={styles.scanPlaceholderText}>
-                  Take a photo of your meal
-                </Text>
-                <TouchableOpacity style={styles.scanBtn} onPress={handleScan}>
-                  <Text style={styles.scanBtnText}>SCAN MEAL</Text>
-                </TouchableOpacity>
-              </View>
-            )}
+      <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>TODAY</Text>
+            <TouchableOpacity style={styles.refreshButton} onPress={daily.refresh}>
+              <Text style={styles.refreshText}>Refresh</Text>
+            </TouchableOpacity>
           </View>
-        </ScrollView>
-      )}
 
-      {/* Search Tab */}
-      {activeTab === 'search' && (
-        <ScrollView style={styles.tabContent} contentContainerStyle={styles.tabContentInner}>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search foods..."
-            placeholderTextColor={Colors.textSecondary}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          {DINING_HALL_MENU.filter((i) =>
-            searchQuery.length > 0 && i.name.toLowerCase().includes(searchQuery.toLowerCase())
-          ).map((item) => (
-            <DiningMenuItem key={item.id} item={item} onLog={() => logItem(item, 'search')} />
-          ))}
-          {searchQuery.length > 0 && (
-            <Text style={styles.hintText}>
-              Results from Rutgers dining database
-            </Text>
+          {daily.error && (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorText}>{daily.error.message}</Text>
+            </View>
           )}
-        </ScrollView>
-      )}
 
-      {/* Dining Tab */}
-      {activeTab === 'dining' && (
-        <ScrollView style={styles.tabContent} contentContainerStyle={styles.tabContentInner}>
-          <View style={styles.categoryRow}>
-            {(['breakfast', 'lunch', 'dinner'] as const).map((cat) => (
+          {daily.isLoading ? (
+            <View style={styles.loadingBox}>
+              <ActivityIndicator color={Colors.primary} />
+            </View>
+          ) : (
+            <View style={styles.totalsGrid}>
+              <TotalPill label="Cal" value={formatMacro(daily.totals.calories)} goal={formatGoal(daily.goals?.calories, '')} />
+              <TotalPill label="Protein" value={`${formatMacro(daily.totals.proteinG)}g`} goal={formatGoal(daily.goals?.proteinG, 'g')} />
+              <TotalPill label="Carbs" value={`${formatMacro(daily.totals.carbsG)}g`} goal={formatGoal(daily.goals?.carbsG, 'g')} />
+              <TotalPill label="Fat" value={`${formatMacro(daily.totals.fatG)}g`} goal={formatGoal(daily.goals?.fatG, 'g')} />
+            </View>
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>MANUAL ENTRY</Text>
+
+          {FIELD_CONFIGS.map((field) => (
+            <View key={field.key} style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>{field.label}</Text>
+              <TextInput
+                style={styles.input}
+                placeholder={field.placeholder}
+                placeholderTextColor={Colors.textSecondary}
+                value={logger.fields[field.key]}
+                onChangeText={(value) => logger.setField(field.key, value)}
+                keyboardType={field.keyboardType ?? 'default'}
+              />
+            </View>
+          ))}
+
+          <View style={styles.mealTypeRow}>
+            {MEAL_TYPES.map((type) => (
               <TouchableOpacity
-                key={cat}
-                style={[styles.categoryBtn, selectedCategory === cat && styles.categoryBtnActive]}
-                onPress={() => setSelectedCategory(cat)}
+                key={type}
+                style={[styles.mealTypeButton, logger.mealType === type && styles.mealTypeButtonActive]}
+                onPress={() => logger.setMealType(type)}
               >
                 <Text
-                  style={[
-                    styles.categoryText,
-                    selectedCategory === cat && styles.categoryTextActive,
-                  ]}
+                  style={[styles.mealTypeText, logger.mealType === type && styles.mealTypeTextActive]}
                 >
-                  {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                  {type.charAt(0).toUpperCase() + type.slice(1)}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
 
-          {filteredMenu.map((item) => (
-            <DiningMenuItem key={item.id} item={item} onLog={() => logItem(item)} />
-          ))}
-        </ScrollView>
-      )}
+          {logger.error && (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorText}>{logger.error}</Text>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={[styles.submitButton, logger.isSubmitting && styles.submitButtonDisabled]}
+            onPress={handleSubmit}
+            disabled={logger.isSubmitting}
+          >
+            <Text style={styles.submitButtonText}>
+              {logger.isSubmitting ? 'SAVING...' : 'SAVE MEAL'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>CONFIRMED MEALS</Text>
+          {daily.isLoading ? (
+            <View style={styles.loadingBox}>
+              <ActivityIndicator color={Colors.primary} />
+            </View>
+          ) : daily.meals.length === 0 ? (
+            <Text style={styles.emptyText}>No meals logged yet.</Text>
+          ) : (
+            daily.meals.map((meal) => <MealRow key={meal.id} meal={meal} />)
+          )}
+        </View>
+      </ScrollView>
     </View>
   );
 }
 
-function MacroPill({ label, value, color }: { label: string; value: number; color: string }) {
+function TotalPill({ label, value, goal }: { label: string; value: string; goal: string }) {
   return (
-    <View style={[pillStyles.pill, { borderColor: color + '44' }]}>
-      <Text style={[pillStyles.value, { color }]}>{value}</Text>
-      <Text style={pillStyles.label}>{label}</Text>
+    <View style={styles.totalPill}>
+      <Text style={styles.totalValue}>{value}</Text>
+      <Text style={styles.totalLabel}>{label}</Text>
+      <Text style={styles.totalGoal}>{goal}</Text>
     </View>
   );
 }
 
-const pillStyles = StyleSheet.create({
-  pill: {
-    backgroundColor: Colors.surface2,
-    borderRadius: 10,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    alignItems: 'center',
-    minWidth: 70,
-  },
-  value: { fontFamily: FontFamily.displayBold, fontSize: 18 },
-  label: { fontFamily: FontFamily.body, fontSize: 10, color: Colors.textSecondary, marginTop: 2 },
-});
+function MealRow({ meal }: { meal: MealLog }) {
+  const calories = meal.calories * meal.quantity;
+  const protein = meal.proteinG * meal.quantity;
+  const carbs = meal.carbsG * meal.quantity;
+  const fat = meal.fatG * meal.quantity;
 
-function DiningMenuItem({ item, onLog }: { item: DiningHallItem; onLog: () => void }) {
   return (
-    <View style={menuStyles.card}>
-      <View style={menuStyles.info}>
-        <Text style={menuStyles.name}>{item.name}</Text>
-        <Text style={menuStyles.hall}>{item.diningHall}</Text>
-        <Text style={menuStyles.macros}>
-          {item.calories} cal · {item.protein}P · {item.carbs}C · {item.fats}F
+    <View style={styles.mealCard}>
+      <View style={styles.mealInfo}>
+        <Text style={styles.mealName} numberOfLines={1}>{meal.freeText}</Text>
+        <Text style={styles.mealMeta}>
+          {formatMealTime(meal.eatenAt)} · {meal.mealType} · qty {formatMacro(meal.quantity)}
         </Text>
       </View>
-      <TouchableOpacity style={menuStyles.addBtn} onPress={onLog}>
-        <Text style={menuStyles.addBtnText}>+ ADD</Text>
-      </TouchableOpacity>
+      <View style={styles.mealMacros}>
+        <Text style={styles.mealCalories}>{formatMacro(calories)} cal</Text>
+        <Text style={styles.mealMacroDetail}>
+          {formatMacro(protein)}P · {formatMacro(carbs)}C · {formatMacro(fat)}F
+        </Text>
+      </View>
     </View>
   );
 }
-
-const menuStyles = StyleSheet.create({
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  info: { flex: 1 },
-  name: { fontFamily: FontFamily.bodyMedium, fontSize: 14, color: Colors.textPrimary },
-  hall: { fontFamily: FontFamily.body, fontSize: 11, color: Colors.textSecondary, marginTop: 2 },
-  macros: { fontFamily: FontFamily.body, fontSize: 11, color: Colors.primary, marginTop: 4 },
-  addBtn: {
-    backgroundColor: Colors.primary + '18',
-    borderWidth: 1,
-    borderColor: Colors.primary + '44',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  addBtnText: { fontFamily: FontFamily.displayBold, fontSize: 12, color: Colors.primary },
-});
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   topBar: { paddingTop: 60, paddingHorizontal: 20, paddingBottom: 12 },
-  title: { fontFamily: FontFamily.displayBold, fontSize: 24, color: Colors.textPrimary, letterSpacing: 1 },
-  tabRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 8, marginBottom: 4 },
-  tab: {
-    flex: 1,
+  title: {
+    fontFamily: FontFamily.displayBold,
+    fontSize: 24,
+    color: Colors.textPrimary,
+    letterSpacing: 1,
+  },
+  content: { flex: 1 },
+  contentInner: { padding: 16, paddingBottom: 32 },
+  section: {
+    marginBottom: 18,
+    backgroundColor: Colors.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 14,
+  },
+  sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  tabActive: { backgroundColor: Colors.primary + '14', borderColor: Colors.primary + '44' },
-  tabIcon: { fontSize: 14 },
-  tabLabel: { fontFamily: FontFamily.bodyMedium, fontSize: 12, color: Colors.textSecondary },
-  tabLabelActive: { color: Colors.primary },
-  tabContent: { flex: 1 },
-  tabContentInner: { padding: 16, paddingBottom: 32 },
-  xpToast: {
-    backgroundColor: Colors.primary,
-    marginHorizontal: 16,
-    borderRadius: 12,
-    paddingVertical: 10,
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  xpToastText: { fontFamily: FontFamily.displayBold, fontSize: 14, color: Colors.background },
-  scanArea: {
-    backgroundColor: Colors.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 24,
-    minHeight: 300,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  scanLoading: { alignItems: 'center', gap: 12 },
-  scanEmoji: { fontSize: 48 },
-  scanText: { fontFamily: FontFamily.bodyMedium, fontSize: 16, color: Colors.textSecondary },
-  scanResultTitle: { fontFamily: FontFamily.displayBold, fontSize: 22, color: Colors.textPrimary, textAlign: 'center', marginBottom: 16 },
-  scanMacros: { flexDirection: 'row', gap: 8, justifyContent: 'center', marginBottom: 12 },
-  mealTypeRow: { flexDirection: 'row', gap: 6, marginBottom: 16, justifyContent: 'center' },
-  mealTypeBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: Colors.surface2,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  mealTypeBtnActive: { backgroundColor: Colors.primary + '14', borderColor: Colors.primary + '44' },
-  mealTypeText: { fontFamily: FontFamily.body, fontSize: 12, color: Colors.textSecondary },
-  mealTypeTextActive: { color: Colors.primary },
-  confirmBtn: {
-    backgroundColor: Colors.primary,
-    borderRadius: 50,
-    paddingVertical: 14,
-    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 12,
   },
-  confirmBtnText: { fontFamily: FontFamily.displayBold, fontSize: 15, color: Colors.background },
-  retakeText: { fontFamily: FontFamily.bodyMedium, fontSize: 13, color: Colors.textSecondary, textAlign: 'center' },
-  scanPlaceholder: { alignItems: 'center', gap: 16 },
-  scanPlaceholderText: { fontFamily: FontFamily.bodyMedium, fontSize: 16, color: Colors.textSecondary },
-  scanBtn: {
-    backgroundColor: Colors.primary,
-    borderRadius: 50,
-    paddingVertical: 14,
-    paddingHorizontal: 40,
+  sectionTitle: {
+    fontFamily: FontFamily.displayBold,
+    fontSize: 18,
+    color: Colors.textPrimary,
+    letterSpacing: 1,
+    marginBottom: 12,
   },
-  scanBtnText: { fontFamily: FontFamily.displayBold, fontSize: 15, color: Colors.background },
-  searchInput: {
-    backgroundColor: Colors.surface,
+  refreshButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.primary + '44',
+    backgroundColor: Colors.primary + '12',
+  },
+  refreshText: { fontFamily: FontFamily.bodyMedium, fontSize: 12, color: Colors.primary },
+  totalsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  totalPill: {
+    flexBasis: '48%',
+    flexGrow: 1,
+    backgroundColor: Colors.surface2,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 12,
+  },
+  totalValue: { fontFamily: FontFamily.displayBold, fontSize: 22, color: Colors.primary },
+  totalLabel: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: 12,
+    color: Colors.textPrimary,
+    marginTop: 2,
+  },
+  totalGoal: { fontFamily: FontFamily.body, fontSize: 11, color: Colors.textSecondary, marginTop: 2 },
+  inputGroup: { marginBottom: 12 },
+  inputLabel: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginBottom: 6,
+  },
+  input: {
+    backgroundColor: Colors.surface2,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.border,
@@ -390,20 +264,65 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.body,
     fontSize: 15,
     color: Colors.textPrimary,
-    marginBottom: 12,
   },
-  hintText: { fontFamily: FontFamily.body, fontSize: 12, color: Colors.textSecondary, textAlign: 'center', marginTop: 8 },
-  categoryRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
-  categoryBtn: {
-    flex: 1,
-    paddingVertical: 10,
+  mealTypeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  mealTypeButton: {
+    flexGrow: 1,
     alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderRadius: 10,
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.surface2,
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  categoryBtnActive: { backgroundColor: Colors.primary + '14', borderColor: Colors.primary + '44' },
-  categoryText: { fontFamily: FontFamily.bodyMedium, fontSize: 13, color: Colors.textSecondary },
-  categoryTextActive: { color: Colors.primary },
+  mealTypeButtonActive: { backgroundColor: Colors.primary + '14', borderColor: Colors.primary + '44' },
+  mealTypeText: { fontFamily: FontFamily.bodyMedium, fontSize: 12, color: Colors.textSecondary },
+  mealTypeTextActive: { color: Colors.primary },
+  submitButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: 50,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  submitButtonDisabled: { opacity: 0.6 },
+  submitButtonText: { fontFamily: FontFamily.displayBold, fontSize: 15, color: Colors.background },
+  loadingBox: { paddingVertical: 22, alignItems: 'center' },
+  errorBanner: {
+    backgroundColor: Colors.error + '16',
+    borderColor: Colors.error + '55',
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 12,
+  },
+  errorText: { fontFamily: FontFamily.bodyMedium, fontSize: 12, color: Colors.error },
+  emptyText: {
+    fontFamily: FontFamily.body,
+    fontSize: 14,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
+  mealCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surface2,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 12,
+    marginBottom: 8,
+  },
+  mealInfo: { flex: 1, marginRight: 8 },
+  mealName: { fontFamily: FontFamily.bodyMedium, fontSize: 14, color: Colors.textPrimary },
+  mealMeta: { fontFamily: FontFamily.body, fontSize: 11, color: Colors.textSecondary, marginTop: 3 },
+  mealMacros: { alignItems: 'flex-end' },
+  mealCalories: { fontFamily: FontFamily.displayBold, fontSize: 15, color: Colors.textPrimary },
+  mealMacroDetail: {
+    fontFamily: FontFamily.body,
+    fontSize: 10,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
 });
