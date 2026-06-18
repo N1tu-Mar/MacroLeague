@@ -1,14 +1,39 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  ActivityIndicator,
   Alert,
 } from 'react-native';
 import { Colors, FontFamily } from '../../theme';
 import { useUserStore } from '../../store/userStore';
+import { supabase } from '../../lib/supabase';
+import { getProfileGoals, updateProfileGoals } from '../../services/profileService';
+
+/**
+ * Mirrors the profiles macro-goal check constraints so the user gets a clear
+ * message before the database rejects the update. `fats` maps to the profile's
+ * unsaturated fat goal (trans fat is always 0).
+ */
+function validateGoals(calories: number, protein: number, carbs: number, fats: number): string | null {
+  if (calories <= 1400) {
+    return 'Calorie goal must be greater than 1400.';
+  }
+  if (protein < 50) {
+    return 'Protein goal must be at least 50g.';
+  }
+  const carbEnergy = carbs * 4;
+  if (carbEnergy < calories * 0.25 || carbEnergy > calories * 0.65) {
+    return 'Carbs must supply between 25% and 65% of your calorie goal.';
+  }
+  if (fats * 9 < calories * 0.1) {
+    return 'Fat goal is too low; it must supply at least 10% of your calorie goal.';
+  }
+  return null;
+}
 
 export default function EditGoalsScreen({ navigation }: any) {
   const dailyGoals = useUserStore((s) => s.dailyGoals);
@@ -18,11 +43,79 @@ export default function EditGoalsScreen({ navigation }: any) {
   const [protein, setProtein] = useState(dailyGoals.protein);
   const [carbs, setCarbs] = useState(dailyGoals.carbs);
   const [fats, setFats] = useState(dailyGoals.fats);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
-  function save() {
-    setDailyGoals({ calories, protein, carbs, fats });
-    Alert.alert('Saved', 'Your macro goals have been updated!');
-    navigation.goBack();
+  // Load the real goals from the profile so the sliders start from persisted
+  // values rather than the local mock defaults.
+  useEffect(() => {
+    let active = true;
+
+    async function load(): Promise<void> {
+      try {
+        const { data } = await supabase.auth.getUser();
+        if (!data.user) {
+          return;
+        }
+        const goals = await getProfileGoals(data.user.id);
+        if (active && goals) {
+          if (goals.goalCalories > 0) setCalories(goals.goalCalories);
+          if (goals.goalProteinG > 0) setProtein(goals.goalProteinG);
+          if (goals.goalCarbsG > 0) setCarbs(goals.goalCarbsG);
+          if (goals.goalUnsaturatedFatG > 0) setFats(goals.goalUnsaturatedFatG);
+        }
+      } catch {
+        // Fall back to the local defaults already in state.
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    }
+
+    void load();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function save() {
+    const validationError = validateGoals(calories, protein, carbs, fats);
+    if (validationError) {
+      Alert.alert('Check your goals', validationError);
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const { data } = await supabase.auth.getUser();
+      if (!data.user) {
+        throw new Error('You are not signed in.');
+      }
+      await updateProfileGoals(data.user.id, {
+        goalCalories: calories,
+        goalProteinG: protein,
+        goalCarbsG: carbs,
+        goalUnsaturatedFatG: fats,
+      });
+      // Keep the legacy local store in sync for any mock surfaces still reading it.
+      setDailyGoals({ calories, protein, carbs, fats });
+      Alert.alert('Saved', 'Your macro goals have been updated!');
+      navigation.goBack();
+    } catch (caughtError) {
+      Alert.alert(
+        'Could not save goals',
+        caughtError instanceof Error ? caughtError.message : 'Please try again.'
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, styles.loadingBox]}>
+        <ActivityIndicator color={Colors.primary} size="large" />
+      </View>
+    );
   }
 
   return (
@@ -34,7 +127,7 @@ export default function EditGoalsScreen({ navigation }: any) {
       <Text style={styles.title}>EDIT MACRO GOALS</Text>
       <Text style={styles.subtitle}>Adjust your daily nutrition targets</Text>
 
-      <MacroSlider label="Calories" value={calories} onChange={setCalories} min={1200} max={5000} step={50} unit="cal" color={Colors.primary} />
+      <MacroSlider label="Calories" value={calories} onChange={setCalories} min={1500} max={5000} step={50} unit="cal" color={Colors.primary} />
       <MacroSlider label="Protein" value={protein} onChange={setProtein} min={50} max={350} step={5} unit="g" color={Colors.primary} />
       <MacroSlider label="Carbs" value={carbs} onChange={setCarbs} min={50} max={500} step={5} unit="g" color={Colors.accent} />
       <MacroSlider label="Fats" value={fats} onChange={setFats} min={20} max={200} step={5} unit="g" color={Colors.gold} />
@@ -65,8 +158,12 @@ export default function EditGoalsScreen({ navigation }: any) {
         </View>
       </View>
 
-      <TouchableOpacity style={styles.saveBtn} onPress={save}>
-        <Text style={styles.saveBtnText}>SAVE GOALS</Text>
+      <TouchableOpacity
+        style={[styles.saveBtn, isSaving && styles.saveBtnDisabled]}
+        onPress={save}
+        disabled={isSaving}
+      >
+        <Text style={styles.saveBtnText}>{isSaving ? 'SAVING...' : 'SAVE GOALS'}</Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -149,6 +246,7 @@ const sliderStyles = StyleSheet.create({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
+  loadingBox: { alignItems: 'center', justifyContent: 'center' },
   content: { padding: 20, paddingTop: 60 },
   backBtn: { marginBottom: 16 },
   backText: { fontFamily: FontFamily.bodyMedium, fontSize: 15, color: Colors.primary },
@@ -180,5 +278,6 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
   },
+  saveBtnDisabled: { opacity: 0.6 },
   saveBtnText: { fontFamily: FontFamily.displayBold, fontSize: 16, color: Colors.background },
 });

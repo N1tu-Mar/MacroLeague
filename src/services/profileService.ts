@@ -43,6 +43,62 @@ export async function updateOnboardingProfile(
   }
 }
 
+export interface ProfileGoalsUpdate {
+  goalCalories: number;
+  goalProteinG: number;
+  goalCarbsG: number;
+  goalUnsaturatedFatG: number;
+}
+
+/**
+ * Loads the current macro goals for a user from their profile row. Returns
+ * null for any goal that has not been set yet.
+ */
+export async function getProfileGoals(userId: string): Promise<ProfileGoalsUpdate | null> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('goal_calories, goal_protein_g, goal_carbs_g, goal_unsaturated_fat_g')
+    .eq('id', userId)
+    .single<{
+      goal_calories: number | null;
+      goal_protein_g: number | null;
+      goal_carbs_g: number | null;
+      goal_unsaturated_fat_g: number | null;
+    }>();
+
+  if (error) throw error;
+  if (!data) return null;
+
+  return {
+    goalCalories: data.goal_calories ?? 0,
+    goalProteinG: data.goal_protein_g ?? 0,
+    goalCarbsG: data.goal_carbs_g ?? 0,
+    goalUnsaturatedFatG: data.goal_unsaturated_fat_g ?? 0,
+  };
+}
+
+/**
+ * Persists macro goals to the user's profile. `goal_trans_fat_g` is always 0
+ * to satisfy the profiles_goal_trans_fat_zero constraint.
+ */
+export async function updateProfileGoals(
+  userId: string,
+  goals: ProfileGoalsUpdate,
+): Promise<void> {
+  const { error } = await supabase
+    .from('profiles')
+    .update({
+      goal_calories: goals.goalCalories,
+      goal_protein_g: goals.goalProteinG,
+      goal_carbs_g: goals.goalCarbsG,
+      goal_unsaturated_fat_g: goals.goalUnsaturatedFatG,
+      goal_trans_fat_g: 0,
+    })
+    .eq('id', userId);
+
+  if (error) throw error;
+}
+
 /** Converts a display name into a valid username slug (3-30 chars). */
 export function slugifyUsername(name: string): string {
   const slug = name

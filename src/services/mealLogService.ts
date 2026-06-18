@@ -433,9 +433,12 @@ export async function getMealsForDay(date: Date, timezone: string): Promise<Meal
   return (data ?? []).map(mapMealLog);
 }
 
-export async function getDailyTotals(date: Date, timezone: string): Promise<DailyTotals> {
-  const meals = await getMealsForDay(date, timezone);
-
+/**
+ * Pure reducer: sums a list of already-loaded meals into daily totals. Kept
+ * separate so callers that already have the day's rows (e.g. useDailyTotals)
+ * can compute totals in memory without issuing a second `meal_logs` query.
+ */
+export function sumMealTotals(meals: MealLog[]): DailyTotals {
   if (meals.length === 0) {
     return { ...ZERO_TOTALS };
   }
@@ -450,6 +453,11 @@ export async function getDailyTotals(date: Date, timezone: string): Promise<Dail
     }),
     { ...ZERO_TOTALS }
   );
+}
+
+export async function getDailyTotals(date: Date, timezone: string): Promise<DailyTotals> {
+  const meals = await getMealsForDay(date, timezone);
+  return sumMealTotals(meals);
 }
 
 export async function editMeal(

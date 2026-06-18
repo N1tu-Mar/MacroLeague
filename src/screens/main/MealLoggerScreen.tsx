@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -8,8 +9,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useDailyTotals } from '../../hooks/useDailyTotals';
-import { MealLog, MealType } from '../../services/mealLogService';
+import { deleteMeal, MealLog, MealType } from '../../services/mealLogService';
 import { useMealLogger, MealLogFields } from '../../hooks/useMealLogger';
 import { useMealEstimate } from '../../hooks/useMealEstimate';
 import { MealEstimateCandidate } from '../../services/nutrition/types';
@@ -50,18 +52,56 @@ function formatMealTime(eatenAt: string): string {
 export default function MealLoggerScreen() {
   const today = useMemo(() => new Date(), []);
   const logger = useMealLogger();
-  const estimate = useMealEstimate();
   const daily = useDailyTotals(today);
-  const [entryMode, setEntryMode] = useState<EntryMode>('manual');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Refresh when the Log tab regains focus so edits/deletes made elsewhere,
+  // or a fresh app session, always show the current persisted state.
+  useFocusEffect(
+    useCallback(() => {
+      daily.refresh();
+    }, [daily.refresh])
+  );
 
   async function handleSubmit(): Promise<void> {
-    await logger.submit();
-    daily.refresh();
+    const saved = await logger.submit();
+    // Only reload totals/meals when the save actually succeeded, so a failed
+    // save does not trigger a pointless refresh or mask the error banner.
+    if (saved) {
+      daily.refresh();
+    }
   }
 
-  function handleUseCandidate(candidate: MealEstimateCandidate): void {
-    logger.applyEstimate(candidate);
-    setEntryMode('manual');
+  function handleEdit(meal: MealLog): void {
+    logger.beginEdit(meal);
+  }
+
+  function handleDelete(meal: MealLog): void {
+    Alert.alert('Delete meal', `Remove "${meal.freeText}" from today?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          setDeletingId(meal.id);
+          try {
+            await deleteMeal(meal.id);
+            // If the row being edited was deleted, drop the stale edit session.
+            if (logger.editingId === meal.id) {
+              logger.cancelEdit();
+            }
+            daily.refresh();
+          } catch (caughtError) {
+            Alert.alert(
+              'Could not delete',
+              caughtError instanceof Error ? caughtError.message : 'Please try again.'
+            );
+          } finally {
+            setDeletingId(null);
+          }
+        },
+      },
+    ]);
   }
 
   return (
@@ -101,79 +141,62 @@ export default function MealLoggerScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>ADD A MEAL</Text>
+          <Text style={styles.sectionTitle}>{logger.editingId ? 'EDIT MEAL' : 'ADD A MEAL'}</Text>
 
-          <View style={styles.modeRow}>
-            <ModeButton
-              label="Manual"
-              active={entryMode === 'manual'}
-              onPress={() => setEntryMode('manual')}
-            />
-            <ModeButton
-              label="Describe"
-              active={entryMode === 'describe'}
-              onPress={() => setEntryMode('describe')}
-            />
-          </View>
+          {FIELD_CONFIGS.map((field) => (
+            <View key={field.key} style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>{field.label}</Text>
+              <TextInput
+                style={styles.input}
+                placeholder={field.placeholder}
+                placeholderTextColor={Colors.textSecondary}
+                value={logger.fields[field.key]}
+                onChangeText={(value) => logger.setField(field.key, value)}
+                keyboardType={field.keyboardType ?? 'default'}
+              />
+            </View>
+          ))}
 
-          {entryMode === 'describe' ? (
-            <DescribePanel estimate={estimate} onUse={handleUseCandidate} />
-          ) : (
-            <>
-              {logger.appliedEstimateName && (
-                <View style={styles.estimateBanner}>
-                  <Text style={styles.estimateBannerText}>
-                    Estimated from “{logger.appliedEstimateName}”. Review and edit before saving.
-                  </Text>
-                </View>
-              )}
-
-              {FIELD_CONFIGS.map((field) => (
-                <View key={field.key} style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>{field.label}</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder={field.placeholder}
-                    placeholderTextColor={Colors.textSecondary}
-                    value={logger.fields[field.key]}
-                    onChangeText={(value) => logger.setField(field.key, value)}
-                    keyboardType={field.keyboardType ?? 'default'}
-                  />
-                </View>
-              ))}
-
-              <View style={styles.mealTypeRow}>
-                {MEAL_TYPES.map((type) => (
-                  <TouchableOpacity
-                    key={type}
-                    style={[styles.mealTypeButton, logger.mealType === type && styles.mealTypeButtonActive]}
-                    onPress={() => logger.setMealType(type)}
-                  >
-                    <Text
-                      style={[styles.mealTypeText, logger.mealType === type && styles.mealTypeTextActive]}
-                    >
-                      {type.charAt(0).toUpperCase() + type.slice(1)}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              {logger.error && (
-                <View style={styles.errorBanner}>
-                  <Text style={styles.errorText}>{logger.error}</Text>
-                </View>
-              )}
-
+          <View style={styles.mealTypeRow}>
+            {MEAL_TYPES.map((type) => (
               <TouchableOpacity
-                style={[styles.submitButton, logger.isSubmitting && styles.submitButtonDisabled]}
-                onPress={handleSubmit}
-                disabled={logger.isSubmitting}
+                key={type}
+                style={[styles.mealTypeButton, logger.mealType === type && styles.mealTypeButtonActive]}
+                onPress={() => logger.setMealType(type)}
               >
-                <Text style={styles.submitButtonText}>
-                  {logger.isSubmitting ? 'SAVING...' : 'SAVE MEAL'}
+                <Text
+                  style={[styles.mealTypeText, logger.mealType === type && styles.mealTypeTextActive]}
+                >
+                  {type.charAt(0).toUpperCase() + type.slice(1)}
                 </Text>
               </TouchableOpacity>
-            </>
+            ))}
+          </View>
+
+          {logger.error && (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorText}>{logger.error}</Text>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={[styles.submitButton, logger.isSubmitting && styles.submitButtonDisabled]}
+            onPress={handleSubmit}
+            disabled={logger.isSubmitting}
+          >
+            <Text style={styles.submitButtonText}>
+              {logger.isSubmitting
+                ? 'SAVING...'
+                : logger.editingId
+                ? 'UPDATE MEAL'
+                : 'SAVE MEAL'}
+            </Text>
+          </TouchableOpacity>
+
+          {logger.editingId && !logger.isSubmitting && (
+            <TouchableOpacity style={styles.cancelButton} onPress={logger.cancelEdit}>
+              <Text style={styles.cancelButtonText}>CANCEL EDIT</Text>
+            </TouchableOpacity>
           )}
         </View>
 
@@ -186,7 +209,16 @@ export default function MealLoggerScreen() {
           ) : daily.meals.length === 0 ? (
             <Text style={styles.emptyText}>No meals logged yet.</Text>
           ) : (
-            daily.meals.map((meal) => <MealRow key={meal.id} meal={meal} />)
+            daily.meals.map((meal) => (
+              <MealRow
+                key={meal.id}
+                meal={meal}
+                isEditing={logger.editingId === meal.id}
+                isDeleting={deletingId === meal.id}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+              />
+            ))
           )}
         </View>
       </ScrollView>
@@ -310,19 +342,49 @@ function CandidateCard({
   );
 }
 
-function MealRow({ meal }: { meal: MealLog }) {
+function MealRow({
+  meal,
+  isEditing,
+  isDeleting,
+  onEdit,
+  onDelete,
+}: {
+  meal: MealLog;
+  isEditing: boolean;
+  isDeleting: boolean;
+  onEdit: (meal: MealLog) => void;
+  onDelete: (meal: MealLog) => void;
+}) {
   const calories = meal.calories * meal.quantity;
   const protein = meal.proteinG * meal.quantity;
   const carbs = meal.carbsG * meal.quantity;
   const fat = meal.fatG * meal.quantity;
 
   return (
-    <View style={styles.mealCard}>
+    <View style={[styles.mealCard, isEditing && styles.mealCardEditing]}>
       <View style={styles.mealInfo}>
         <Text style={styles.mealName} numberOfLines={1}>{meal.freeText}</Text>
         <Text style={styles.mealMeta}>
           {formatMealTime(meal.eatenAt)} · {meal.mealType} · qty {formatMacro(meal.quantity)}
         </Text>
+        <View style={styles.mealActions}>
+          <TouchableOpacity
+            style={styles.mealActionButton}
+            onPress={() => onEdit(meal)}
+            disabled={isDeleting}
+          >
+            <Text style={styles.mealActionText}>Edit</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.mealActionButton}
+            onPress={() => onDelete(meal)}
+            disabled={isDeleting}
+          >
+            <Text style={[styles.mealActionText, styles.mealActionDelete]}>
+              {isDeleting ? 'Deleting...' : 'Delete'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
       <View style={styles.mealMacros}>
         <Text style={styles.mealCalories}>{formatMacro(calories)} cal</Text>
@@ -504,6 +566,15 @@ const styles = StyleSheet.create({
   },
   submitButtonDisabled: { opacity: 0.6 },
   submitButtonText: { fontFamily: FontFamily.displayBold, fontSize: 15, color: Colors.background },
+  cancelButton: {
+    marginTop: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: 50,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  cancelButtonText: { fontFamily: FontFamily.bodyMedium, fontSize: 13, color: Colors.textSecondary },
   loadingBox: { paddingVertical: 22, alignItems: 'center' },
   errorBanner: {
     backgroundColor: Colors.error + '16',
@@ -531,9 +602,14 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 8,
   },
+  mealCardEditing: { borderColor: Colors.primary + '88' },
   mealInfo: { flex: 1, marginRight: 8 },
   mealName: { fontFamily: FontFamily.bodyMedium, fontSize: 14, color: Colors.textPrimary },
   mealMeta: { fontFamily: FontFamily.body, fontSize: 11, color: Colors.textSecondary, marginTop: 3 },
+  mealActions: { flexDirection: 'row', gap: 14, marginTop: 8 },
+  mealActionButton: { paddingVertical: 2 },
+  mealActionText: { fontFamily: FontFamily.bodyMedium, fontSize: 12, color: Colors.primary },
+  mealActionDelete: { color: Colors.error },
   mealMacros: { alignItems: 'flex-end' },
   mealCalories: { fontFamily: FontFamily.displayBold, fontSize: 15, color: Colors.textPrimary },
   mealMacroDetail: {

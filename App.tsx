@@ -27,7 +27,7 @@ export default function App() {
 
   const [fontsLoaded] = useFonts({
     BarlowCondensed_600SemiBold,
-    BarlowCondensed_700Bold,
+    BarlowCondensed_700Bold,     
     DMSans_400Regular,
     DMSans_500Medium,
     DMSans_600SemiBold,

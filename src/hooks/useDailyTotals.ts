@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import {
   DailyTotals,
-  getDailyTotals,
   getMealsForDay,
   MealLog,
+  sumMealTotals,
 } from '../services/mealLogService';
 
 export interface ProfileGoals {
@@ -143,14 +143,13 @@ export function useDailyTotals(date: Date): {
       setError(null);
 
       try {
-        const [loadedMeals, loadedTotals] = await Promise.all([
-          getMealsForDay(selectedDate, currentProfile.timezone),
-          getDailyTotals(selectedDate, currentProfile.timezone),
-        ]);
+        // Fetch the day's rows once and derive totals in memory, instead of
+        // querying meal_logs a second time just to recompute the same sum.
+        const loadedMeals = await getMealsForDay(selectedDate, currentProfile.timezone);
 
         if (active) {
           setMeals(loadedMeals);
-          setTotals(loadedTotals);
+          setTotals(sumMealTotals(loadedMeals));
         }
       } catch (caughtError) {
         if (active) {
