@@ -3,12 +3,23 @@ import { fromZonedTime, toZonedTime } from 'date-fns-tz';
 
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
+// 'manual'        = user typed every macro themselves.
+// 'usda_fdc'      = (reserved) a direct, unedited USDA row.
+// 'user_estimate' = a USDA-derived estimate the user reviewed/edited/confirmed.
+// NULL on a row   = legacy meal logged before `source` existed; treated as manual.
 export type MealSource = 'manual' | 'usda_fdc' | 'user_estimate';
 
 /**
  * Optional provenance + extended-nutrition fields written when a meal comes from
  * the natural-language estimate flow. All nullable so the manual path is
  * unaffected and existing callers need not pass them.
+ *
+ * IMPORTANT (fat model): `fatG` on the meal is ALWAYS total fat. The three
+ * subtype fields below are independent, individually-nullable values:
+ *   - saturatedFatG   = saturated fat
+ *   - transFatG       = trans fat
+ *   - unsaturatedFatG = unsaturated fat (mono + poly)
+ * A null subtype means "not known" and must never be coerced to 0.
  */
 export interface MealEstimateMeta {
   source?: MealSource | null;
@@ -29,6 +40,7 @@ export interface MealLog {
   calories: number;
   proteinG: number;
   carbsG: number;
+  /** Total fat (grams). Never relabel this as unsaturated fat. */
   fatG: number;
   quantity: number;
   mealType: MealType;
@@ -36,14 +48,46 @@ export interface MealLog {
   clientRequestId: string;
   createdAt: string;
   updatedAt: string;
+  // --- Provenance + fat subtypes (migration 0003; nullable for legacy rows). ---
+  /** NULL is a legacy row → treat as a manual log. */
+  source: MealSource | null;
+  sourceFoodId: string | null;
+  confidence: number | null;
+  /** Subtype grams, per single serving (×quantity for totals). NULL = unknown. */
+  saturatedFatG: number | null;
+  transFatG: number | null;
+  unsaturatedFatG: number | null;
+  fiberG: number | null;
+  sodiumMg: number | null;
+  userConfirmedAt: string | null;
+}
+
+/**
+ * Running total for one fat subtype across a day's meals. Because a subtype can
+ * be unknown (null) on any given meal, we deliberately track coverage instead of
+ * silently summing nulls as zero — the UI uses `knownCount`/`missingCount` to
+ * show an honest "Not available" / "partial" state instead of false precision.
+ */
+export interface FatSubtypeTotal {
+  /** Sum of (subtype × quantity) over only the meals where the value is known. */
+  grams: number;
+  /** Number of the day's meals that supplied a value. */
+  knownCount: number;
+  /** Number of the day's meals where the value was null/unknown. */
+  missingCount: number;
 }
 
 export interface DailyTotals {
   calories: number;
   proteinG: number;
   carbsG: number;
+  /** Total fat — always summed; the schema keeps `fat_g` not-null. */
   fatG: number;
   mealCount: number;
+  // Fat subtypes are coverage-aware so the UI never invents missing data.
+  saturatedFat: FatSubtypeTotal;
+  transFat: FatSubtypeTotal;
+  unsaturatedFat: FatSubtypeTotal;
 }
 
 export interface LogMealParams extends MealEstimateMeta {
@@ -80,6 +124,17 @@ type MealLogRow = {
   client_request_id: string;
   created_at: string;
   updated_at: string;
+  // Nullable provenance + fat-subtype columns added in migration 0003. Older
+  // rows predate these columns, so every one can come back null.
+  source: MealSource | null;
+  source_food_id: string | null;
+  confidence: number | string | null;
+  saturated_fat_g: number | string | null;
+  trans_fat_g: number | string | null;
+  unsaturated_fat_g: number | string | null;
+  fiber_g: number | string | null;
+  sodium_mg: number | string | null;
+  user_confirmed_at: string | null;
 };
 
 type DbErrorShape = {
@@ -154,16 +209,36 @@ const MEAL_TYPES: readonly MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'
 const UUID_V4_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+/** A subtype total that no meal has contributed to yet. */
+function emptySubtypeTotal(): FatSubtypeTotal {
+  return { grams: 0, knownCount: 0, missingCount: 0 };
+}
+
 const ZERO_TOTALS: DailyTotals = {
   calories: 0,
   proteinG: 0,
   carbsG: 0,
   fatG: 0,
   mealCount: 0,
+  saturatedFat: emptySubtypeTotal(),
+  transFat: emptySubtypeTotal(),
+  unsaturatedFat: emptySubtypeTotal(),
 };
 
 function normalizeNumber(value: number | string): number {
   return typeof value === 'number' ? value : Number(value);
+}
+
+/**
+ * Numeric columns that can be null (fat subtypes, confidence). Returns null when
+ * the DB value is null/undefined/non-finite so "unknown" never becomes a fake 0.
+ */
+function normalizeNullableNumber(value: number | string | null | undefined): number | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const parsed = normalizeNumber(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function mapMealLog(row: MealLogRow): MealLog {
@@ -182,6 +257,15 @@ function mapMealLog(row: MealLogRow): MealLog {
     clientRequestId: row.client_request_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    source: row.source ?? null,
+    sourceFoodId: row.source_food_id ?? null,
+    confidence: normalizeNullableNumber(row.confidence),
+    saturatedFatG: normalizeNullableNumber(row.saturated_fat_g),
+    transFatG: normalizeNullableNumber(row.trans_fat_g),
+    unsaturatedFatG: normalizeNullableNumber(row.unsaturated_fat_g),
+    fiberG: normalizeNullableNumber(row.fiber_g),
+    sodiumMg: normalizeNullableNumber(row.sodium_mg),
+    userConfirmedAt: row.user_confirmed_at ?? null,
   };
 }
 
@@ -248,8 +332,32 @@ function validateLogMealParams(params: LogMealParams): ValidatedLogMealParams {
   validateDate('eatenAt', validated.eatenAt);
   validateClientRequestId(validated.clientRequestId);
   validateOptionalMeta(validated);
+  validateFatSubtypes(validated.fatG, validated);
 
   return validated;
+}
+
+// Allow this much slop (grams) when comparing subtype sums to total fat, since
+// USDA per-100g values are rounded and the user may round their own edits.
+const FAT_SUBTYPE_TOLERANCE_G = 0.5;
+
+/**
+ * Guards against an inconsistent fat breakdown reaching the database: the known
+ * subtypes (saturated + trans + unsaturated) must not sum to more than total fat
+ * beyond a small rounding tolerance. Missing subtypes are skipped, not treated
+ * as zero, so a partial breakdown is still allowed.
+ */
+function validateFatSubtypes(totalFat: number, meta: MealEstimateMeta): void {
+  const knownSubtypeSum =
+    (meta.saturatedFatG ?? 0) + (meta.transFatG ?? 0) + (meta.unsaturatedFatG ?? 0);
+
+  if (knownSubtypeSum > totalFat + FAT_SUBTYPE_TOLERANCE_G) {
+    throw new ValidationError(
+      'fatSubtypes',
+      'Saturated, trans, and unsaturated fat together exceed total fat. ' +
+        'Adjust total fat or the fat breakdown before saving.',
+    );
+  }
 }
 
 function validateOptionalMeta(meta: MealEstimateMeta): void {
@@ -316,6 +424,12 @@ function validateEditableFields(params: Partial<EditableMealFields>): Partial<Ed
   }
   if (params.eatenAt !== undefined) {
     validateDate('eatenAt', params.eatenAt);
+  }
+  validateOptionalMeta(params);
+  // Only enforce the subtype-vs-total relationship when total fat is part of the
+  // edit; a partial edit that omits fatG can't be checked here.
+  if (params.fatG !== undefined) {
+    validateFatSubtypes(params.fatG, params);
   }
 
   return validated;
@@ -433,11 +547,40 @@ export async function getMealsForDay(date: Date, timezone: string): Promise<Meal
   return (data ?? []).map(mapMealLog);
 }
 
-export async function getDailyTotals(date: Date, timezone: string): Promise<DailyTotals> {
-  const meals = await getMealsForDay(date, timezone);
+/**
+ * Folds one meal's subtype value into a running FatSubtypeTotal. A null value
+ * counts toward `missingCount` (so the UI can flag incomplete coverage) and is
+ * NOT added to `grams`; a known value is scaled by quantity and summed.
+ */
+function accumulateSubtype(
+  running: FatSubtypeTotal,
+  value: number | null,
+  quantity: number,
+): FatSubtypeTotal {
+  if (value === null) {
+    return { ...running, missingCount: running.missingCount + 1 };
+  }
+  return {
+    grams: running.grams + value * quantity,
+    knownCount: running.knownCount + 1,
+    missingCount: running.missingCount,
+  };
+}
 
+/**
+ * Pure reducer: sums already-loaded meals into daily totals. Kept separate from
+ * the DB call so callers that already hold the day's rows (useDailyTotals) can
+ * compute totals in memory without a second `meal_logs` query. Quantity is
+ * applied consistently to every macro and known fat subtype.
+ */
+export function sumMealTotals(meals: MealLog[]): DailyTotals {
   if (meals.length === 0) {
-    return { ...ZERO_TOTALS };
+    return {
+      ...ZERO_TOTALS,
+      saturatedFat: emptySubtypeTotal(),
+      transFat: emptySubtypeTotal(),
+      unsaturatedFat: emptySubtypeTotal(),
+    };
   }
 
   return meals.reduce<DailyTotals>(
@@ -447,9 +590,22 @@ export async function getDailyTotals(date: Date, timezone: string): Promise<Dail
       carbsG: totals.carbsG + meal.carbsG * meal.quantity,
       fatG: totals.fatG + meal.fatG * meal.quantity,
       mealCount: totals.mealCount + 1,
+      saturatedFat: accumulateSubtype(totals.saturatedFat, meal.saturatedFatG, meal.quantity),
+      transFat: accumulateSubtype(totals.transFat, meal.transFatG, meal.quantity),
+      unsaturatedFat: accumulateSubtype(totals.unsaturatedFat, meal.unsaturatedFatG, meal.quantity),
     }),
-    { ...ZERO_TOTALS }
+    {
+      ...ZERO_TOTALS,
+      saturatedFat: emptySubtypeTotal(),
+      transFat: emptySubtypeTotal(),
+      unsaturatedFat: emptySubtypeTotal(),
+    },
   );
+}
+
+export async function getDailyTotals(date: Date, timezone: string): Promise<DailyTotals> {
+  const meals = await getMealsForDay(date, timezone);
+  return sumMealTotals(meals);
 }
 
 export async function editMeal(
@@ -457,7 +613,8 @@ export async function editMeal(
   params: Partial<EditableMealFields>
 ): Promise<MealLog> {
   const validated = validateEditableFields(params);
-  const updatePayload: Record<string, string | number> = {
+  // `null` is allowed so a blank fat subtype clears the column back to unknown.
+  const updatePayload: Record<string, string | number | null> = {
     updated_at: new Date().toISOString(),
   };
 
@@ -469,6 +626,13 @@ export async function editMeal(
   if (validated.quantity !== undefined) updatePayload.quantity = validated.quantity;
   if (validated.mealType !== undefined) updatePayload.meal_type = validated.mealType;
   if (validated.eatenAt !== undefined) updatePayload.eaten_at = validated.eatenAt.toISOString();
+  // Fat subtypes travel on edits too; a blank/null value is written as SQL NULL
+  // (not 0) so "unknown" stays unknown after an edit.
+  if (validated.saturatedFatG !== undefined) updatePayload.saturated_fat_g = validated.saturatedFatG;
+  if (validated.transFatG !== undefined) updatePayload.trans_fat_g = validated.transFatG;
+  if (validated.unsaturatedFatG !== undefined) updatePayload.unsaturated_fat_g = validated.unsaturatedFatG;
+  if (validated.fiberG !== undefined) updatePayload.fiber_g = validated.fiberG;
+  if (validated.sodiumMg !== undefined) updatePayload.sodium_mg = validated.sodiumMg;
 
   const { data, error } = await supabase
     .from('meal_logs')

@@ -85,6 +85,54 @@ Documented next steps for better composite handling (not built in Phase 1):
 - A Nutritionix-style natural-language nutrition API.
 - Custom campus/dining-hall foods.
 
+## Composite meal descriptions (Phase 2)
+
+Multi-item descriptions (`"2 eggs and toast"`, `"steak and broccoli, carrots"`)
+are handled by an **optional** composite path layered on top of the existing
+whole-query USDA search. The whole-query path is unchanged and is always the
+fallback.
+
+**Architecture chosen:** a provider-independent parser interface
+(`estimate-meal/parser.ts`) with a single optional implementation (OpenAI) that
+is created only when `OPENAI_API_KEY` is present. This combines the two options
+in the brief: the interface + whole-query fallback gives clean degradation, and
+the LLM parser adds real decomposition when configured.
+
+```
+description
+  └─ estimate-meal (authenticated)
+       ├─ DIRECT: whole-query USDA search (always; also the fallback)   ← existing
+       └─ COMPOSITE (only if OPENAI_API_KEY set):
+            ├─ parser.parse(query) → { isComposite, components[], warnings }   ← OpenAI, strict JSON
+            │     (model returns INGREDIENT STRUCTURE ONLY — no macros)
+            ├─ for each component → USDA search (reuses food/search caches)
+            ├─ deterministic gram scaling + summing of USDA nutrients (composite.ts)
+            └─ composite candidate { components, assumptions, warnings, confidenceRange }
+  ← candidates: [composite?, ...direct]   (all editable drafts; never auto-saved)
+```
+
+Key guarantees:
+
+- **USDA is the only source of macro numbers.** The model never returns
+  calories/protein/carbs/fat; the strict `json_schema` has no nutrition fields
+  and every field is re-validated server-side (`validateParsedMeal`).
+- **Single dishes stay whole.** The prompt instructs the model to keep
+  `"macaroni and cheese"`, `"chicken pot pie"`, etc. as one component
+  (`isComposite=false`), so they are not wrongly split.
+- **No silent zeros.** A component with no USDA match contributes nothing and is
+  surfaced as a warning; the estimate is explicitly partial.
+- **Honest fat subtypes.** A composite fat subtype is summed only when every
+  contributing component reports it; otherwise it stays null (unknown).
+- **Graceful fallback at every step.** Missing key, parse timeout, invalid JSON,
+  or zero matched components → the user still gets the direct candidates.
+- **Bounded + safe.** Input is capped at 180 chars; components capped at 8;
+  per-component grams clamped; per-component USDA `pageSize` is small; parse
+  results are cached (7-day TTL) and reuse the existing `food_search_cache` under
+  a `parse::` key namespace (no new table/migration needed). Keys and auth
+  headers are never logged.
+- **Saving is unchanged.** A confirmed composite draft saves through the same
+  `logMeal()` → `meal_logs` path as everything else (`source = 'user_estimate'`).
+
 ## Where API keys live
 
 - `USDA_FDC_API_KEY` is a **Supabase function secret**, read via
@@ -112,19 +160,68 @@ All changes are additive and backwards-compatible.
 - `food_search_cache`: **no** client policy — only the edge function (service role) touches it.
 - `foods`: existing read-all / insert-own policies kept; USDA rows are inserted by the service role with `created_by = null`.
 
+## Meal-logging stabilization (Phase 1.1)
+
+This pass hardened the shared logging foundation without expanding parsing. Key
+decisions a future reviewer should know:
+
+- **One save path.** Both manual and assisted entry build the same editable
+  draft in `useMealLogger` and save through `logMeal()` → `meal_logs`. There is
+  no second table or insert path. Assisted estimates are never auto-saved.
+- **Fat model is explicit.** `meal_logs.fat_g` is **total fat**. Saturated,
+  trans, and unsaturated are separate nullable columns. The UI never relabels
+  total fat as unsaturated.
+- **No stale hidden breakdown.** The USDA fat subtypes populate **visible,
+  editable** form fields (not a hidden ref). What the user sees is what saves.
+  `logMeal` validates that known subtypes don't exceed total fat (±0.5 g), so an
+  edited total fat forces the user to reconcile an inconsistent breakdown instead
+  of silently saving stale numbers. Estimate **provenance** (source food id,
+  confidence, `user_confirmed_at`) is preserved even after the user edits macros.
+- **Coverage-aware totals.** `DailyTotals` exposes each fat subtype as
+  `{ grams, knownCount, missingCount }`. A blank/null subtype is counted as
+  missing, never summed as 0, so the UI shows "Not available" / "partial" instead
+  of false precision. Quantity is applied consistently to every macro and subtype.
+- **Source labeling.** Manual saves use `source = 'manual'`; assisted saves use
+  `source = 'user_estimate'` with the USDA reference. A legacy `source = null`
+  row is treated/displayed as a manual log. All appear together in totals/lists.
+- **Real Home + persisted goals.** Home reads today's macros/meals from
+  `useDailyTotals` (refresh on focus). Edit Goals loads from and saves to
+  `profiles` via `getProfileGoals`/`updateProfileGoals`; the trans-fat goal is
+  fixed at 0 (DB constraint) and shown as non-editable.
+
+These are **code-only** changes — no migration, function, or secret changes were
+made. No new migration is required because migration `0003` already added the
+fat-subtype and provenance columns.
+
 ## Changed / added files
 
 - `supabase/migrations/0003_nutrition_architecture.sql` — schema (additive).
-- `supabase/functions/estimate-meal/index.ts` — edge function handler.
+- `supabase/functions/estimate-meal/index.ts` — edge function handler (direct +
+  optional composite orchestration, cache-or-search helper, parse cache).
 - `supabase/functions/estimate-meal/usda.ts` — USDA search + nutrient mapping.
+- `supabase/functions/estimate-meal/parser.ts` — provider-independent ingredient
+  parser + optional OpenAI implementation (no nutrition values; strict JSON).
+- `supabase/functions/estimate-meal/composite.ts` — deterministic gram scaling +
+  summing of USDA nutrients into a composite estimate.
 - `supabase/functions/_shared/cors.ts` — CORS headers.
 - `supabase/config.toml` — `[functions.estimate-meal]` with `verify_jwt = true`.
 - `src/services/nutrition/types.ts` — shared estimate/candidate types.
 - `src/services/nutrition/mealEstimateService.ts` — client entry point (invokes the function; never calls USDA).
 - `src/services/mealLogService.ts` — `logMeal` now optionally carries source + fat-type provenance (`MealEstimateMeta`).
 - `src/hooks/useMealEstimate.ts` — estimate state hook.
-- `src/hooks/useMealLogger.ts` — `applyEstimate()` populates editable fields and carries provenance to save.
-- `src/screens/main/MealLoggerScreen.tsx` — "Manual / Describe" mode toggle and candidate UI.
+- `src/hooks/useMealLogger.ts` — `applyEstimate()` populates editable fields
+  (incl. **visible** fat subtypes); provenance is kept in a ref and carried to
+  save; idempotency key rotates only after a confirmed save.
+- `src/hooks/useDailyTotals.ts` — fetches the day's rows once and sums them in
+  memory via `sumMealTotals` (incl. coverage-aware fat subtypes).
+- `src/services/mealLogService.ts` — coverage-aware `DailyTotals`/`sumMealTotals`,
+  fat-subtype row mapping, and subtype-vs-total-fat validation.
+- `src/services/profileService.ts` — `getProfileGoals`/`updateProfileGoals`.
+- `src/screens/main/MealLoggerScreen.tsx` — "Manual / Describe" mode toggle,
+  candidate UI, optional fat-breakdown inputs, and honest fat-total display.
+- `src/screens/main/HomeScreen.tsx` — real macros/meals via `useDailyTotals`.
+- `src/screens/main/EditGoalsScreen.tsx` — loads/saves goals to `profiles`.
+- `src/components/FoodLogItem.tsx` — renders the real `mealLogService.MealLog`.
 - `tsconfig.json` — excludes `supabase/functions` (Deno) from the app type-check.
 
 ## Required Supabase setup (after merging the code)
@@ -148,6 +245,15 @@ the app:
    ```
    `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are provided automatically by
    the edge runtime — do **not** add them manually.
+5. **(Optional) enable composite parsing:**
+   ```sh
+   npx supabase secrets set OPENAI_API_KEY=your_key_here
+   # optional model override (defaults to gpt-4o-mini):
+   npx supabase secrets set OPENAI_MODEL=gpt-4o-mini
+   ```
+   Without this secret the function still works and returns direct USDA
+   candidates only. `OPENAI_API_KEY` is a **server-side** function secret — never
+   add it to `.env` as an `EXPO_PUBLIC_*` variable.
 
 ## Verification
 
@@ -159,10 +265,17 @@ the app:
 
 ## What works vs. what remains approximate
 
-**Works now:** on-demand USDA search, 7-day result caching, per-100g→serving
-nutrient mapping incl. derived unsaturated fat, candidate confidence,
-server-side key isolation, confirm-and-edit before save, separate fat-type +
-fiber/sodium capture on the meal log.
+**Works now (code):** on-demand USDA search, 7-day result caching,
+per-100g→serving nutrient mapping incl. derived unsaturated fat, candidate
+confidence, server-side key isolation, confirm-and-edit before save, separate
+fat-type + fiber/sodium capture on the meal log, visible/editable fat breakdown
+with no stale hidden values, coverage-aware daily totals, real Home macros/meals,
+and Supabase-persisted macro goals.
+
+> **Needs deployment to actually run end-to-end:** applying migrations, setting
+> `USDA_FDC_API_KEY`, and deploying the `estimate-meal` function (see "Required
+> Supabase setup"). These are **not** done by the code above and require the
+> commands below to be run against the project.
 
 **Approximate / future:** quantity parsing ("2 eggs"), composite-meal
 decomposition, branded/barcode (Open Food Facts), and richer portion selection

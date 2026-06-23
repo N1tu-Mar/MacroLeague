@@ -416,4 +416,8 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 # Require a valid Supabase user JWT; the function also re-checks the caller so
 # anonymous clients cannot reach USDA. The USDA_FDC_API_KEY secret is set via
 # `supabase secrets set` and is never bundled into the Expo app.
+#
+# OPTIONAL: OPENAI_API_KEY (and optionally OPENAI_MODEL) enable composite
+# ingredient parsing. Both are server-side function secrets — never EXPO_PUBLIC_*.
+# When absent, the function serves only the direct whole-query USDA candidates.
 verify_jwt = true

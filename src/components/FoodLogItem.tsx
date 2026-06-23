@@ -1,16 +1,19 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Colors, FontFamily } from '../theme';
-import { MealLog } from '../types';
+// Renders the REAL Supabase meal row (mealLogService.MealLog), not the demo
+// `../types` MealLog. Macros are per-serving, so each is multiplied by quantity
+// for display — matching how daily totals are summed.
+import { MealLog } from '../services/mealLogService';
 
 interface FoodLogItemProps {
   meal: MealLog;
 }
 
+// Provenance badge. A null source is a legacy row → treated/labeled as manual.
 const SOURCE_ICONS: Record<string, string> = {
-  ai_scan: '📷',
-  search: '🔍',
-  dining_hall: '🍽️',
+  user_estimate: '✨',
+  usda_fdc: '🔍',
   manual: '✏️',
 };
 
@@ -21,8 +24,28 @@ const MEAL_ICONS: Record<string, string> = {
   snack: '🍎',
 };
 
+function formatMacro(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+function sourceKey(source: MealLog['source']): string {
+  // NULL/legacy collapses to 'manual' so old logs render consistently.
+  return source ?? 'manual';
+}
+
+function sourceLabel(source: MealLog['source']): string {
+  if (source === 'user_estimate') return 'estimate';
+  if (source === 'usda_fdc') return 'USDA';
+  return 'manual';
+}
+
 export default function FoodLogItem({ meal }: FoodLogItemProps) {
-  const time = new Date(meal.loggedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const time = new Date(meal.eatenAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  // Apply quantity so the card matches the contribution to daily totals.
+  const calories = meal.calories * meal.quantity;
+  const protein = meal.proteinG * meal.quantity;
+  const carbs = meal.carbsG * meal.quantity;
+  const fat = meal.fatG * meal.quantity;
 
   return (
     <View style={styles.container}>
@@ -30,14 +53,16 @@ export default function FoodLogItem({ meal }: FoodLogItemProps) {
         <Text style={styles.mealIcon}>{MEAL_ICONS[meal.mealType] ?? '🍽️'}</Text>
       </View>
       <View style={styles.info}>
-        <Text style={styles.name} numberOfLines={1}>{meal.mealName}</Text>
+        <Text style={styles.name} numberOfLines={1}>{meal.freeText}</Text>
         <Text style={styles.meta}>
-          {time} · {SOURCE_ICONS[meal.source] ?? ''} {meal.source.replace('_', ' ')}
+          {time} · {SOURCE_ICONS[sourceKey(meal.source)] ?? ''} {sourceLabel(meal.source)}
         </Text>
       </View>
       <View style={styles.macros}>
-        <Text style={styles.cal}>{meal.calories} cal</Text>
-        <Text style={styles.macroDetail}>{meal.protein}P · {meal.carbs}C · {meal.fats}F</Text>
+        <Text style={styles.cal}>{formatMacro(calories)} cal</Text>
+        <Text style={styles.macroDetail}>
+          {formatMacro(protein)}P · {formatMacro(carbs)}C · {formatMacro(fat)}F
+        </Text>
       </View>
     </View>
   );

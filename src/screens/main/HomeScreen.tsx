@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,10 +6,11 @@ import {
   ScrollView,
   TouchableOpacity,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Colors, FontFamily } from '../../theme';
 import { useUserStore } from '../../store/userStore';
-import { useMacroStore } from '../../store/macroStore';
 import { useChallengeStore } from '../../store/challengeStore';
+import { useDailyTotals } from '../../hooks/useDailyTotals';
 import MacroRing from '../../components/MacroRing';
 import StreakFlame from '../../components/StreakFlame';
 import ChallengeCard from '../../components/ChallengeCard';
@@ -18,14 +19,30 @@ import { MOCK_ACTIVITY_FEED } from '../../data/mockData';
 
 export default function HomeScreen({ navigation }: any) {
   const user = useUserStore((s) => s.user);
-  const dailyGoals = useUserStore((s) => s.dailyGoals);
-  const todaysMeals = useMacroStore((s) => s.todaysMeals);
-  const totals = useMacroStore((s) => s.getTodaysTotals)();
   const challenges = useChallengeStore((s) => s.challenges);
+
+  // Real Supabase macros/meals/goals for today. (Activity feed, challenges, and
+  // rewards below remain demo data and are intentionally left untouched.)
+  const today = useMemo(() => new Date(), []);
+  const daily = useDailyTotals(today);
+  const totals = daily.totals;
+  const goals = daily.goals;
+
+  // Re-pull today's meals/totals whenever Home regains focus, so a meal logged
+  // on the Log tab shows up here without restarting the app.
+  useFocusEffect(
+    useCallback(() => {
+      daily.refresh();
+    }, [daily.refresh]),
+  );
 
   const activeChallenges = challenges.filter((c) => c.status === 'active');
   const greeting = getGreeting();
-  const proteinPct = dailyGoals.protein > 0 ? Math.round((totals.protein / dailyGoals.protein) * 100) : 0;
+  const proteinGoal = goals?.proteinG ?? 0;
+  const proteinPct = proteinGoal > 0 ? Math.round((totals.proteinG / proteinGoal) * 100) : 0;
+  // Honest flag: some of today's meals lack a fat breakdown, so the unsaturated
+  // ring is a known lower bound rather than a precise total.
+  const unsatPartial = totals.unsaturatedFat.missingCount > 0;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -53,15 +70,22 @@ export default function HomeScreen({ navigation }: any) {
         </View>
       </View>
 
-      {/* Macro Rings */}
+      {/* Macro Rings — Calories/Protein/Carbs are always-present totals. The
+          fourth ring is UNSATURATED fat (the only fat goal the schema stores);
+          total fat is never relabeled as unsaturated. */}
       <View style={styles.ringSection}>
         <Text style={styles.sectionTitle}>TODAY'S MACROS</Text>
         <View style={styles.ringsRow}>
-          <MacroRing label="Calories" current={totals.calories} goal={dailyGoals.calories} />
-          <MacroRing label="Protein" current={totals.protein} goal={dailyGoals.protein} />
-          <MacroRing label="Carbs" current={totals.carbs} goal={dailyGoals.carbs} />
-          <MacroRing label="Fats" current={totals.fats} goal={dailyGoals.fats} />
+          <MacroRing label="Calories" current={Math.round(totals.calories)} goal={goals?.calories ?? 0} />
+          <MacroRing label="Protein" current={Math.round(totals.proteinG)} goal={goals?.proteinG ?? 0} />
+          <MacroRing label="Carbs" current={Math.round(totals.carbsG)} goal={goals?.carbsG ?? 0} />
+          <MacroRing label="Unsat Fat" current={Math.round(totals.unsaturatedFat.grams)} goal={goals?.unsaturatedFatG ?? 0} />
         </View>
+        {unsatPartial && (
+          <Text style={styles.ringNote}>
+            Some meals don&apos;t include a fat breakdown, so unsaturated fat is a partial total.
+          </Text>
+        )}
       </View>
 
       {/* Log a Meal CTA */}
@@ -74,7 +98,7 @@ export default function HomeScreen({ navigation }: any) {
       </TouchableOpacity>
 
       {/* Progress Toast */}
-      {totals.protein > 0 && (
+      {totals.proteinG > 0 && proteinGoal > 0 && (
         <View style={styles.progressToast}>
           <Text style={styles.progressText}>
             {proteinPct >= 100
@@ -95,15 +119,21 @@ export default function HomeScreen({ navigation }: any) {
         </View>
       )}
 
-      {/* Today's Meals */}
-      {todaysMeals.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>TODAY'S MEALS</Text>
-          {todaysMeals.map((meal) => (
-            <FoodLogItem key={meal.id} meal={meal} />
-          ))}
-        </View>
-      )}
+      {/* Today's Meals — real Supabase rows with loading/empty/error states. */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>TODAY'S MEALS</Text>
+        {daily.error ? (
+          <Text style={styles.mealsNotice}>
+            Couldn&apos;t load today&apos;s meals. Pull to refresh or try again shortly.
+          </Text>
+        ) : daily.isLoading ? (
+          <Text style={styles.mealsNotice}>Loading your meals...</Text>
+        ) : daily.meals.length === 0 ? (
+          <Text style={styles.mealsNotice}>No meals logged yet today.</Text>
+        ) : (
+          daily.meals.map((meal) => <FoodLogItem key={meal.id} meal={meal} />)
+        )}
+      </View>
 
       {/* Activity Feed */}
       <View style={styles.section}>
@@ -196,6 +226,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   ringsRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  ringNote: {
+    fontFamily: FontFamily.body,
+    fontSize: 11,
+    color: Colors.textSecondary,
+    marginTop: 10,
+  },
   logButton: {
     backgroundColor: Colors.primary,
     borderRadius: 50,
@@ -214,6 +250,12 @@ const styles = StyleSheet.create({
   },
   progressText: { fontFamily: FontFamily.bodyMedium, fontSize: 13, color: Colors.primary, textAlign: 'center' },
   section: { marginBottom: 20 },
+  mealsNotice: {
+    fontFamily: FontFamily.body,
+    fontSize: 13,
+    color: Colors.textSecondary,
+    paddingVertical: 8,
+  },
   feedItem: {
     flexDirection: 'row',
     alignItems: 'center',

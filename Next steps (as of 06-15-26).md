@@ -40,22 +40,14 @@ This document is a developer handoff for continuing MacroLeague from the current
 
 ## Immediate Fixes
 
-1. Fix the profile goal schema mismatch.
+1. ~~Fix the profile goal schema mismatch.~~ **Done.**
 
-   The migration defines:
-
-   ```sql
-   goal_unsaturated_fat_g
-   goal_trans_fat_g
-   ```
-
-   But `src/hooks/useDailyTotals.ts` queries:
-
-   ```ts
-   goal_fat_g;
-   ```
-
-   Recommended MVP fix: simplify the schema to use `goal_fat_g`, because the app and prompt both describe fats as one macro target.
+   The old mismatch (a `goal_fat_g` query against a schema that defines
+   `goal_unsaturated_fat_g` + `goal_trans_fat_g`) no longer exists.
+   `src/hooks/useDailyTotals.ts` and `profileService` now read/write
+   `goal_unsaturated_fat_g` and `goal_trans_fat_g` (trans always 0). The schema
+   was **not** simplified to a single `goal_fat_g`; we kept the separate
+   unsaturated/trans goals and represent trans = 0 honestly in the UI.
 
 ## Next Backend Work
 
@@ -132,9 +124,13 @@ Seed data should include:
 
 ## Next Frontend Work
 
-1. Wire Home screen to real backend data.
+1. ~~Wire Home screen to real backend data.~~ **Done.**
 
-   Replace `useMacroStore` mock totals with `useDailyTotals`.
+   Home now reads today's macros/meals/goals from `useDailyTotals` (real
+   `meal_logs` + `profiles`) and refreshes on focus. The activity feed,
+   challenges, and rewards on Home remain demo data by design. The legacy
+   `useMacroStore` is no longer used by Home (kept only for any remaining mock
+   surfaces). Edit Goals now also persists to `profiles` instead of local state.
 
 2. Wire sign-up onboarding to Supabase profile updates.
 
