@@ -5,14 +5,12 @@ import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import {
   useFonts,
-  BarlowCondensed_600SemiBold,
-  BarlowCondensed_700Bold,
-} from '@expo-google-fonts/barlow-condensed';
-import {
-  DMSans_400Regular,
-  DMSans_500Medium,
-  DMSans_600SemiBold,
-} from '@expo-google-fonts/dm-sans';
+  Nunito_400Regular,
+  Nunito_500Medium,
+  Nunito_600SemiBold,
+  Nunito_700Bold,
+  Nunito_800ExtraBold,
+} from '@expo-google-fonts/nunito';
 import AuthNavigator from './src/navigation/AuthNavigator';
 import MainNavigator from './src/navigation/MainNavigator';
 import { useUserStore } from './src/store/userStore';
@@ -23,14 +21,15 @@ export default function App() {
   const isAuthenticated = useUserStore((s) => s.isAuthenticated);
   const login = useUserStore((s) => s.login);
   const logout = useUserStore((s) => s.logout);
+  const refreshStats = useUserStore((s) => s.refreshStats);
   const [loading, setLoading] = useState(true);
 
   const [fontsLoaded] = useFonts({
-    BarlowCondensed_600SemiBold,
-    BarlowCondensed_700Bold,     
-    DMSans_400Regular,
-    DMSans_500Medium,
-    DMSans_600SemiBold,
+    Nunito_400Regular,
+    Nunito_500Medium,
+    Nunito_600SemiBold,
+    Nunito_700Bold,
+    Nunito_800ExtraBold,
   });
 
   // Listen for Supabase auth state changes
@@ -55,6 +54,9 @@ export default function App() {
           points: 0,
           createdAt: session.user.created_at,
         });
+        // login() seeds zeros; immediately hydrate the real backend-owned
+        // XP/points/streak/level so the UI never shows a stale zeroed account.
+        void refreshStats();
       }
       setLoading(false);
     });
@@ -80,6 +82,8 @@ export default function App() {
             points: 0,
             createdAt: session.user.created_at,
           });
+          // Hydrate real backend stats right after a fresh sign-in.
+          void refreshStats();
         } else if (event === 'SIGNED_OUT') {
           logout();
         }

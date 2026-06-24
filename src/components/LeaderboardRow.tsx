@@ -1,47 +1,103 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { Colors, FontFamily } from '../theme';
-import { LeaderboardEntry } from '../types';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Colors, FontFamily, FontSize, Spacing, Radius, alpha } from '../theme';
+import Avatar from './ui/Avatar';
+import RankMovement from './ui/RankMovement';
 
-interface LeaderboardRowProps {
-  entry: LeaderboardEntry;
+// Visual zone tint for a leaderboard row. Local type (no longer sourced from mock
+// league data); 'safe' is the neutral default used by the real global leaderboard.
+export type LeagueZone = 'promotion' | 'relegation' | 'safe';
+
+export interface LeaderboardRowProps {
+  rank: number;
+  name: string;
+  points: number;
+  streak: number;
+  movement: number;
+  zone?: LeagueZone;
   isCurrentUser?: boolean;
+  isRival?: boolean;
+  badge?: string;
+  avatarUrl?: string | null;
+  onPress?: () => void;
 }
 
-const RANK_ICONS: Record<number, string> = { 1: '👑', 2: '🥈', 3: '🥉' };
+const MEDAL: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
 
-export default function LeaderboardRow({ entry, isCurrentUser }: LeaderboardRowProps) {
-  const rankIcon = RANK_ICONS[entry.rank];
+/**
+ * One league-table row. Conveys a lot at a glance: rank/medal, movement vs last
+ * week, who it is + a status badge, points, and streak. The left edge is tinted
+ * by promotion/relegation zone; the current user gets a brand highlight and the
+ * rival a subtle accent ring so the chase reads instantly.
+ */
+export default function LeaderboardRow({
+  rank,
+  name,
+  points,
+  streak,
+  movement,
+  zone = 'safe',
+  isCurrentUser,
+  isRival,
+  badge,
+  avatarUrl,
+  onPress,
+}: LeaderboardRowProps) {
+  const zoneColor =
+    zone === 'promotion' ? Colors.promotion : zone === 'relegation' ? Colors.relegation : Colors.border;
+
+  const ring = isCurrentUser
+    ? Colors.primary
+    : rank === 1
+    ? Colors.gold
+    : isRival
+    ? Colors.accent
+    : undefined;
+
+  const Wrapper: any = onPress ? TouchableOpacity : View;
 
   return (
-    <View style={[styles.row, isCurrentUser && styles.currentUser]}>
+    <Wrapper
+      {...(onPress ? { onPress, activeOpacity: 0.85 } : {})}
+      style={[
+        styles.row,
+        { borderLeftColor: zoneColor, borderLeftWidth: zone === 'safe' ? 1 : 3 },
+        isCurrentUser && styles.currentUser,
+        isRival && !isCurrentUser && styles.rival,
+      ]}
+    >
       <View style={styles.rankCol}>
-        {rankIcon ? (
-          <Text style={styles.rankIcon}>{rankIcon}</Text>
+        {MEDAL[rank] ? (
+          <Text style={styles.medal}>{MEDAL[rank]}</Text>
         ) : (
-          <Text style={styles.rankNum}>{entry.rank}</Text>
+          <Text style={[styles.rankNum, isCurrentUser && { color: Colors.primary }]}>{rank}</Text>
+        )}
+        <RankMovement movement={movement} />
+      </View>
+
+      <Avatar name={name} uri={avatarUrl} size={38} ring={ring} />
+
+      <View style={styles.info}>
+        <Text style={[styles.name, isCurrentUser && { color: Colors.primary }]} numberOfLines={1}>
+          {name}{isCurrentUser ? ' (You)' : ''}
+        </Text>
+        {badge ? (
+          <Text style={styles.badge} numberOfLines={1}>{badge}</Text>
+        ) : (
+          <View style={styles.streakRow}>
+            <Text style={styles.streakIcon}>🔥</Text>
+            <Text style={styles.streakText}>{streak}-day</Text>
+          </View>
         )}
       </View>
 
-      <View style={[styles.avatar, isCurrentUser && styles.avatarGlow]}>
-        <Text style={styles.avatarText}>{entry.name[0]}</Text>
-      </View>
-
-      <View style={styles.info}>
-        <Text style={[styles.name, isCurrentUser && { color: Colors.primary }]}>
-          {entry.name} {isCurrentUser ? '(You)' : ''}
+      <View style={styles.pointsCol}>
+        <Text style={[styles.points, isCurrentUser && { color: Colors.primary }]}>
+          {points.toLocaleString()}
         </Text>
-        <Text style={styles.university}>{entry.university}</Text>
+        <Text style={styles.pointsLabel}>pts</Text>
       </View>
-
-      <View style={styles.statsCol}>
-        <Text style={styles.score}>{entry.weeklyScore.toLocaleString()}</Text>
-        <View style={styles.streakRow}>
-          <Text style={{ fontSize: 10 }}>🔥</Text>
-          <Text style={styles.streak}>{entry.streakCount}</Text>
-        </View>
-      </View>
-    </View>
+    </Wrapper>
   );
 }
 
@@ -49,36 +105,32 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: Spacing.md,
     backgroundColor: Colors.surface,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
+    borderRadius: Radius.md,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    marginBottom: Spacing.sm,
     borderWidth: 1,
     borderColor: Colors.border,
   },
   currentUser: {
-    borderColor: Colors.primary + '44',
-    backgroundColor: Colors.primary + '08',
+    backgroundColor: alpha(Colors.primary, 0.1),
+    borderColor: alpha(Colors.primary, 0.4),
   },
-  rankCol: { width: 32, alignItems: 'center' },
-  rankIcon: { fontSize: 18 },
-  rankNum: { fontFamily: FontFamily.displayBold, fontSize: 16, color: Colors.textSecondary },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.surface2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
+  rival: {
+    borderColor: alpha(Colors.accent, 0.35),
   },
-  avatarGlow: { borderWidth: 2, borderColor: Colors.primary },
-  avatarText: { fontFamily: FontFamily.bodySemiBold, fontSize: 14, color: Colors.textPrimary },
+  rankCol: { width: 30, alignItems: 'center', gap: 2 },
+  medal: { fontSize: 18 },
+  rankNum: { fontFamily: FontFamily.displayBold, fontSize: FontSize.subhead, color: Colors.textSecondary },
   info: { flex: 1 },
-  name: { fontFamily: FontFamily.bodyMedium, fontSize: 14, color: Colors.textPrimary },
-  university: { fontFamily: FontFamily.body, fontSize: 11, color: Colors.textSecondary },
-  statsCol: { alignItems: 'flex-end' },
-  score: { fontFamily: FontFamily.displayBold, fontSize: 16, color: Colors.textPrimary },
-  streakRow: { flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 2 },
-  streak: { fontFamily: FontFamily.body, fontSize: 11, color: Colors.textSecondary },
+  name: { fontFamily: FontFamily.bodySemiBold, fontSize: FontSize.body, color: Colors.textPrimary },
+  badge: { fontFamily: FontFamily.bodyMedium, fontSize: FontSize.meta, color: Colors.accent, marginTop: 1 },
+  streakRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 1 },
+  streakIcon: { fontSize: FontSize.micro },
+  streakText: { fontFamily: FontFamily.body, fontSize: FontSize.meta, color: Colors.textSecondary },
+  pointsCol: { alignItems: 'flex-end' },
+  points: { fontFamily: FontFamily.displayBold, fontSize: FontSize.subhead, color: Colors.textPrimary },
+  pointsLabel: { fontFamily: FontFamily.body, fontSize: FontSize.micro, color: Colors.textTertiary },
 });

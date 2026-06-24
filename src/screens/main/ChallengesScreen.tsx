@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -8,64 +8,89 @@ import {
   TextInput,
   Modal,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Colors, FontFamily } from '../../theme';
-import { useChallengeStore } from '../../store/challengeStore';
+import { useUserStore } from '../../store/userStore';
 import ChallengeCard from '../../components/ChallengeCard';
-import { Challenge } from '../../types';
+import {
+  listChallenges,
+  getChallengeDetail,
+  createChallenge,
+  joinChallenge,
+  ChallengeSummary,
+  ChallengeDetail as ChallengeDetailType,
+  ChallengeType,
+  ChallengeGoalType,
+} from '../../services/challengeService';
 
 export default function ChallengesScreen() {
-  const challenges = useChallengeStore((s) => s.challenges);
-  const joinChallenge = useChallengeStore((s) => s.joinChallenge);
-  const createChallenge = useChallengeStore((s) => s.createChallenge);
-  const [selectedChallenge, setSelectedChallenge] = useState<Challenge | null>(null);
+  const [challenges, setChallenges] = useState<ChallengeSummary[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
-  const active = challenges.filter((c) => c.status === 'active');
-  const upcoming = challenges.filter((c) => c.status === 'upcoming');
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      setChallenges(await listChallenges());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load challenges.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
-  if (selectedChallenge) {
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
+
+  if (selectedId) {
     return (
       <ChallengeDetail
-        challenge={selectedChallenge}
-        onBack={() => setSelectedChallenge(null)}
-        onJoin={() => {
-          joinChallenge(selectedChallenge.id);
-          setSelectedChallenge(null);
+        challengeId={selectedId}
+        onBack={() => {
+          setSelectedId(null);
+          void load();
         }}
       />
     );
   }
+
+  const active = challenges.filter((c) => c.status === 'active');
+  const upcoming = challenges.filter((c) => c.status === 'upcoming');
+  const completed = challenges.filter((c) => c.status === 'completed');
 
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>CHALLENGES</Text>
 
-        {active.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>ACTIVE</Text>
-            {active.map((c) => (
-              <ChallengeCard
-                key={c.id}
-                challenge={c}
-                onPress={() => setSelectedChallenge(c)}
-              />
-            ))}
+        {isLoading ? (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator color={Colors.primary} />
           </View>
-        )}
-
-        {upcoming.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>UPCOMING</Text>
-            {upcoming.map((c) => (
-              <ChallengeCard
-                key={c.id}
-                challenge={c}
-                onPress={() => setSelectedChallenge(c)}
-              />
-            ))}
+        ) : error ? (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorText}>{error}</Text>
           </View>
+        ) : challenges.length === 0 ? (
+          <View style={styles.emptyBox}>
+            <Text style={styles.emptyIcon}>⚔️</Text>
+            <Text style={styles.emptyTitle}>No challenges yet</Text>
+            <Text style={styles.emptySub}>Create the first one and invite your friends to compete.</Text>
+          </View>
+        ) : (
+          <>
+            {renderSection('ACTIVE', active, setSelectedId)}
+            {renderSection('UPCOMING', upcoming, setSelectedId)}
+            {renderSection('COMPLETED', completed, setSelectedId)}
+          </>
         )}
 
         <TouchableOpacity style={styles.createBtn} onPress={() => setShowCreate(true)}>
@@ -73,53 +98,91 @@ export default function ChallengesScreen() {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Create Challenge Modal */}
       <CreateChallengeModal
         visible={showCreate}
         onClose={() => setShowCreate(false)}
-        onCreate={(data) => {
-          createChallenge(data);
+        onCreated={() => {
           setShowCreate(false);
-          Alert.alert('Created!', 'Your challenge has been created. Invite your friends!');
+          void load();
         }}
       />
     </View>
   );
 }
 
+function renderSection(
+  title: string,
+  items: ChallengeSummary[],
+  onSelect: (id: string) => void,
+) {
+  if (items.length === 0) return null;
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      {items.map((c) => (
+        <ChallengeCard
+          key={c.id}
+          name={c.name}
+          type={c.type}
+          stakesText={c.stakesText}
+          endDate={c.endDate}
+          status={c.status}
+          participantCount={c.participantCount}
+          joined={c.joined}
+          onPress={() => onSelect(c.id)}
+        />
+      ))}
+    </View>
+  );
+}
+
 // ── Create Challenge Modal ────────────────────────────────
 
-interface CreateData {
-  name: string;
-  type: 'solo' | 'team';
-  goalType: string;
-  duration: number;
-  stakes: string;
-}
+const GOAL_OPTIONS: { key: ChallengeGoalType; label: string }[] = [
+  { key: 'protein', label: '💪 Protein' },
+  { key: 'meal_count', label: '🍱 Meals' },
+  { key: 'streak', label: '📆 Streak' },
+];
 
 function CreateChallengeModal({
   visible,
   onClose,
-  onCreate,
+  onCreated,
 }: {
   visible: boolean;
   onClose: () => void;
-  onCreate: (data: CreateData) => void;
+  onCreated: () => void;
 }) {
   const [name, setName] = useState('');
-  const [type, setType] = useState<'solo' | 'team'>('team');
-  const [goalType, setGoalType] = useState('protein');
+  const [type, setType] = useState<ChallengeType>('team');
+  const [goalType, setGoalType] = useState<ChallengeGoalType>('protein');
   const [duration, setDuration] = useState(7);
   const [stakes, setStakes] = useState('');
+  const [saving, setSaving] = useState(false);
 
-  function handleCreate() {
+  async function handleCreate() {
     if (!name.trim()) {
       Alert.alert('Error', 'Give your challenge a name');
       return;
     }
-    onCreate({ name: name.trim(), type, goalType, duration, stakes: stakes.trim() || 'Bragging rights' });
-    setName('');
-    setStakes('');
+    setSaving(true);
+    try {
+      await createChallenge({
+        name: name.trim(),
+        type,
+        goalType,
+        durationDays: duration,
+        stakes: stakes.trim(),
+      });
+      setName('');
+      setStakes('');
+      onCreated();
+      Alert.alert('Created!', 'Your challenge is live. Invite your friends!');
+    } catch (e) {
+      Alert.alert('Could not create', e instanceof Error ? e.message : 'Please try again.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -129,7 +192,6 @@ function CreateChallengeModal({
           <ScrollView showsVerticalScrollIndicator={false}>
             <Text style={createStyles.title}>CREATE CHALLENGE</Text>
 
-            {/* Name */}
             <Text style={createStyles.label}>Challenge Name</Text>
             <TextInput
               style={createStyles.input}
@@ -139,10 +201,9 @@ function CreateChallengeModal({
               onChangeText={setName}
             />
 
-            {/* Type */}
             <Text style={createStyles.label}>Type</Text>
             <View style={createStyles.optionRow}>
-              {(['solo', 'team'] as const).map((t) => (
+              {(['solo', 'team'] as ChallengeType[]).map((t) => (
                 <TouchableOpacity
                   key={t}
                   style={[createStyles.optionBtn, type === t && createStyles.optionBtnActive]}
@@ -155,14 +216,9 @@ function CreateChallengeModal({
               ))}
             </View>
 
-            {/* Goal Type */}
             <Text style={createStyles.label}>Goal</Text>
             <View style={createStyles.optionRow}>
-              {[
-                { key: 'protein', label: '💪 Protein' },
-                { key: 'calories', label: '🔥 Calories' },
-                { key: 'streak', label: '📆 Streak' },
-              ].map((g) => (
+              {GOAL_OPTIONS.map((g) => (
                 <TouchableOpacity
                   key={g.key}
                   style={[createStyles.optionBtn, goalType === g.key && createStyles.optionBtnActive]}
@@ -175,7 +231,6 @@ function CreateChallengeModal({
               ))}
             </View>
 
-            {/* Duration */}
             <Text style={createStyles.label}>Duration</Text>
             <View style={createStyles.optionRow}>
               {[3, 7, 14].map((d) => (
@@ -191,7 +246,6 @@ function CreateChallengeModal({
               ))}
             </View>
 
-            {/* Stakes */}
             <Text style={createStyles.label}>Stakes (optional)</Text>
             <TextInput
               style={createStyles.input}
@@ -201,10 +255,14 @@ function CreateChallengeModal({
               onChangeText={setStakes}
             />
 
-            <TouchableOpacity style={createStyles.createBtn} onPress={handleCreate}>
-              <Text style={createStyles.createBtnText}>CREATE</Text>
+            <TouchableOpacity
+              style={[createStyles.createBtn, saving && { opacity: 0.6 }]}
+              onPress={handleCreate}
+              disabled={saving}
+            >
+              <Text style={createStyles.createBtnText}>{saving ? 'CREATING…' : 'CREATE'}</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={onClose} style={createStyles.cancelBtn}>
+            <TouchableOpacity onPress={onClose} style={createStyles.cancelBtn} disabled={saving}>
               <Text style={createStyles.cancelText}>Cancel</Text>
             </TouchableOpacity>
           </ScrollView>
@@ -216,13 +274,7 @@ function CreateChallengeModal({
 
 const createStyles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
-  card: {
-    backgroundColor: Colors.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    maxHeight: '85%',
-  },
+  card: { backgroundColor: Colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: '85%' },
   title: { fontFamily: FontFamily.displayBold, fontSize: 22, color: Colors.textPrimary, marginBottom: 20 },
   label: { fontFamily: FontFamily.bodySemiBold, fontSize: 13, color: Colors.textSecondary, letterSpacing: 1, marginBottom: 8, marginTop: 12 },
   input: {
@@ -248,13 +300,7 @@ const createStyles = StyleSheet.create({
   optionBtnActive: { backgroundColor: Colors.primary + '14', borderColor: Colors.primary + '44' },
   optionText: { fontFamily: FontFamily.bodyMedium, fontSize: 13, color: Colors.textSecondary },
   optionTextActive: { color: Colors.primary },
-  createBtn: {
-    backgroundColor: Colors.primary,
-    borderRadius: 50,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 24,
-  },
+  createBtn: { backgroundColor: Colors.primary, borderRadius: 50, paddingVertical: 16, alignItems: 'center', marginTop: 24 },
   createBtnText: { fontFamily: FontFamily.displayBold, fontSize: 16, color: Colors.background },
   cancelBtn: { alignItems: 'center', paddingVertical: 14 },
   cancelText: { fontFamily: FontFamily.bodyMedium, fontSize: 14, color: Colors.textSecondary },
@@ -262,42 +308,73 @@ const createStyles = StyleSheet.create({
 
 // ── Challenge Detail ──────────────────────────────────────
 
-function ChallengeDetail({
-  challenge,
-  onBack,
-  onJoin,
-}: {
-  challenge: Challenge;
-  onBack: () => void;
-  onJoin: () => void;
-}) {
-  const [reactions, setReactions] = useState<Record<string, number>>({
-    '💪': 3, '🔥': 7, '👏': 2, '😤': 1, '🎯': 4,
-  });
-  const [myReactions, setMyReactions] = useState<Set<string>>(new Set());
+function ChallengeDetail({ challengeId, onBack }: { challengeId: string; onBack: () => void }) {
+  const userId = useUserStore((s) => s.user?.id);
+  const [detail, setDetail] = useState<ChallengeDetailType | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [joining, setJoining] = useState(false);
 
-  function toggleReaction(emoji: string) {
-    setMyReactions((prev) => {
-      const next = new Set(prev);
-      if (next.has(emoji)) {
-        next.delete(emoji);
-        setReactions((r) => ({ ...r, [emoji]: (r[emoji] ?? 1) - 1 }));
-      } else {
-        next.add(emoji);
-        setReactions((r) => ({ ...r, [emoji]: (r[emoji] ?? 0) + 1 }));
-      }
-      return next;
-    });
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      setDetail(await getChallengeDetail(challengeId));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load this challenge.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [challengeId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
+
+  async function handleJoin() {
+    setJoining(true);
+    try {
+      await joinChallenge(challengeId, detail?.type === 'solo' ? 'Solo' : 'My Team');
+      await load();
+    } catch (e) {
+      Alert.alert('Could not join', e instanceof Error ? e.message : 'Please try again.');
+    } finally {
+      setJoining(false);
+    }
   }
 
-  const teams: Record<string, { score: number; members: string[] }> = {};
-  challenge.participants.forEach((p) => {
-    if (!teams[p.teamName]) teams[p.teamName] = { score: 0, members: [] };
-    teams[p.teamName].score += p.score;
-    teams[p.teamName].members.push(p.userName);
-  });
-  const teamEntries = Object.entries(teams);
-  const isParticipant = challenge.participants.some((p) => p.userId === 'demo-001');
+  if (isLoading) {
+    return (
+      <View style={[styles.container, styles.loadingBox]}>
+        <ActivityIndicator color={Colors.primary} size="large" />
+      </View>
+    );
+  }
+
+  if (error || !detail) {
+    return (
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <TouchableOpacity onPress={onBack} style={styles.backBtn}>
+          <Text style={styles.backText}>← Back</Text>
+        </TouchableOpacity>
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorText}>{error ?? 'Challenge not found.'}</Text>
+        </View>
+      </ScrollView>
+    );
+  }
+
+  // Group standings by team for team challenges.
+  const teams = new Map<string, { score: number; members: string[] }>();
+  for (const s of detail.standings) {
+    const entry = teams.get(s.teamName) ?? { score: 0, members: [] };
+    entry.score += s.score;
+    entry.members.push(s.displayName ?? s.username);
+    teams.set(s.teamName, entry);
+  }
+  const teamEntries = Array.from(teams.entries());
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -305,100 +382,88 @@ function ChallengeDetail({
         <Text style={styles.backText}>← Back</Text>
       </TouchableOpacity>
 
-      <Text style={styles.detailTitle}>{challenge.name}</Text>
+      <Text style={styles.detailTitle}>{detail.name}</Text>
       <Text style={styles.detailMeta}>
-        {challenge.type === 'solo' ? 'Solo Challenge' : challenge.type === 'team' ? 'Team Challenge' : 'Floor vs Floor'} · Ends{' '}
-        {new Date(challenge.endDate).toLocaleDateString()}
+        {detail.type === 'solo' ? 'Solo Challenge' : 'Team Challenge'} · {detail.status} · Ends{' '}
+        {new Date(`${detail.endDate}T00:00:00`).toLocaleDateString()}
       </Text>
 
-      {/* Scoreboard */}
-      {teamEntries.length >= 2 && (
+      {/* Standings — derived scores from the ledger */}
+      <Text style={styles.sectionTitle}>STANDINGS</Text>
+      {detail.standings.length === 0 ? (
+        <Text style={styles.emptyText}>No participants yet.</Text>
+      ) : detail.type === 'team' && teamEntries.length >= 2 ? (
         <View style={styles.scoreboard}>
-          <View style={styles.teamBlock}>
-            <Text style={styles.teamNameLg}>{teamEntries[0][0]}</Text>
-            <Text style={[styles.teamScoreLg, { color: Colors.primary }]}>
-              {teamEntries[0][1].score}
-            </Text>
-            {teamEntries[0][1].members.map((m, i) => (
-              <Text key={i} style={styles.memberName}>{m}</Text>
-            ))}
-          </View>
-          <View style={styles.vsBlock}>
-            <Text style={styles.vsText}>VS</Text>
-          </View>
-          <View style={[styles.teamBlock, { alignItems: 'flex-end' }]}>
-            <Text style={styles.teamNameLg}>{teamEntries[1][0]}</Text>
-            <Text style={[styles.teamScoreLg, { color: Colors.accent }]}>
-              {teamEntries[1][1].score}
-            </Text>
-            {teamEntries[1][1].members.map((m, i) => (
-              <Text key={i} style={styles.memberName}>{m}</Text>
-            ))}
-          </View>
+          {teamEntries.slice(0, 2).map(([teamName, t], idx) => (
+            <React.Fragment key={teamName}>
+              {idx === 1 && (
+                <View style={styles.vsBlock}>
+                  <Text style={styles.vsText}>VS</Text>
+                </View>
+              )}
+              <View style={[styles.teamBlock, idx === 1 && { alignItems: 'flex-end' }]}>
+                <Text style={styles.teamNameLg}>{teamName}</Text>
+                <Text style={[styles.teamScoreLg, { color: idx === 0 ? Colors.primary : Colors.accent }]}>
+                  {t.score}
+                </Text>
+                {t.members.map((m, i) => (
+                  <Text key={i} style={styles.memberName}>{m}</Text>
+                ))}
+              </View>
+            </React.Fragment>
+          ))}
         </View>
-      )}
-
-      {/* Solo score */}
-      {teamEntries.length === 1 && (
-        <View style={styles.soloScoreCard}>
-          <Text style={styles.soloLabel}>Your Progress</Text>
-          <Text style={[styles.teamScoreLg, { color: Colors.primary }]}>
-            {teamEntries[0][1].score}
-          </Text>
-        </View>
-      )}
-
-      {/* Goals */}
-      <View style={styles.goalsSection}>
-        <Text style={styles.sectionTitle}>GOALS</Text>
-        {challenge.goals.map((g) => (
-          <View key={g.id} style={styles.goalRow}>
-            <Text style={{ fontSize: 16 }}>{g.completed ? '✅' : '⏳'}</Text>
-            <View style={styles.goalInfo}>
-              <Text style={styles.goalName}>{g.goalType}</Text>
-              <Text style={styles.goalPts}>+{g.pointsValue} pts</Text>
+      ) : (
+        <View style={styles.standingsList}>
+          {detail.standings.map((s) => (
+            <View
+              key={s.userId}
+              style={[styles.standingRow, s.userId === userId && styles.standingRowMe]}
+            >
+              <Text style={styles.standingRank}>{s.rank}</Text>
+              <Text style={styles.standingName} numberOfLines={1}>
+                {s.displayName ?? s.username}
+                {s.userId === userId ? ' (You)' : ''}
+              </Text>
+              <Text style={styles.standingScore}>{s.score} pts</Text>
             </View>
-          </View>
-        ))}
-      </View>
+          ))}
+        </View>
+      )}
+
+      {/* Goals — display targets (completion not auto-evaluated in Phase 1) */}
+      {detail.goals.length > 0 && (
+        <View style={styles.goalsSection}>
+          <Text style={styles.sectionTitle}>GOALS</Text>
+          {detail.goals.map((g) => (
+            <View key={g.id} style={styles.goalRow}>
+              <Text style={{ fontSize: 16 }}>🎯</Text>
+              <View style={styles.goalInfo}>
+                <Text style={styles.goalName}>{g.description}</Text>
+                <Text style={styles.goalPts}>+{g.pointsValue} pts</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
 
       {/* Stakes */}
       <View style={styles.stakesCard}>
         <Text style={styles.stakesLabel}>🏆 STAKES</Text>
-        <Text style={styles.stakesValue}>{challenge.stakesText}</Text>
+        <Text style={styles.stakesValue}>{detail.stakesText}</Text>
       </View>
 
-      {/* Reactions */}
-      <View style={styles.reactionRow}>
-        {['💪', '🔥', '👏', '😤', '🎯'].map((emoji) => (
-          <TouchableOpacity
-            key={emoji}
-            style={[
-              styles.reactionBtn,
-              myReactions.has(emoji) && styles.reactionBtnActive,
-            ]}
-            onPress={() => toggleReaction(emoji)}
-          >
-            <Text style={{ fontSize: 18 }}>{emoji}</Text>
-            <Text style={[
-              styles.reactionCount,
-              myReactions.has(emoji) && { color: Colors.primary },
-            ]}>
-              {reactions[emoji] ?? 0}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {!isParticipant && (
-        <TouchableOpacity style={styles.joinBtn} onPress={onJoin}>
-          <Text style={styles.joinBtnText}>JOIN CHALLENGE</Text>
-        </TouchableOpacity>
-      )}
-
-      {isParticipant && (
+      {detail.joined ? (
         <View style={styles.participatingBadge}>
           <Text style={styles.participatingText}>✓ You're in this challenge</Text>
+        </View>
+      ) : detail.status !== 'completed' ? (
+        <TouchableOpacity style={[styles.joinBtn, joining && { opacity: 0.6 }]} onPress={handleJoin} disabled={joining}>
+          <Text style={styles.joinBtnText}>{joining ? 'JOINING…' : 'JOIN CHALLENGE'}</Text>
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.participatingBadge}>
+          <Text style={styles.participatingText}>This challenge has ended</Text>
         </View>
       )}
 
@@ -410,21 +475,23 @@ function ChallengeDetail({
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: 20, paddingTop: 60 },
-  title: {
-    fontFamily: FontFamily.displayBold,
-    fontSize: 24,
-    color: Colors.textPrimary,
-    letterSpacing: 1,
-    marginBottom: 20,
-  },
+  title: { fontFamily: FontFamily.displayBold, fontSize: 24, color: Colors.textPrimary, letterSpacing: 1, marginBottom: 20 },
   section: { marginBottom: 20 },
-  sectionTitle: {
-    fontFamily: FontFamily.displayBold,
-    fontSize: 13,
-    color: Colors.textSecondary,
-    letterSpacing: 1.5,
+  sectionTitle: { fontFamily: FontFamily.displayBold, fontSize: 13, color: Colors.textSecondary, letterSpacing: 1.5, marginBottom: 12 },
+  loadingBox: { alignItems: 'center', justifyContent: 'center' },
+  errorBanner: {
+    backgroundColor: Colors.error + '16',
+    borderColor: Colors.error + '55',
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 12,
     marginBottom: 12,
   },
+  errorText: { fontFamily: FontFamily.bodyMedium, fontSize: 13, color: Colors.error },
+  emptyBox: { alignItems: 'center', paddingVertical: 40, gap: 6 },
+  emptyIcon: { fontSize: 40 },
+  emptyTitle: { fontFamily: FontFamily.displayBold, fontSize: 18, color: Colors.textPrimary },
+  emptySub: { fontFamily: FontFamily.body, fontSize: 13, color: Colors.textSecondary, textAlign: 'center' },
   createBtn: {
     borderWidth: 1.5,
     borderColor: Colors.primary,
@@ -432,13 +499,14 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     borderStyle: 'dashed',
+    marginTop: 4,
   },
   createBtnText: { fontFamily: FontFamily.displayBold, fontSize: 15, color: Colors.primary },
   // Detail
   backBtn: { marginBottom: 16 },
   backText: { fontFamily: FontFamily.bodyMedium, fontSize: 15, color: Colors.primary },
   detailTitle: { fontFamily: FontFamily.displayBold, fontSize: 28, color: Colors.textPrimary, marginBottom: 4 },
-  detailMeta: { fontFamily: FontFamily.body, fontSize: 14, color: Colors.textSecondary, marginBottom: 24 },
+  detailMeta: { fontFamily: FontFamily.body, fontSize: 14, color: Colors.textSecondary, marginBottom: 24, textTransform: 'capitalize' },
   scoreboard: {
     flexDirection: 'row',
     backgroundColor: Colors.surface,
@@ -454,16 +522,22 @@ const styles = StyleSheet.create({
   teamNameLg: { fontFamily: FontFamily.displayBold, fontSize: 16, color: Colors.textPrimary, marginBottom: 4 },
   teamScoreLg: { fontFamily: FontFamily.displayBold, fontSize: 32, marginBottom: 8 },
   memberName: { fontFamily: FontFamily.body, fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
-  soloScoreCard: {
+  standingsList: { marginBottom: 20 },
+  standingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: Colors.surface,
-    borderRadius: 16,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 6,
     borderWidth: 1,
     borderColor: Colors.border,
-    padding: 20,
-    alignItems: 'center',
-    marginBottom: 20,
+    gap: 12,
   },
-  soloLabel: { fontFamily: FontFamily.bodyMedium, fontSize: 14, color: Colors.textSecondary, marginBottom: 4 },
+  standingRowMe: { borderColor: Colors.primary + '66', backgroundColor: Colors.primary + '10' },
+  standingRank: { fontFamily: FontFamily.displayBold, fontSize: 16, color: Colors.textSecondary, width: 24 },
+  standingName: { fontFamily: FontFamily.bodyMedium, fontSize: 14, color: Colors.textPrimary, flex: 1 },
+  standingScore: { fontFamily: FontFamily.displayBold, fontSize: 14, color: Colors.primary },
   goalsSection: { marginBottom: 20 },
   goalRow: {
     flexDirection: 'row',
@@ -477,8 +551,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   goalInfo: { flex: 1, flexDirection: 'row', justifyContent: 'space-between' },
-  goalName: { fontFamily: FontFamily.bodyMedium, fontSize: 14, color: Colors.textPrimary },
+  goalName: { fontFamily: FontFamily.bodyMedium, fontSize: 14, color: Colors.textPrimary, flex: 1, marginRight: 8 },
   goalPts: { fontFamily: FontFamily.displayBold, fontSize: 14, color: Colors.primary },
+  emptyText: { fontFamily: FontFamily.body, fontSize: 14, color: Colors.textSecondary, paddingVertical: 12 },
   stakesCard: {
     backgroundColor: Colors.gold + '10',
     borderRadius: 12,
@@ -489,33 +564,7 @@ const styles = StyleSheet.create({
   },
   stakesLabel: { fontFamily: FontFamily.displayBold, fontSize: 13, color: Colors.gold, marginBottom: 4 },
   stakesValue: { fontFamily: FontFamily.bodyMedium, fontSize: 15, color: Colors.textPrimary },
-  reactionRow: { flexDirection: 'row', justifyContent: 'center', gap: 10, marginBottom: 20 },
-  reactionBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  reactionBtnActive: {
-    backgroundColor: Colors.primary + '14',
-    borderColor: Colors.primary + '44',
-  },
-  reactionCount: {
-    fontFamily: FontFamily.body,
-    fontSize: 10,
-    color: Colors.textSecondary,
-    marginTop: 1,
-  },
-  joinBtn: {
-    backgroundColor: Colors.primary,
-    borderRadius: 50,
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
+  joinBtn: { backgroundColor: Colors.primary, borderRadius: 50, paddingVertical: 16, alignItems: 'center' },
   joinBtnText: { fontFamily: FontFamily.displayBold, fontSize: 16, color: Colors.background },
   participatingBadge: {
     backgroundColor: Colors.primary + '12',

@@ -34,7 +34,8 @@
     "plugins": [
       "expo-font",
       "expo-web-browser",
-      "expo-dev-client"
+      "expo-dev-client",
+      "expo-status-bar"
     ],
     "scheme": "macroleague",
     "extra": {

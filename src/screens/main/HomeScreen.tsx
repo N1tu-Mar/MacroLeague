@@ -1,162 +1,294 @@
-import React, { useCallback, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-} from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { Colors, FontFamily } from '../../theme';
+import { Colors, FontFamily, FontSize, Spacing, Radius, Shadow, alpha } from '../../theme';
 import { useUserStore } from '../../store/userStore';
-import { useChallengeStore } from '../../store/challengeStore';
 import { useDailyTotals } from '../../hooks/useDailyTotals';
-import MacroRing from '../../components/MacroRing';
-import StreakFlame from '../../components/StreakFlame';
-import ChallengeCard from '../../components/ChallengeCard';
+import Card from '../../components/ui/Card';
+import NutritionScoreCard from '../../components/NutritionScoreCard';
+import MacroProgressBar from '../../components/MacroProgressBar';
+import StreakCard from '../../components/StreakCard';
+import RivalCard from '../../components/RivalCard';
+import ActivityFeedItem from '../../components/ActivityFeedItem';
 import FoodLogItem from '../../components/FoodLogItem';
-import { MOCK_ACTIVITY_FEED } from '../../data/mockData';
+import { getLeaderboard, LeaderboardUser } from '../../services/leaderboardService';
+import { getProfileIdentity } from '../../services/profileService';
+import {
+  getRecentDailyActivity,
+  getRecentActivityFeed,
+  ActivityFeedEntry,
+} from '../../services/activityService';
+import { computeNutritionScore } from '../../lib/nutritionScore';
+
+const ORDINAL = (n: number): string => {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+};
+
+function dateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 export default function HomeScreen({ navigation }: any) {
   const user = useUserStore((s) => s.user);
-  const challenges = useChallengeStore((s) => s.challenges);
+  const refreshStats = useUserStore((s) => s.refreshStats);
 
   const today = useMemo(() => new Date(), []);
   const daily = useDailyTotals(today);
   const totals = daily.totals;
   const goals = daily.goals;
 
-  // Re-pull today's meals/totals whenever Home regains focus, so a meal logged
-  // on the Log tab is reflected here without needing an app restart.
+  const [leaderboard, setLeaderboard] = useState<LeaderboardUser[]>([]);
+  const [feed, setFeed] = useState<ActivityFeedEntry[]>([]);
+  const [yesterdayScore, setYesterdayScore] = useState<number | null>(null);
+  // The user's preferred name from the profiles table (display_name → username).
+  const [profileName, setProfileName] = useState<string | null>(null);
+
+  // Load the real saved name from the database so the greeting shows e.g.
+  // "Good evening, Nityanth" instead of an auth-derived "user_<id>" placeholder.
+  useEffect(() => {
+    if (!user?.id) return;
+    let active = true;
+    getProfileIdentity(user.id)
+      .then((identity) => {
+        if (active) setProfileName(identity.displayName ?? identity.username);
+      })
+      .catch(() => {
+        // Keep the fallback below if the profile can't be read.
+      });
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
+
+  // On focus: refresh real meals/totals + backend stats, and pull the real
+  // leaderboard (for rank/rival), recent activity feed, and yesterday's macros
+  // (for the nutrition-score delta). All Supabase-backed — no mock data.
   useFocusEffect(
     useCallback(() => {
+      let active = true;
       daily.refresh();
-    }, [daily.refresh])
+      void refreshStats();
+      (async () => {
+        try {
+          const [board, recent, activity] = await Promise.all([
+            getLeaderboard(14),
+            getRecentActivityFeed(6),
+            getRecentDailyActivity(2),
+          ]);
+          if (!active) return;
+          setLeaderboard(board);
+          setFeed(recent);
+          const yKey = dateKey(new Date(Date.now() - 86400000));
+          const yRow = activity.find((a) => a.date === yKey);
+          setYesterdayScore(
+            yRow
+              ? computeNutritionScore(
+                  { calories: yRow.calories, proteinG: yRow.proteinG, carbsG: yRow.carbsG },
+                  goals
+                    ? { calories: goals.calories ?? 0, proteinG: goals.proteinG ?? 0, carbsG: goals.carbsG ?? 0 }
+                    : null,
+                ).score
+              : null,
+          );
+        } catch {
+          // Leave the last good data; the real macro sections below still render.
+        }
+      })();
+      return () => {
+        active = false;
+      };
+    }, [daily.refresh, refreshStats, goals]),
   );
 
-  const activeChallenges = challenges.filter((c) => c.status === 'active');
   const greeting = getGreeting();
+  // Prefer the real saved profile name; never show the "user_<id>" placeholder.
+  const resolvedName =
+    profileName && !profileName.startsWith('user_')
+      ? profileName
+      : user?.name && !user.name.startsWith('user_')
+      ? user.name
+      : 'Athlete';
+  const firstName = resolvedName.split(' ')[0];
+
+  // Real rank + rival from the leaderboard.
+  const myIndex = leaderboard.findIndex((r) => r.userId === user?.id);
+  const me = myIndex >= 0 ? leaderboard[myIndex] : null;
+  const rival = myIndex > 0 ? leaderboard[myIndex - 1] : null;
+  const rivalGap = me && rival ? rival.score - me.score : 0;
+
+  // Real nutrition score from today's adherence + delta vs yesterday.
+  const nutrition = useMemo(
+    () =>
+      computeNutritionScore(
+        { calories: totals.calories, proteinG: totals.proteinG, carbsG: totals.carbsG },
+        goals ? { calories: goals.calories ?? 0, proteinG: goals.proteinG ?? 0, carbsG: goals.carbsG ?? 0 } : null,
+      ),
+    [totals.calories, totals.proteinG, totals.carbsG, goals],
+  );
+  const scoreDelta = yesterdayScore === null ? 0 : nutrition.score - yesterdayScore;
+
   const proteinGoal = goals?.proteinG ?? 0;
-  const proteinPct = proteinGoal > 0 ? Math.round((totals.proteinG / proteinGoal) * 100) : 0;
+  const proteinLeft = Math.max(0, Math.round(proteinGoal - totals.proteinG));
+  const proteinMet = proteinGoal > 0 && totals.proteinG >= proteinGoal;
+  const unsatPartial = totals.unsaturatedFat.missingCount > 0;
+
+  const nextActionText = proteinMet
+    ? 'Protein goal locked — log dinner to pad your score'
+    : proteinGoal > 0
+    ? `Log dinner to close ${proteinLeft}g of protein`
+    : 'Log a meal to start your day';
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Header */}
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.greeting}>
-            {greeting}, {user?.name ?? 'Athlete'} 🔥
-          </Text>
-          <View style={styles.streakBadge}>
-            <StreakFlame count={user?.streakCount ?? 0} size="small" />
-            <Text style={styles.streakText}>{user?.streakCount}-day streak</Text>
-          </View>
+          <Text style={styles.greeting}>{greeting},</Text>
+          <Text style={styles.name}>{firstName}</Text>
         </View>
-        <View style={styles.headerRight}>
-          <View style={styles.levelBadge}>
-            <Text style={styles.levelText}>Lv {user?.level ?? 1}</Text>
-          </View>
-          <TouchableOpacity
-            style={styles.pointsBadge}
-            onPress={() => navigation.navigate('Rewards')}
-          >
-            <Text style={styles.pointsText}>⭐ {user?.points?.toLocaleString() ?? 0}</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          style={styles.pointsBadge}
+          onPress={() => navigation.navigate('Rewards')}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.pointsValue}>⭐ {user?.points?.toLocaleString() ?? 0}</Text>
+          <Text style={styles.pointsLabel}>Lv {user?.level ?? 1}</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Macro Rings */}
-      <View style={styles.ringSection}>
-        <Text style={styles.sectionTitle}>TODAY'S MACROS</Text>
-        <View style={styles.ringsRow}>
-          <MacroRing label="Calories" current={Math.round(totals.calories)} goal={goals?.calories ?? 0} />
-          <MacroRing label="Protein" current={Math.round(totals.proteinG)} goal={goals?.proteinG ?? 0} />
-          <MacroRing label="Carbs" current={Math.round(totals.carbsG)} goal={goals?.carbsG ?? 0} />
-          <MacroRing label="Fats" current={Math.round(totals.fatG)} goal={goals?.unsaturatedFatG ?? 0} />
+      {/* HERO: real leaderboard standing */}
+      <Card variant="hero" onPress={() => navigation.navigate('Leaderboard')} accent={alpha(Colors.primary, 0.35)}>
+        <View style={styles.heroTop}>
+          <Text style={styles.heroTitle}>🏆 Global Leaderboard</Text>
+          <Text style={styles.heroWindow}>last 2 weeks</Text>
         </View>
-      </View>
+        {me ? (
+          <>
+            <View style={styles.heroRankRow}>
+              <View>
+                <Text style={styles.heroLabel}>YOUR RANK</Text>
+                <Text style={styles.heroRank}>{ORDINAL(me.rank)}</Text>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={styles.heroPoints}>{me.score.toLocaleString()}</Text>
+                <Text style={styles.heroPointsLabel}>pts</Text>
+              </View>
+            </View>
+            <Text style={styles.heroChase}>
+              {rival && rivalGap > 0 ? (
+                <>
+                  <Text style={styles.heroChaseStrong}>{rivalGap} pts</Text> behind{' '}
+                  {rival.displayName ?? rival.username}
+                </>
+              ) : (
+                'You lead the league 👑'
+              )}
+            </Text>
+          </>
+        ) : (
+          <View style={styles.heroEmpty}>
+            <Text style={styles.heroEmptyText}>You're not ranked yet</Text>
+            <Text style={styles.heroEmptySub}>Log meals to earn points and climb the board.</Text>
+          </View>
+        )}
+      </Card>
 
-      {/* Log a Meal CTA */}
-      <TouchableOpacity
-        style={styles.logButton}
-        onPress={() => navigation.navigate('Log')}
-        activeOpacity={0.85}
-      >
-        <Text style={styles.logButtonText}>+ LOG A MEAL</Text>
+      {/* Nutrition score — real adherence */}
+      <Card variant="elevated" style={styles.scoreCard}>
+        <NutritionScoreCard score={nutrition.score} delta={scoreDelta} status={nutrition.status} />
+      </Card>
+
+      {/* Daily progress — REAL data */}
+      <Text style={styles.sectionTitle}>TODAY'S PROGRESS</Text>
+      <Card style={styles.progressCard}>
+        {daily.isLoading ? (
+          <Text style={styles.notice}>Loading your progress…</Text>
+        ) : daily.error ? (
+          <Text style={styles.notice}>Couldn't load today's progress. Pull to refresh.</Text>
+        ) : (
+          <>
+            <MacroProgressBar label="Calories" current={totals.calories} target={goals?.calories ?? 0} unit="" color={Colors.accent} />
+            <MacroProgressBar label="Protein" current={totals.proteinG} target={goals?.proteinG ?? 0} />
+            <MacroProgressBar label="Carbs" current={totals.carbsG} target={goals?.carbsG ?? 0} />
+            <MacroProgressBar
+              label="Unsat. Fat"
+              current={totals.unsaturatedFat.grams}
+              target={goals?.unsaturatedFatG ?? 0}
+              note={unsatPartial ? 'Partial — some meals lack a breakdown' : undefined}
+            />
+          </>
+        )}
+      </Card>
+
+      {/* Next action CTA */}
+      <TouchableOpacity style={styles.cta} onPress={() => navigation.navigate('Log')} activeOpacity={0.9}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.ctaLabel}>{nextActionText}</Text>
+          <Text style={styles.ctaSub}>Earn points and climb the board</Text>
+        </View>
+        <Text style={styles.ctaArrow}>＋</Text>
       </TouchableOpacity>
 
-      {/* Progress Toast */}
-      {totals.proteinG > 0 && proteinGoal > 0 && (
-        <View style={styles.progressToast}>
-          <Text style={styles.progressText}>
-            {proteinPct >= 100
-              ? `You hit your protein goal today! 💪`
-              : `You're ${proteinPct}% to your protein goal today.`}
-          </Text>
-        </View>
-      )}
+      {/* Streak */}
+      <StreakCard streakCount={user?.streakCount ?? 0} nextMilestone={14} />
 
-      {/* Active Challenge */}
-      {activeChallenges.length > 0 && (
+      {/* Rival race — real */}
+      {me && rival && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>ACTIVE CHALLENGE</Text>
-          <ChallengeCard
-            challenge={activeChallenges[0]}
-            onPress={() => navigation.navigate('Challenges')}
+          <RivalCard
+            myName={firstName}
+            myPoints={me.score}
+            rivalName={rival.displayName ?? rival.username}
+            rivalPoints={rival.score}
+            gap={rivalGap}
+            suggestedAction={`Hit your protein goal today to pass ${rival.displayName ?? rival.username}`}
+            onPress={() => navigation.navigate('Leaderboard')}
           />
         </View>
       )}
 
-      {/* Today's Meals */}
+      {/* Today's meals — REAL data */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>TODAY'S MEALS</Text>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>TODAY'S MEALS</Text>
+          {daily.meals.length > 0 && <Text style={styles.sectionCount}>{daily.meals.length} logged</Text>}
+        </View>
         {daily.error ? (
-          <Text style={styles.mealsNotice}>{daily.error.message}</Text>
+          <Text style={styles.notice}>Couldn't load today's meals.</Text>
         ) : daily.isLoading ? (
-          <Text style={styles.mealsNotice}>Loading your meals...</Text>
+          <Text style={styles.notice}>Loading your meals…</Text>
         ) : daily.meals.length === 0 ? (
-          <Text style={styles.mealsNotice}>No meals logged yet today.</Text>
+          <Card style={styles.emptyMeals}>
+            <Text style={styles.emptyIcon}>🍽️</Text>
+            <Text style={styles.emptyText}>No meals logged yet today</Text>
+            <Text style={styles.emptySub}>Log one to earn points and climb the league.</Text>
+          </Card>
         ) : (
           daily.meals.map((meal) => <FoodLogItem key={meal.id} meal={meal} />)
         )}
       </View>
 
-      {/* Activity Feed */}
+      {/* Recent activity — the user's REAL gamification events */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>TEAM ACTIVITY</Text>
-        {MOCK_ACTIVITY_FEED.slice(0, 4).map((item) => (
-          <View key={item.id} style={styles.feedItem}>
-            <View style={styles.feedAvatar}>
-              <Text style={styles.feedAvatarText}>{item.userName[0]}</Text>
-            </View>
-            <View style={styles.feedInfo}>
-              <Text style={styles.feedName}>{item.userName}</Text>
-              <Text style={styles.feedMeta}>{item.metadata}</Text>
-            </View>
-            <Text style={styles.feedTime}>
-              {getRelativeTime(item.createdAt)}
+        <Text style={styles.sectionTitle}>RECENT ACTIVITY</Text>
+        <Card padded={false} style={styles.feedCard}>
+          {feed.length === 0 ? (
+            <Text style={[styles.notice, { padding: Spacing.base }]}>
+              No recent activity yet. Log a meal to get started.
             </Text>
-          </View>
-        ))}
+          ) : (
+            feed.map((item, i) => (
+              <View key={item.id} style={i > 0 ? styles.feedDivider : undefined}>
+                <ActivityFeedItem name={firstName} icon={item.icon} text={item.text} minutesAgo={item.minutesAgo} />
+              </View>
+            ))
+          )}
+        </Card>
       </View>
 
-      {/* Rewards Banner */}
-      <TouchableOpacity
-        style={styles.rewardsBanner}
-        onPress={() => navigation.navigate('Rewards')}
-        activeOpacity={0.85}
-      >
-        <Text style={styles.rewardsBannerIcon}>🎁</Text>
-        <View style={styles.rewardsBannerInfo}>
-          <Text style={styles.rewardsBannerTitle}>Rewards & Discounts</Text>
-          <Text style={styles.rewardsBannerSub}>
-            {user?.points?.toLocaleString() ?? 0} points — Tap to redeem
-          </Text>
-        </View>
-        <Text style={styles.rewardsBannerArrow}>›</Text>
-      </TouchableOpacity>
-
-      <View style={{ height: 32 }} />
+      <View style={{ height: Spacing.xxl }} />
     </ScrollView>
   );
 }
@@ -168,111 +300,75 @@ function getGreeting(): string {
   return 'Good evening';
 }
 
-function getRelativeTime(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 60) return `${mins}m`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h`;
-  return `${Math.floor(hrs / 24)}d`;
-}
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
-  content: { padding: 20, paddingTop: 60 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 },
-  headerRight: { alignItems: 'flex-end', gap: 6 },
-  greeting: { fontFamily: FontFamily.displayBold, fontSize: 26, color: Colors.textPrimary },
-  streakBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
-  streakText: { fontFamily: FontFamily.bodyMedium, fontSize: 13, color: Colors.accent },
-  levelBadge: {
-    backgroundColor: Colors.primary + '18',
-    borderWidth: 1,
-    borderColor: Colors.primary + '44',
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  levelText: { fontFamily: FontFamily.displayBold, fontSize: 14, color: Colors.primary },
+  content: { padding: Spacing.lg, paddingTop: 60, paddingBottom: Spacing.xxl },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.lg },
+  greeting: { fontFamily: FontFamily.body, fontSize: FontSize.body, color: Colors.textSecondary },
+  name: { fontFamily: FontFamily.displayBold, fontSize: FontSize.title, color: Colors.textPrimary },
   pointsBadge: {
-    backgroundColor: Colors.gold + '18',
+    alignItems: 'center',
+    backgroundColor: alpha(Colors.gold, 0.1),
     borderWidth: 1,
-    borderColor: Colors.gold + '44',
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    borderColor: alpha(Colors.gold, 0.3),
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
   },
-  pointsText: { fontFamily: FontFamily.displayBold, fontSize: 12, color: Colors.gold },
-  ringSection: { marginBottom: 20 },
+  pointsValue: { fontFamily: FontFamily.displayBold, fontSize: FontSize.body, color: Colors.gold },
+  pointsLabel: { fontFamily: FontFamily.bodyMedium, fontSize: FontSize.micro, color: Colors.textSecondary, marginTop: 1 },
+
+  heroTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.base },
+  heroTitle: { fontFamily: FontFamily.displayBold, fontSize: FontSize.subhead, color: Colors.gold },
+  heroWindow: { fontFamily: FontFamily.body, fontSize: FontSize.meta, color: Colors.textSecondary },
+  heroRankRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: Spacing.md },
+  heroLabel: { fontFamily: FontFamily.displayBold, fontSize: FontSize.meta, color: Colors.textSecondary, letterSpacing: 1.5 },
+  heroRank: { fontFamily: FontFamily.displayBold, fontSize: FontSize.hero, color: Colors.textPrimary, lineHeight: FontSize.hero + 2 },
+  heroPoints: { fontFamily: FontFamily.displayBold, fontSize: FontSize.heading, color: Colors.primary },
+  heroPointsLabel: { fontFamily: FontFamily.body, fontSize: FontSize.meta, color: Colors.textSecondary },
+  heroChase: { fontFamily: FontFamily.body, fontSize: FontSize.label, color: Colors.textSecondary, borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: Spacing.md },
+  heroChaseStrong: { fontFamily: FontFamily.displayBold, color: Colors.textPrimary },
+  heroEmpty: { paddingVertical: Spacing.sm },
+  heroEmptyText: { fontFamily: FontFamily.displayBold, fontSize: FontSize.subhead, color: Colors.textPrimary },
+  heroEmptySub: { fontFamily: FontFamily.body, fontSize: FontSize.label, color: Colors.textSecondary, marginTop: 2 },
+
+  scoreCard: { marginTop: Spacing.base, paddingVertical: Spacing.lg },
+  progressCard: { marginBottom: Spacing.base },
+
   sectionTitle: {
     fontFamily: FontFamily.displayBold,
-    fontSize: 13,
+    fontSize: FontSize.label,
     color: Colors.textSecondary,
     letterSpacing: 1.5,
-    marginBottom: 12,
+    marginBottom: Spacing.md,
+    marginTop: Spacing.lg,
   },
-  ringsRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  logButton: {
+  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sectionCount: { fontFamily: FontFamily.bodyMedium, fontSize: FontSize.meta, color: Colors.textTertiary, marginTop: Spacing.lg, marginBottom: Spacing.md },
+  section: { marginTop: Spacing.xs },
+
+  cta: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: Colors.primary,
-    borderRadius: 50,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginBottom: 12,
+    borderRadius: Radius.lg,
+    paddingVertical: Spacing.base,
+    paddingHorizontal: Spacing.lg,
+    marginTop: Spacing.base,
+    marginBottom: Spacing.base,
+    ...Shadow.floating,
   },
-  logButtonText: { fontFamily: FontFamily.displayBold, fontSize: 16, color: Colors.background },
-  progressToast: {
-    backgroundColor: Colors.primary + '12',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.primary + '22',
-    padding: 12,
-    marginBottom: 20,
-  },
-  progressText: { fontFamily: FontFamily.bodyMedium, fontSize: 13, color: Colors.primary, textAlign: 'center' },
-  section: { marginBottom: 20 },
-  mealsNotice: {
-    fontFamily: FontFamily.body,
-    fontSize: 13,
-    color: Colors.textSecondary,
-    paddingVertical: 8,
-  },
-  feedItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 6,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  feedAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Colors.surface2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  feedAvatarText: { fontFamily: FontFamily.bodySemiBold, fontSize: 13, color: Colors.textPrimary },
-  feedInfo: { flex: 1 },
-  feedName: { fontFamily: FontFamily.bodyMedium, fontSize: 13, color: Colors.textPrimary },
-  feedMeta: { fontFamily: FontFamily.body, fontSize: 12, color: Colors.textSecondary, marginTop: 1 },
-  feedTime: { fontFamily: FontFamily.body, fontSize: 11, color: Colors.textSecondary },
-  rewardsBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.gold + '0D',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Colors.gold + '22',
-    padding: 16,
-    marginBottom: 8,
-  },
-  rewardsBannerIcon: { fontSize: 28, marginRight: 12 },
-  rewardsBannerInfo: { flex: 1 },
-  rewardsBannerTitle: { fontFamily: FontFamily.displayBold, fontSize: 15, color: Colors.gold },
-  rewardsBannerSub: { fontFamily: FontFamily.body, fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
-  rewardsBannerArrow: { fontFamily: FontFamily.displayBold, fontSize: 24, color: Colors.gold },
+  ctaLabel: { fontFamily: FontFamily.displayBold, fontSize: FontSize.subhead, color: Colors.textPrimary },
+  ctaSub: { fontFamily: FontFamily.bodyMedium, fontSize: FontSize.meta, color: alpha(Colors.textPrimary, 0.75), marginTop: 2 },
+  ctaArrow: { fontFamily: FontFamily.displayBold, fontSize: 32, color: Colors.textPrimary },
+
+  feedCard: { paddingHorizontal: Spacing.base },
+  feedDivider: { borderTopWidth: 1, borderTopColor: Colors.border },
+
+  emptyMeals: { alignItems: 'center', paddingVertical: Spacing.xl },
+  emptyIcon: { fontSize: 32, marginBottom: Spacing.sm },
+  emptyText: { fontFamily: FontFamily.bodySemiBold, fontSize: FontSize.body, color: Colors.textPrimary },
+  emptySub: { fontFamily: FontFamily.body, fontSize: FontSize.label, color: Colors.textSecondary, marginTop: 4, textAlign: 'center' },
+
+  notice: { fontFamily: FontFamily.body, fontSize: FontSize.label, color: Colors.textSecondary, paddingVertical: Spacing.sm },
 });

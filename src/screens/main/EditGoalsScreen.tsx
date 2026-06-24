@@ -14,9 +14,10 @@ import { supabase } from '../../lib/supabase';
 import { getProfileGoals, updateProfileGoals } from '../../services/profileService';
 
 /**
- * Mirrors the profiles macro-goal check constraints so the user gets a clear
- * message before the database rejects the update. `fats` maps to the profile's
- * unsaturated fat goal (trans fat is always 0).
+ * Mirrors the `profiles` macro-goal CHECK constraints so the user gets a clear
+ * message before the database rejects the update. `fats` here is the profile's
+ * UNSATURATED fat goal (goal_unsaturated_fat_g); the trans-fat goal is always 0
+ * and is not user-editable. Carb range follows migration 0002 (25-65%).
  */
 function validateGoals(calories: number, protein: number, carbs: number, fats: number): string | null {
   if (calories <= 1400) {
@@ -30,7 +31,7 @@ function validateGoals(calories: number, protein: number, carbs: number, fats: n
     return 'Carbs must supply between 25% and 65% of your calorie goal.';
   }
   if (fats * 9 < calories * 0.1) {
-    return 'Fat goal is too low; it must supply at least 10% of your calorie goal.';
+    return 'Unsaturated fat goal is too low; it must supply at least 10% of your calorie goal.';
   }
   return null;
 }
@@ -46,8 +47,9 @@ export default function EditGoalsScreen({ navigation }: any) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Load the real goals from the profile so the sliders start from persisted
-  // values rather than the local mock defaults.
+  // Load saved goals from Supabase so the sliders start from the persisted
+  // profile values, not the local mock defaults. A failure falls back to the
+  // defaults already in state rather than blocking the screen.
   useEffect(() => {
     let active = true;
 
@@ -65,7 +67,7 @@ export default function EditGoalsScreen({ navigation }: any) {
           if (goals.goalUnsaturatedFatG > 0) setFats(goals.goalUnsaturatedFatG);
         }
       } catch {
-        // Fall back to the local defaults already in state.
+        // Keep the local defaults already in state.
       } finally {
         if (active) setIsLoading(false);
       }
@@ -90,6 +92,8 @@ export default function EditGoalsScreen({ navigation }: any) {
       if (!data.user) {
         throw new Error('You are not signed in.');
       }
+      // Persist to Supabase FIRST; only report success and sync the local store
+      // after the database write actually succeeds.
       await updateProfileGoals(data.user.id, {
         goalCalories: calories,
         goalProteinG: protein,
@@ -103,7 +107,7 @@ export default function EditGoalsScreen({ navigation }: any) {
     } catch (caughtError) {
       Alert.alert(
         'Could not save goals',
-        caughtError instanceof Error ? caughtError.message : 'Please try again.'
+        caughtError instanceof Error ? caughtError.message : 'Please try again.',
       );
     } finally {
       setIsSaving(false);
@@ -127,10 +131,14 @@ export default function EditGoalsScreen({ navigation }: any) {
       <Text style={styles.title}>EDIT MACRO GOALS</Text>
       <Text style={styles.subtitle}>Adjust your daily nutrition targets</Text>
 
+      {/* Calorie floor is 1500 because the DB requires goal_calories > 1400. */}
       <MacroSlider label="Calories" value={calories} onChange={setCalories} min={1500} max={5000} step={50} unit="cal" color={Colors.primary} />
       <MacroSlider label="Protein" value={protein} onChange={setProtein} min={50} max={350} step={5} unit="g" color={Colors.primary} />
       <MacroSlider label="Carbs" value={carbs} onChange={setCarbs} min={50} max={500} step={5} unit="g" color={Colors.accent} />
-      <MacroSlider label="Fats" value={fats} onChange={setFats} min={20} max={200} step={5} unit="g" color={Colors.gold} />
+      {/* This slider is the UNSATURATED fat goal — the only fat target the schema
+          stores. Trans-fat goal is fixed at 0 (profiles_goal_trans_fat_zero). */}
+      <MacroSlider label="Unsaturated Fat" value={fats} onChange={setFats} min={20} max={200} step={5} unit="g" color={Colors.gold} />
+      <Text style={styles.transFatNote}>Trans-fat goal is fixed at 0g and isn't editable.</Text>
 
       {/* Quick Presets */}
       <View style={styles.presetSection}>
@@ -252,6 +260,13 @@ const styles = StyleSheet.create({
   backText: { fontFamily: FontFamily.bodyMedium, fontSize: 15, color: Colors.primary },
   title: { fontFamily: FontFamily.displayBold, fontSize: 24, color: Colors.textPrimary, letterSpacing: 1, marginBottom: 4 },
   subtitle: { fontFamily: FontFamily.body, fontSize: 14, color: Colors.textSecondary, marginBottom: 24 },
+  transFatNote: {
+    fontFamily: FontFamily.body,
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: -4,
+    marginBottom: 16,
+  },
   sectionTitle: {
     fontFamily: FontFamily.displayBold,
     fontSize: 13,

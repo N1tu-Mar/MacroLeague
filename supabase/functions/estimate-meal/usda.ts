@@ -77,7 +77,7 @@ export function normalizeQuery(raw: string): string {
     .trim();
 }
 
-function round(value: number, decimals = 1): number {
+export function round(value: number, decimals = 1): number {
   const factor = 10 ** decimals;
   return Math.round(value * factor) / factor;
 }
@@ -130,7 +130,9 @@ function per100gMacros(food: FdcFood): MacroBundle {
   };
 }
 
-function scale(per100g: MacroBundle, grams: number): MacroBundle {
+/** Scale per-100g macros to an arbitrary gram amount. Exported so the composite
+ *  estimator can reuse the exact same scaling the direct path uses. */
+export function scale(per100g: MacroBundle, grams: number): MacroBundle {
   const factor = grams / 100;
   const opt = (v: number | null) => (v === null ? null : round(v * factor));
   return {

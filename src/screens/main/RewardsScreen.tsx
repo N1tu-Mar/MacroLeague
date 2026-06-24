@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -6,26 +6,85 @@ import {
   ScrollView,
   TouchableOpacity,
   Modal,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Colors, FontFamily } from '../../theme';
 import { useUserStore } from '../../store/userStore';
-import { MOCK_REWARDS, EARN_RULES } from '../../data/mockData';
-import { Reward } from '../../types';
+import {
+  listRewards,
+  getRedeemedRewardIds,
+  redeemReward,
+  RewardCatalogItem,
+} from '../../services/rewardService';
+import { getEarnRules, EarnRule } from '../../services/ruleSetService';
 
 export default function RewardsScreen() {
   const user = useUserStore((s) => s.user);
-  const addPoints = useUserStore((s) => s.addPoints);
-  const [selectedReward, setSelectedReward] = useState<Reward | null>(null);
+  const adjustPointsLocally = useUserStore((s) => s.adjustPointsLocally);
+  const refreshStats = useUserStore((s) => s.refreshStats);
+
+  const [rewards, setRewards] = useState<RewardCatalogItem[]>([]);
+  const [earnRules, setEarnRules] = useState<EarnRule[]>([]);
   const [redeemed, setRedeemed] = useState<Set<string>>(new Set());
+  const [selectedReward, setSelectedReward] = useState<RewardCatalogItem | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
   const [earnExpanded, setEarnExpanded] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRedeeming, setIsRedeeming] = useState(false);
 
-  function handleRedeem(reward: Reward) {
-    if (!user || user.points < reward.pointsCost) return;
-    addPoints(-reward.pointsCost);
-    setRedeemed((prev) => new Set(prev).add(reward.id));
-    setShowConfetti(true);
-    setTimeout(() => setShowConfetti(false), 2500);
+  // On focus: pull the real points balance + the catalog + which rewards this
+  // user has already redeemed, so the screen reflects backend truth.
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      void refreshStats();
+      const userId = user?.id;
+      (async () => {
+        try {
+          const [catalog, redeemedIds, rules] = await Promise.all([
+            listRewards(),
+            getRedeemedRewardIds(),
+            userId ? getEarnRules(userId) : Promise.resolve([] as EarnRule[]),
+          ]);
+          if (active) {
+            setRewards(catalog);
+            setRedeemed(redeemedIds);
+            setEarnRules(rules);
+          }
+        } catch {
+          // Leave whatever is already shown; the balance card still works.
+        } finally {
+          if (active) setIsLoading(false);
+        }
+      })();
+      return () => {
+        active = false;
+      };
+    }, [refreshStats, user?.id]),
+  );
+
+  async function handleRedeem(reward: RewardCatalogItem) {
+    if (!user || isRedeeming) return;
+    setIsRedeeming(true);
+    try {
+      // Ledger-backed, atomic spend on the backend. The authoritative new balance
+      // comes back from the RPC; sync the cached store to it, then refresh.
+      const { newBalance } = await redeemReward(reward.id);
+      adjustPointsLocally(newBalance - user.points);
+      void refreshStats();
+      setRedeemed((prev) => new Set(prev).add(reward.id));
+      setShowConfetti(true);
+      setTimeout(() => setShowConfetti(false), 2500);
+    } catch (caughtError) {
+      Alert.alert(
+        'Could not redeem',
+        caughtError instanceof Error ? caughtError.message : 'Please try again.',
+      );
+    } finally {
+      setIsRedeeming(false);
+    }
   }
 
   return (
@@ -33,52 +92,60 @@ export default function RewardsScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>REWARDS</Text>
 
-        {/* Points Balance */}
+        {/* Points Balance — real backend-owned points. */}
         <View style={styles.balanceCard}>
           <Text style={styles.balanceLabel}>Your Points</Text>
           <Text style={styles.balanceValue}>{user?.points.toLocaleString() ?? 0}</Text>
           <Text style={styles.balanceSub}>Earn points from logging, streaks & challenges</Text>
         </View>
 
-        {/* Confetti overlay */}
         {showConfetti && (
           <View style={styles.confettiOverlay}>
             <Text style={styles.confettiText}>🎉 Reward Unlocked! 🎉</Text>
           </View>
         )}
 
-        {/* Available Rewards */}
         <Text style={styles.sectionTitle}>AVAILABLE REWARDS</Text>
-        <View style={styles.rewardsGrid}>
-          {MOCK_REWARDS.map((reward) => {
-            const isRedeemed = redeemed.has(reward.id);
-            const canAfford = (user?.points ?? 0) >= reward.pointsCost;
-            return (
-              <TouchableOpacity
-                key={reward.id}
-                style={[styles.rewardCard, isRedeemed && styles.rewardCardRedeemed]}
-                onPress={() => !isRedeemed && setSelectedReward(reward)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.rewardLogo}>{reward.partnerLogo}</Text>
-                <Text style={styles.rewardPartner}>{reward.partnerName}</Text>
-                <Text style={styles.rewardDesc}>{reward.description}</Text>
-                <View style={styles.rewardFooter}>
-                  {isRedeemed ? (
-                    <Text style={styles.redeemedBadge}>✓ Redeemed</Text>
-                  ) : (
-                    <View style={[styles.costBadge, !canAfford && { opacity: 0.4 }]}>
-                      <Text style={styles.costText}>{reward.pointsCost} pts</Text>
-                    </View>
+        {isLoading ? (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator color={Colors.primary} />
+          </View>
+        ) : rewards.length === 0 ? (
+          <Text style={styles.notice}>No rewards available right now. Check back soon.</Text>
+        ) : (
+          <View style={styles.rewardsGrid}>
+            {rewards.map((reward) => {
+              const isRedeemed = redeemed.has(reward.id);
+              const canAfford = (user?.points ?? 0) >= reward.pointsCost;
+              return (
+                <TouchableOpacity
+                  key={reward.id}
+                  style={[styles.rewardCard, isRedeemed && styles.rewardCardRedeemed]}
+                  onPress={() => !isRedeemed && setSelectedReward(reward)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.rewardLogo}>{reward.partnerLogo}</Text>
+                  <Text style={styles.rewardPartner}>{reward.partnerName}</Text>
+                  <Text style={styles.rewardDesc}>{reward.description}</Text>
+                  <View style={styles.rewardFooter}>
+                    {isRedeemed ? (
+                      <Text style={styles.redeemedBadge}>✓ Redeemed</Text>
+                    ) : (
+                      <View style={[styles.costBadge, !canAfford && { opacity: 0.4 }]}>
+                        <Text style={styles.costText}>{reward.pointsCost} pts</Text>
+                      </View>
+                    )}
+                  </View>
+                  {reward.expiryDate && (
+                    <Text style={styles.rewardExpiry}>
+                      Expires {new Date(reward.expiryDate).toLocaleDateString()}
+                    </Text>
                   )}
-                </View>
-                <Text style={styles.rewardExpiry}>
-                  Expires {new Date(reward.expiryDate).toLocaleDateString()}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
 
         {/* How to Earn */}
         <TouchableOpacity
@@ -90,12 +157,16 @@ export default function RewardsScreen() {
         </TouchableOpacity>
         {earnExpanded && (
           <View style={styles.earnCard}>
-            {EARN_RULES.map((rule, i) => (
-              <View key={i} style={styles.earnRow}>
-                <Text style={styles.earnAction}>{rule.action}</Text>
-                <Text style={styles.earnPts}>+{rule.points} pts</Text>
-              </View>
-            ))}
+            {earnRules.length === 0 ? (
+              <Text style={styles.notice}>Scoring rules unavailable right now.</Text>
+            ) : (
+              earnRules.map((rule, i) => (
+                <View key={i} style={styles.earnRow}>
+                  <Text style={styles.earnAction}>{rule.action}</Text>
+                  <Text style={styles.earnPts}>+{rule.points} pts</Text>
+                </View>
+              ))
+            )}
           </View>
         )}
 
@@ -122,16 +193,22 @@ export default function RewardsScreen() {
                 <TouchableOpacity
                   style={[
                     styles.unlockBtn,
-                    (user?.points ?? 0) < selectedReward.pointsCost && styles.unlockBtnDisabled,
+                    ((user?.points ?? 0) < selectedReward.pointsCost || isRedeeming) &&
+                      styles.unlockBtnDisabled,
                   ]}
                   onPress={() => {
-                    handleRedeem(selectedReward);
+                    const reward = selectedReward;
                     setSelectedReward(null);
+                    void handleRedeem(reward);
                   }}
-                  disabled={(user?.points ?? 0) < selectedReward.pointsCost}
+                  disabled={(user?.points ?? 0) < selectedReward.pointsCost || isRedeeming}
                 >
                   <Text style={styles.unlockBtnText}>
-                    {(user?.points ?? 0) >= selectedReward.pointsCost ? 'UNLOCK REWARD' : 'NOT ENOUGH POINTS'}
+                    {isRedeeming
+                      ? 'REDEEMING...'
+                      : (user?.points ?? 0) >= selectedReward.pointsCost
+                        ? 'UNLOCK REWARD'
+                        : 'NOT ENOUGH POINTS'}
                   </Text>
                 </TouchableOpacity>
 
@@ -184,6 +261,8 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     marginBottom: 12,
   },
+  loadingBox: { paddingVertical: 30, alignItems: 'center' },
+  notice: { fontFamily: FontFamily.body, fontSize: 13, color: Colors.textSecondary, paddingVertical: 8 },
   rewardsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 24 },
   rewardCard: {
     width: '48%',
@@ -227,7 +306,6 @@ const styles = StyleSheet.create({
   },
   earnAction: { fontFamily: FontFamily.bodyMedium, fontSize: 14, color: Colors.textPrimary },
   earnPts: { fontFamily: FontFamily.displayBold, fontSize: 14, color: Colors.primary },
-  // Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.7)',

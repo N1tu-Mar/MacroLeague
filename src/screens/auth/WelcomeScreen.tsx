@@ -37,7 +37,7 @@ const PARTICLES = Array.from({ length: NUM_PARTICLES }, (_, i) => ({
   y: ((i * 47 + 31) % 100) / 100,   // 0-1 as fraction of height
   size: 2 + (i % 3),
   delay: (i * 200) % 2000,
-  color: i % 3 === 0 ? Colors.primary : i % 3 === 1 ? Colors.accent : '#FFFFFF',
+  color: i % 3 === 0 ? Colors.primary : i % 3 === 1 ? Colors.accent : Colors.textPrimary,
   opacity: 0.15 + (i % 4) * 0.1,
 }));
 

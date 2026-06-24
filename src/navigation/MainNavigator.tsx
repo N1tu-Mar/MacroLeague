@@ -1,8 +1,8 @@
 import React from 'react';
-import { StyleSheet, View, Text } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, GestureResponderEvent } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Colors, FontFamily } from '../theme';
+import { Colors, FontFamily, FontSize, Shadow } from '../theme';
 
 import HomeScreen from '../screens/main/HomeScreen';
 import MealLoggerScreen from '../screens/main/MealLoggerScreen';
@@ -13,15 +13,28 @@ import RewardsScreen from '../screens/main/RewardsScreen';
 import EditGoalsScreen from '../screens/main/EditGoalsScreen';
 import NotificationsSettingsScreen from '../screens/main/NotificationsSettingsScreen';
 import UniversitySettingsScreen from '../screens/main/UniversitySettingsScreen';
+import RuleSettingsScreen from '../screens/main/RuleSettingsScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
-function TabIcon({ icon, focused }: { icon: string; focused: boolean }) {
+function TabIcon({ icon, label, focused }: { icon: string; label: string; focused: boolean }) {
   return (
-    <View style={styles.tabIconContainer}>
-      <Text style={[styles.tabEmoji, focused && styles.tabEmojiActive]}>{icon}</Text>
-      {focused && <View style={styles.tabGlow} />}
+    <View style={styles.tabIcon}>
+      <Text style={[styles.tabEmoji, { opacity: focused ? 1 : 0.55 }]}>{icon}</Text>
+      <Text style={[styles.tabLabel, focused && styles.tabLabelActive]}>{label}</Text>
+    </View>
+  );
+}
+
+// Raised, brand-filled primary action for logging a meal — the emphasized tab.
+function RaisedLogButton({ onPress }: { onPress?: (e: GestureResponderEvent) => void }) {
+  return (
+    <View style={styles.raisedWrap}>
+      <TouchableOpacity style={styles.raisedButton} onPress={onPress} activeOpacity={0.85}>
+        <Text style={styles.raisedPlus}>＋</Text>
+      </TouchableOpacity>
+      <Text style={styles.raisedLabel}>Log</Text>
     </View>
   );
 }
@@ -31,46 +44,36 @@ function HomeTabs() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
+        tabBarShowLabel: false,
         tabBarStyle: styles.tabBar,
-        tabBarActiveTintColor: Colors.primary,
-        tabBarInactiveTintColor: Colors.textSecondary,
-        tabBarLabelStyle: styles.tabLabel,
       }}
     >
       <Tab.Screen
         name="Home"
         component={HomeScreen}
-        options={{
-          tabBarIcon: ({ focused }) => <TabIcon icon="🏠" focused={focused} />,
-        }}
+        options={{ tabBarIcon: ({ focused }) => <TabIcon icon="🏠" label="Home" focused={focused} /> }}
+      />
+      <Tab.Screen
+        name="Leaderboard"
+        component={LeaderboardScreen}
+        options={{ tabBarIcon: ({ focused }) => <TabIcon icon="🏆" label="League" focused={focused} /> }}
       />
       <Tab.Screen
         name="Log"
         component={MealLoggerScreen}
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon icon="➕" focused={focused} />,
+          tabBarButton: (props) => <RaisedLogButton onPress={props.onPress ?? undefined} />,
         }}
       />
       <Tab.Screen
         name="Challenges"
         component={ChallengesScreen}
-        options={{
-          tabBarIcon: ({ focused }) => <TabIcon icon="⚔️" focused={focused} />,
-        }}
-      />
-      <Tab.Screen
-        name="Leaderboard"
-        component={LeaderboardScreen}
-        options={{
-          tabBarIcon: ({ focused }) => <TabIcon icon="🏆" focused={focused} />,
-        }}
+        options={{ tabBarIcon: ({ focused }) => <TabIcon icon="⚔️" label="Challenges" focused={focused} /> }}
       />
       <Tab.Screen
         name="Profile"
         component={ProfileScreen}
-        options={{
-          tabBarIcon: ({ focused }) => <TabIcon icon="👤" focused={focused} />,
-        }}
+        options={{ tabBarIcon: ({ focused }) => <TabIcon icon="👤" label="Profile" focused={focused} /> }}
       />
     </Tab.Navigator>
   );
@@ -82,6 +85,7 @@ export default function MainNavigator() {
       <Stack.Screen name="Tabs" component={HomeTabs} />
       <Stack.Screen name="Rewards" component={RewardsScreen} />
       <Stack.Screen name="EditGoals" component={EditGoalsScreen} />
+      <Stack.Screen name="RuleSettings" component={RuleSettingsScreen} />
       <Stack.Screen name="NotificationSettings" component={NotificationsSettingsScreen} />
       <Stack.Screen name="UniversitySettings" component={UniversitySettingsScreen} />
     </Stack.Navigator>
@@ -93,31 +97,28 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
-    height: 85,
-    paddingBottom: 20,
-    paddingTop: 8,
+    height: 88,
+    paddingBottom: 22,
+    paddingTop: 10,
   },
-  tabLabel: {
-    fontFamily: FontFamily.bodyMedium,
-    fontSize: 10,
-  },
-  tabIconContainer: {
+  tabIcon: { alignItems: 'center', justifyContent: 'center', gap: 3, width: 64 },
+  tabEmoji: { fontSize: 20 },
+  tabLabel: { fontFamily: FontFamily.bodyMedium, fontSize: FontSize.micro, color: Colors.textSecondary },
+  tabLabelActive: { color: Colors.primary, fontFamily: FontFamily.bodySemiBold },
+
+  raisedWrap: { flex: 1, alignItems: 'center', justifyContent: 'flex-start' },
+  raisedButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'relative',
+    marginTop: -18,
+    borderWidth: 4,
+    borderColor: Colors.background,
+    ...Shadow.floating,
   },
-  tabEmoji: { fontSize: 22, opacity: 0.6 },
-  tabEmojiActive: { opacity: 1 },
-  tabGlow: {
-    position: 'absolute',
-    bottom: -6,
-    width: 20,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: Colors.primary,
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 6,
-  },
+  raisedPlus: { fontFamily: FontFamily.displayBold, fontSize: 30, color: Colors.textPrimary, marginTop: -2 },
+  raisedLabel: { fontFamily: FontFamily.bodySemiBold, fontSize: FontSize.micro, color: Colors.primary, marginTop: 2 },
 });

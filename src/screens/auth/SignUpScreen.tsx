@@ -31,15 +31,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { Colors, FontFamily } from '../../theme';
 import { signUpWithEmail, signInWithGoogle } from '../../lib/auth';
-import { calculateMacros, UserProfile } from '../../lib/mockAuth';
+import { calculateMacros, GoalType } from '../../lib/macros';
 import { updateOnboardingProfile, slugifyUsername } from '../../services/profileService';
 import type { SignUpScreenProps } from '../../navigation/types';
 
 const { width } = Dimensions.get('window');
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type GoalType = UserProfile['goalType'];
 
 interface GoalOption {
   id: GoalType;

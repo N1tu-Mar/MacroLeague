@@ -1,21 +1,44 @@
 // `estimate-meal` edge function.
 //
-// Flow (see Databaseprompt.md section 4):
+// Flow:
 //   Expo app -> estimate-meal -> USDA FoodData Central -> Supabase cache -> app
 //
-// The USDA API key lives ONLY here as a function secret. The Expo client invokes
-// this function with the user's JWT and never touches USDA or the cache tables.
+// Two candidate kinds are returned (both editable, never auto-saved):
+//   - 'direct'    : the existing whole-query USDA search (always present; this is
+//                   also the fallback whenever composite parsing is unavailable).
+//   - 'composite' : an optional summed estimate for multi-item descriptions, built
+//                   only when OPENAI_API_KEY is configured (see parser.ts). The
+//                   language model only extracts ingredient structure; ALL macro
+//                   numbers still come from USDA.
+//
+// The USDA + OpenAI keys live ONLY here as function secrets and are never logged
+// or returned to the client.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { corsHeaders } from '../_shared/cors.ts';
-import { normalizeQuery, searchUsda, type UsdaCandidate } from './usda.ts';
+import { normalizeQuery, round, searchUsda, type UsdaCandidate } from './usda.ts';
+import { createParser, validateParsedMeal, type ParsedMeal } from './parser.ts';
+import { buildComposite, type ComponentEstimate, type ResolvedFood } from './composite.ts';
 
 const CACHE_TTL_DAYS = 7;
 const DEFAULT_PAGE_SIZE = 6;
 const MAX_PAGE_SIZE = 10;
+// Smaller per-component search; we only use the top hit for each ingredient.
+const COMPONENT_PAGE_SIZE = 4;
+// Bound input so a normalized cache key stays under the 200-char column limit
+// (with the "parse::" prefix) and a hostile description can't fan out forever.
+const MAX_QUERY_LEN = 180;
+const PARSE_CACHE_PREFIX = 'parse::';
 
 interface EstimateCandidate extends Omit<UsdaCandidate, 'rawPayload'> {
   foodId: string | null;
+  // --- Additive composite fields (optional; older clients ignore them). ---
+  kind?: 'direct' | 'composite';
+  originalQuery?: string;
+  components?: ComponentEstimate[];
+  assumptions?: string[];
+  warnings?: string[];
+  confidenceRange?: { low: number; high: number } | null;
 }
 
 function json(body: unknown, status = 200): Response {
@@ -63,7 +86,7 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'Invalid JSON body.' }, 400);
   }
 
-  const rawQuery = typeof payload.query === 'string' ? payload.query : '';
+  const rawQuery = typeof payload.query === 'string' ? payload.query.slice(0, MAX_QUERY_LEN) : '';
   const normalized = normalizeQuery(rawQuery);
   if (normalized.length < 2) {
     return json({ error: 'Please describe your meal in at least 2 characters.' }, 400);
@@ -86,6 +109,105 @@ Deno.serve(async (req: Request) => {
   }
   const sourceId = source.id as string;
 
+  // 1. DIRECT candidates (whole-query search). This is also the fallback path.
+  let direct: { candidates: EstimateCandidate[]; cached: boolean };
+  try {
+    direct = await resolveCandidates(admin, sourceId, usdaApiKey, normalized, rawQuery, pageSize);
+  } catch (err) {
+    return json({ error: (err as Error).message }, 502);
+  }
+  const directCandidates = direct.candidates.map((c) => ({ ...c, kind: 'direct' as const }));
+
+  // 2. COMPOSITE candidate (optional). Any failure here is swallowed so the user
+  //    still gets the direct candidates — composite is purely additive.
+  const compositeCandidates: EstimateCandidate[] = [];
+  const parser = createParser();
+  if (parser) {
+    try {
+      const parsed = await getOrParse(admin, sourceId, normalized, rawQuery, parser);
+      if (parsed && parsed.isComposite && parsed.components.length >= 2) {
+        const composite = await buildComposite(parsed, async (name): Promise<ResolvedFood | null> => {
+          const componentQuery = normalizeQuery(name);
+          // Too short to search meaningfully → treat as unmatched (no USDA call).
+          if (componentQuery.length < 2) {
+            return null;
+          }
+          const resolved = await resolveCandidates(
+            admin,
+            sourceId,
+            usdaApiKey,
+            componentQuery,
+            name,
+            COMPONENT_PAGE_SIZE,
+          );
+          const top = resolved.candidates[0];
+          if (!top) return null;
+          return {
+            externalId: top.externalId,
+            foodId: top.foodId,
+            name: top.name,
+            per100g: top.per100g,
+            servingGramWeight: top.servingGramWeight,
+            confidence: top.confidence,
+          };
+        });
+
+        if (composite) {
+          compositeCandidates.push({
+            source: 'usda_fdc',
+            kind: 'composite',
+            // Synthetic id — a composite isn't a single cached food.
+            externalId: `composite::${normalized}`,
+            foodId: null,
+            name: rawQuery,
+            brandName: null,
+            dataType: 'Composite estimate',
+            servingDescription: `${round(composite.totalGrams)} g total`,
+            servingGramWeight: round(composite.totalGrams),
+            confidence: composite.confidence,
+            serving: composite.summed,
+            per100g: composite.per100g,
+            originalQuery: rawQuery,
+            components: composite.components,
+            assumptions: composite.assumptions,
+            warnings: composite.warnings,
+            confidenceRange: composite.confidenceRange,
+          });
+        }
+      }
+    } catch (err) {
+      // Parser/compose failure → fall back to direct candidates only.
+      console.error('[estimate-meal] composite path failed', (err as Error)?.name ?? 'error');
+    }
+  }
+
+  // Composite first (when present), then the direct matches.
+  const candidates = [...compositeCandidates, ...directCandidates];
+
+  return json({
+    query: rawQuery,
+    normalizedQuery: normalized,
+    source: 'usda_fdc',
+    cached: direct.cached,
+    candidates,
+  });
+});
+
+/**
+ * Cache-or-search for one normalized query: returns mapped candidates (each with
+ * its cached `foods.id`) and whether the result came from the search cache. Used
+ * for both the whole-query search and each composite component, so repeated
+ * ingredients reuse the cache and the USDA call count stays bounded.
+ */
+async function resolveCandidates(
+  // deno-lint-ignore no-explicit-any
+  admin: any,
+  sourceId: string,
+  usdaApiKey: string,
+  normalized: string,
+  rawQuery: string,
+  pageSize: number,
+): Promise<{ candidates: EstimateCandidate[]; cached: boolean }> {
   // 1. Cache hit?
   const { data: cached } = await admin
     .from('food_search_cache')
@@ -95,22 +217,11 @@ Deno.serve(async (req: Request) => {
     .maybeSingle();
 
   if (cached && new Date(cached.expires_at).getTime() > Date.now()) {
-    return json({
-      query: rawQuery,
-      normalizedQuery: normalized,
-      source: 'usda_fdc',
-      cached: true,
-      candidates: cached.results as EstimateCandidate[],
-    });
+    return { candidates: cached.results as EstimateCandidate[], cached: true };
   }
 
   // 2. Query USDA on demand.
-  let usdaCandidates: UsdaCandidate[];
-  try {
-    usdaCandidates = await searchUsda(usdaApiKey, normalized, pageSize);
-  } catch (err) {
-    return json({ error: (err as Error).message }, 502);
-  }
+  const usdaCandidates = await searchUsda(usdaApiKey, normalized, pageSize);
 
   // 3. Cache each candidate food into `foods` (once per source+external_id).
   const externalIds = usdaCandidates.map((c) => c.externalId);
@@ -200,11 +311,62 @@ Deno.serve(async (req: Request) => {
       { onConflict: 'source_id,normalized_query' },
     );
 
-  return json({
-    query: rawQuery,
-    normalizedQuery: normalized,
-    source: 'usda_fdc',
-    cached: false,
-    candidates,
-  });
-});
+  return { candidates, cached: false };
+}
+
+/**
+ * Returns a cached parse if present and unexpired, otherwise calls the parser and
+ * caches the (non-sensitive, normalized) result. Reuses `food_search_cache` under
+ * a "parse::" key namespace so no new table/migration is required. Cache failures
+ * are non-fatal — parsing still proceeds.
+ */
+async function getOrParse(
+  // deno-lint-ignore no-explicit-any
+  admin: any,
+  sourceId: string,
+  normalized: string,
+  query: string,
+  parser: { parse: (q: string) => Promise<ParsedMeal | null> },
+): Promise<ParsedMeal | null> {
+  const cacheKey = (PARSE_CACHE_PREFIX + normalized).slice(0, 200);
+
+  try {
+    const { data } = await admin
+      .from('food_search_cache')
+      .select('results, expires_at')
+      .eq('source_id', sourceId)
+      .eq('normalized_query', cacheKey)
+      .maybeSingle();
+    if (data && new Date(data.expires_at).getTime() > Date.now()) {
+      const cachedParsed = validateParsedMeal(data.results);
+      if (cachedParsed) {
+        return cachedParsed;
+      }
+    }
+  } catch {
+    // Ignore cache-read problems and parse fresh.
+  }
+
+  const parsed = await parser.parse(query);
+  if (!parsed) {
+    return null;
+  }
+
+  try {
+    const expiresAt = new Date(Date.now() + CACHE_TTL_DAYS * 86_400_000).toISOString();
+    await admin.from('food_search_cache').upsert(
+      {
+        source_id: sourceId,
+        normalized_query: cacheKey,
+        raw_query: query.slice(0, 200),
+        results: parsed,
+        expires_at: expiresAt,
+      },
+      { onConflict: 'source_id,normalized_query' },
+    );
+  } catch {
+    // Non-fatal: a missing cache write just means we may re-parse next time.
+  }
+
+  return parsed;
+}

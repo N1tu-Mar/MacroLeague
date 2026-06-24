@@ -1,11 +1,21 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Colors, FontFamily } from '../theme';
+// Renders the REAL Supabase meal row (mealLogService.MealLog), not the demo
+// `../types` MealLog. Macros are per-serving, so each is multiplied by quantity
+// for display — matching how daily totals are summed.
 import { MealLog } from '../services/mealLogService';
 
 interface FoodLogItemProps {
   meal: MealLog;
 }
+
+// Provenance badge. A null source is a legacy row → treated/labeled as manual.
+const SOURCE_ICONS: Record<string, string> = {
+  user_estimate: '✨',
+  usda_fdc: '🔍',
+  manual: '✏️',
+};
 
 const MEAL_ICONS: Record<string, string> = {
   breakfast: '🌅',
@@ -18,8 +28,20 @@ function formatMacro(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
+function sourceKey(source: MealLog['source']): string {
+  // NULL/legacy collapses to 'manual' so old logs render consistently.
+  return source ?? 'manual';
+}
+
+function sourceLabel(source: MealLog['source']): string {
+  if (source === 'user_estimate') return 'estimate';
+  if (source === 'usda_fdc') return 'USDA';
+  return 'manual';
+}
+
 export default function FoodLogItem({ meal }: FoodLogItemProps) {
   const time = new Date(meal.eatenAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  // Apply quantity so the card matches the contribution to daily totals.
   const calories = meal.calories * meal.quantity;
   const protein = meal.proteinG * meal.quantity;
   const carbs = meal.carbsG * meal.quantity;
@@ -33,7 +55,7 @@ export default function FoodLogItem({ meal }: FoodLogItemProps) {
       <View style={styles.info}>
         <Text style={styles.name} numberOfLines={1}>{meal.freeText}</Text>
         <Text style={styles.meta}>
-          {time} · {meal.mealType}
+          {time} · {SOURCE_ICONS[sourceKey(meal.source)] ?? ''} {sourceLabel(meal.source)}
         </Text>
       </View>
       <View style={styles.macros}>

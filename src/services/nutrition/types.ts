@@ -16,6 +16,27 @@ export interface MacroBundle {
   sodiumMg: number | null;
 }
 
+/**
+ * One parsed-and-resolved ingredient inside a composite estimate. `macros` is
+ * null when no USDA match was found — that ingredient contributes nothing to the
+ * summed totals (it is never silently treated as zero) and is flagged in
+ * `warnings`.
+ */
+export interface ComponentEstimate {
+  displayName: string;
+  quantity: number | null;
+  unit: string | null;
+  /** True when the portion was assumed rather than taken from the description. */
+  assumedQuantity: boolean;
+  matchedName: string | null;
+  externalId: string | null;
+  foodId: string | null;
+  servingGramWeight: number;
+  servingDescription: string;
+  confidence: number;
+  macros: MacroBundle | null;
+}
+
 /** One candidate match the user can confirm/edit before logging. */
 export interface MealEstimateCandidate {
   source: 'usda_fdc';
@@ -33,6 +54,21 @@ export interface MealEstimateCandidate {
   serving: MacroBundle;
   /** Macros per 100 g, so the client can re-scale on quantity edits. */
   per100g: MacroBundle;
+
+  // --- Optional composite fields (additive). A missing `kind` means 'direct',
+  // so older candidates and clients keep working unchanged. ---
+  /** 'direct' = single USDA match; 'composite' = summed multi-item estimate. */
+  kind?: 'direct' | 'composite';
+  /** The original free-text description (composite candidates only). */
+  originalQuery?: string;
+  /** Per-ingredient breakdown for a composite estimate. */
+  components?: ComponentEstimate[];
+  /** Portion/aggregation assumptions to show before "Use & Edit". */
+  assumptions?: string[];
+  /** Caveats (e.g. an ingredient with no USDA match). */
+  warnings?: string[];
+  /** Confidence band for a composite estimate, when available. */
+  confidenceRange?: { low: number; high: number } | null;
 }
 
 export interface MealEstimateResponse {

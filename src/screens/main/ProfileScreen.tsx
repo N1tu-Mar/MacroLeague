@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -6,22 +6,79 @@ import {
   ScrollView,
   TouchableOpacity,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Colors, FontFamily } from '../../theme';
 import { useUserStore } from '../../store/userStore';
 import { signOut } from '../../lib/auth';
 import StreakFlame from '../../components/StreakFlame';
-import {
-  MOCK_ACHIEVEMENTS,
-  DEMO_WEEKLY_PROTEIN,
-  DEMO_WEEKLY_LABELS,
-  LEVEL_TITLES,
-  getXpForLevel,
-} from '../../data/mockData';
+import { LEVEL_TITLES, getXpForLevel } from '../../lib/leveling';
+import { deriveAchievements } from '../../lib/achievements';
+import { getRecentDailyActivity } from '../../services/activityService';
+
+interface WeeklyPoint {
+  label: string;
+  value: number;
+}
+
+const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** Builds the last 7 local days as {label, proteinG}, filling unlogged days with 0. */
+function buildWeeklyProtein(activity: { date: string; proteinG: number }[]): WeeklyPoint[] {
+  const byDate = new Map(activity.map((a) => [a.date, a.proteinG]));
+  const out: WeeklyPoint[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    out.push({ label: WEEKDAY_LABELS[d.getDay()], value: Math.round(byDate.get(key) ?? 0) });
+  }
+  return out;
+}
 
 export default function ProfileScreen({ navigation }: any) {
   const user = useUserStore((s) => s.user);
   const dailyGoals = useUserStore((s) => s.dailyGoals);
   const logout = useUserStore((s) => s.logout);
+  const refreshStats = useUserStore((s) => s.refreshStats);
+
+  const [weekly, setWeekly] = useState<WeeklyPoint[]>([]);
+
+  // Re-read backend-owned XP/level/points/streak each time Profile is focused so
+  // the stats reflect meals logged elsewhere without an app restart, and pull the
+  // real last-7-days protein from user_daily_activity for the chart.
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      void refreshStats();
+      (async () => {
+        try {
+          const activity = await getRecentDailyActivity(7);
+          if (active) setWeekly(buildWeeklyProtein(activity));
+        } catch {
+          if (active) setWeekly(buildWeeklyProtein([]));
+        }
+      })();
+      return () => {
+        active = false;
+      };
+    }, [refreshStats]),
+  );
+
+  const achievements = useMemo(
+    () =>
+      user
+        ? deriveAchievements({
+            xp: user.xp,
+            points: user.points,
+            streakCount: user.streakCount,
+            longestStreak: user.longestStreak,
+            totalMealsLogged: user.totalMealsLogged,
+            challengesWon: user.challengesWon,
+            level: user.level,
+          })
+        : [],
+    [user],
+  );
 
   if (!user) return null;
 
@@ -31,6 +88,7 @@ export default function ProfileScreen({ navigation }: any) {
 
   const settingsItems = [
     { label: 'Edit Macro Goals', icon: '🎯', screen: 'EditGoals' },
+    { label: 'Scoring Rules', icon: '🏅', screen: 'RuleSettings' },
     { label: 'Notification Preferences', icon: '🔔', screen: 'NotificationSettings' },
     { label: 'Linked University', icon: '🏫', screen: 'UniversitySettings' },
   ];
@@ -88,7 +146,7 @@ export default function ProfileScreen({ navigation }: any) {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>ACHIEVEMENTS</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.badgesRow}>
-          {MOCK_ACHIEVEMENTS.map((ach) => (
+          {achievements.map((ach) => (
             <View
               key={ach.id}
               style={[styles.badgeCard, !ach.unlocked && styles.badgeLocked]}
@@ -100,11 +158,7 @@ export default function ProfileScreen({ navigation }: any) {
                 {ach.name}
               </Text>
               <Text style={styles.badgeDesc} numberOfLines={2}>{ach.description}</Text>
-              {ach.unlocked && ach.unlockedAt && (
-                <Text style={styles.badgeDate}>
-                  {new Date(ach.unlockedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                </Text>
-              )}
+              {ach.unlocked && <Text style={styles.badgeDate}>Unlocked</Text>}
             </View>
           ))}
         </ScrollView>
@@ -115,29 +169,39 @@ export default function ProfileScreen({ navigation }: any) {
         <Text style={styles.sectionTitle}>WEEKLY PROTEIN</Text>
         <View style={styles.chartCard}>
           <View style={styles.chartBars}>
-            {DEMO_WEEKLY_PROTEIN.map((val, i) => {
-              const pct = Math.min(val / dailyGoals.protein, 1.2);
-              const isHit = val >= dailyGoals.protein;
-              const barColor = isHit ? Colors.primary : val >= dailyGoals.protein * 0.8 ? Colors.accent : Colors.error;
+            {weekly.map(({ label, value }, i) => {
+              const goal = dailyGoals.protein;
+              const pct = goal > 0 ? Math.min(value / goal, 1.2) : 0;
+              const isHit = goal > 0 && value >= goal;
+              const barColor =
+                goal <= 0
+                  ? Colors.surface2
+                  : isHit
+                    ? Colors.primary
+                    : value >= goal * 0.8
+                      ? Colors.accent
+                      : Colors.error;
               return (
                 <View key={i} style={styles.chartBarCol}>
                   <View style={styles.chartBarContainer}>
                     <View
                       style={[
                         styles.chartBar,
-                        { height: `${Math.min(pct * 100, 100)}%`, backgroundColor: barColor },
+                        { height: `${Math.max(2, Math.min(pct * 100, 100))}%`, backgroundColor: barColor },
                       ]}
                     />
                   </View>
-                  <Text style={styles.chartLabel}>{DEMO_WEEKLY_LABELS[i]}</Text>
-                  <Text style={styles.chartValue}>{val}g</Text>
+                  <Text style={styles.chartLabel}>{label}</Text>
+                  <Text style={styles.chartValue}>{value}g</Text>
                 </View>
               );
             })}
           </View>
           <View style={styles.goalLine}>
             <View style={styles.goalLineDash} />
-            <Text style={styles.goalLineText}>Goal: {dailyGoals.protein}g</Text>
+            <Text style={styles.goalLineText}>
+              {dailyGoals.protein > 0 ? `Goal: ${dailyGoals.protein}g` : 'Set a protein goal'}
+            </Text>
           </View>
         </View>
       </View>

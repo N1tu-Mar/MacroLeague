@@ -1,0 +1,112 @@
+╭─── Claude Code v2.1.183 ─────────────────────────────────────────────────────╮
+│                                                    │ Tips for getting        │
+│                 Welcome back Nitu!                 │ started                 │
+│                                                    │ Run /init to create a … │
+│                       ▐▛███▜▌                      │ ─────────────────────── │
+│                      ▝▜█████▛▘                     │ What's new              │
+│                        ▘▘ ▝▝                       │ Improved auto mode saf… │
+│    Opus 4.8 · Claude Pro ·                         │ Added a warning when t… │
+│    nityanth.maramreddy@gmail.com's Organization    │ Added `attribution.ses… │
+│            ~/Downloads/MacroLeagueDemo             │ /release-notes for more │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+
+✻ Conversation compacted (ctrl+o for history)
+
+
+⏺ Everything is complete and verified. The untracked
+  0004_repair_missing_profiles.sql is from separate concurrent work (referenced
+  by the linter-updated profileService) — I left it untouched as it's unrelated
+  to this task.
+
+  Summary
+
+  Part 1 — editMeal/deleteMeal wired to the UI
+
+  - useMealLogger.ts: added editingId state plus beginEdit(meal), cancelEdit(),
+  and removeMeal(id). submit() now branches: when editingId is set it calls
+  editMeal() (in-place update, no new idempotency key, carries the fat breakdown
+  so an edit can also clear a stale subtype); otherwise it inserts as before.
+  beginEdit loads every field including the fat subtypes so nothing is hidden;
+  it deliberately doesn't restore estimate provenance because editMeal leaves
+  source/source_food_id untouched.
+  - MealLoggerScreen.tsx: each confirmed-meal row now has Edit and Delete
+  actions. Edit loads the row into the form (header flips to "EDIT MEAL", the
+  Manual/Describe toggle hides, the button reads "UPDATE MEAL", and a "Cancel
+  edit" button appears). Delete confirms via Alert then calls removeMeal and
+  refreshes. Totals refresh after edit/delete.
+
+  Part 2 — Composite meal descriptions
+
+  Architecture (justified): a provider-independent parser interface (parser.ts)
+  with the existing whole-query USDA search as the always-on fallback, plus a
+  single optional OpenAI implementation that activates only when OPENAI_API_KEY
+  is set. No key → byte-for-byte the old direct-search behavior.
+
+  New/changed edge files:
+  - parser.ts — MealParser interface + OpenAiParser. Strict json_schema (no
+  nutrition fields), every field re-validated (validateParsedMeal), 8s timeout,
+  component cap, returns null on any failure. The prompt tells the model to keep
+  real dishes ("macaroni and cheese") as one component.
+  - composite.ts — deterministic gram scaling + summing of USDA nutrients.
+  Unmatched components contribute nothing and raise a warning (no silent zeros);
+  a fat subtype is summed only when every component reports it; portion
+  assumptions and a conservative confidence range are produced.
+  - index.ts — refactored into a resolveCandidates cache-or-search helper reused
+  by the whole-query path and each component (bounding USDA calls, reusing
+  food_search_cache/foods); parse results cached under a parse:: key namespace
+  (no new migration); composite path fully wrapped so any failure falls back to
+  direct candidates. Input capped at 180 chars; keys/auth headers never logged.
+  - usda.ts — exported scale/round for reuse.
+
+  Client:
+  - types.ts — additively extended MealEstimateCandidate (kind, originalQuery,
+  components, assumptions, warnings, confidenceRange) + ComponentEstimate.
+  Missing kind ⇒ treated as direct, so older clients/cached rows keep working.
+  - MealLoggerScreen.tsx — CandidateCard shows the ingredient breakdown,
+  assumptions, warnings, and a confidence range before "Use & Edit". Confirming
+  still routes through applyEstimate → the one logMeal() save path (source = 
+  'user_estimate').
+
+  Verification
+
+  - npx tsc --noEmit — clean. git diff --check — clean.
+  - Security grep: no OpenAI/USDA/service-role keys anywhere under src//app
+  config; only EXPO_PUBLIC_SUPABASE_URL/ANON_KEY are client-side.
+  - Edge functions can't be type-checked locally (Deno isn't installed;
+  supabase/functions is excluded from the app config by design) — reviewed
+  manually.
+
+  Deploy steps — NOT executed (no approval)
+
+  npx supabase functions deploy estimate-meal
+  npx supabase secrets set OPENAI_API_KEY=your_key_here     # optional; enables 
+  composite parsing
+  npx supabase secrets set OPENAI_MODEL=gpt-4o-mini         # optional override
+  No new migration is required for composite (parse cache reuses
+  food_search_cache).
+
+  Limitations
+
+  - Composite quality depends on USDA single-food matches and the model's
+  splitting; quantities for count/volume units are explicit assumptions
+  (surfaced in the UI), not exact.
+  - Edit doesn't re-run estimation (by design — an existing meal is reconciled
+  manually).
+  - Composite candidates save as one summed user_estimate meal (no per-component
+  rows persisted), per the "no recipe builder" constraint.
+
+  Want me to branch and commit this?
+
+✻ Cogitated for 13m 49s
+
+❯ /compact                                                                      
+  ⎿  Compacted (ctrl+o to see full summary)
+  ⎿  Referenced file docs/nutrition-architecture.md
+  ⎿  Referenced file supabase/config.toml
+  ⎿  Referenced file supabase/functions/estimate-meal/index.ts
+  ⎿  Referenced file src/screens/main/MealLoggerScreen.tsx
+  ⎿  Read src/services/profileService.ts (146 lines)
+
+❯ /usage 
+  ⎿  Settings dialog dismissed
