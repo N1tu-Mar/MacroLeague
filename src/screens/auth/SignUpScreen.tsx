@@ -33,23 +33,26 @@ import { Colors, FontFamily } from '../../theme';
 import { signUpWithEmail, signInWithGoogle } from '../../lib/auth';
 import { calculateMacros, GoalType } from '../../lib/macros';
 import { updateOnboardingProfile, slugifyUsername } from '../../services/profileService';
+import { useUserStore } from '../../store/userStore';
+import PixelFlame from '../../components/PixelFlame';
+import AppIcon, { AppIconName } from '../../components/ui/AppIcon';
 import type { SignUpScreenProps } from '../../navigation/types';
 
 const { width } = Dimensions.get('window');
 
 interface GoalOption {
   id: GoalType;
-  emoji: string;
+  icon: AppIconName | 'flame';
   label: string;
   description: string;
   accentColor: string;
 }
 
 const GOALS: GoalOption[] = [
-  { id: 'muscle', emoji: '💪', label: 'Build Muscle', description: 'High protein, caloric surplus', accentColor: Colors.primary },
-  { id: 'lose_weight', emoji: '🔥', label: 'Lose Weight', description: 'Caloric deficit, lean focus', accentColor: Colors.accent },
-  { id: 'eat_cleaner', emoji: '🥗', label: 'Eat Cleaner', description: 'Whole foods, balanced macros', accentColor: '#00D4FF' },
-  { id: 'just_track', emoji: '📊', label: 'Just Track', description: 'No specific goal, just log', accentColor: Colors.gold },
+  { id: 'muscle', icon: 'protein', label: 'Build Muscle', description: 'High protein, caloric surplus', accentColor: Colors.primary },
+  { id: 'lose_weight', icon: 'flame', label: 'Lose Weight', description: 'Caloric deficit, lean focus', accentColor: Colors.accent },
+  { id: 'eat_cleaner', icon: 'salad', label: 'Eat Cleaner', description: 'Whole foods, balanced macros', accentColor: '#00D4FF' },
+  { id: 'just_track', icon: 'chart', label: 'Just Track', description: 'No specific goal, just log', accentColor: Colors.gold },
 ];
 
 // ─── Step Indicator ───────────────────────────────────────────────────────────
@@ -177,7 +180,7 @@ function SuccessCheck() {
     <View style={check.container}>
       <Animated.View style={[check.ring, ringStyle]} />
       <Animated.View style={[check.circle, circleStyle]}>
-        <Text style={check.checkmark}>✓</Text>
+        <AppIcon name="checkmark" size={40} color="#0A0A0F" strokeWidth={3} />
       </Animated.View>
       <Text style={check.title}>You're in!</Text>
       <Text style={check.sub}>MacroLeague is ready.{'\n'}Time to compete.</Text>
@@ -197,7 +200,6 @@ const check = StyleSheet.create({
     shadowColor: Colors.primary, shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.6, shadowRadius: 20, elevation: 12,
   },
-  checkmark: { color: '#0A0A0F', fontSize: 40, fontWeight: '700' },
   title: { fontFamily: FontFamily.displayBold, fontSize: 36, color: Colors.textPrimary, letterSpacing: 1 },
   sub: { fontFamily: FontFamily.body, fontSize: 15, color: Colors.textSecondary, textAlign: 'center', lineHeight: 22 },
 });
@@ -266,11 +268,17 @@ export default function SignUpScreen({ navigation }: SignUpScreenProps) {
       if (authData.user) {
         await updateOnboardingProfile(authData.user.id, {
           username: slugifyUsername(name || email.split('@')[0]),
+          displayName: name,
+          university,
+          goalType,
           goalCalories: macros.calories,
           goalProteinG: macros.protein,
           goalCarbsG: macros.carbs,
           goalUnsaturatedFatG: macros.fats,
         });
+        // SIGNED_IN can hydrate before the onboarding update finishes. Refresh
+        // once more after the write so the first Profile render has the real name.
+        await useUserStore.getState().refreshStats();
       }
       setDone(true);
     } catch (err: any) {
@@ -301,19 +309,21 @@ export default function SignUpScreen({ navigation }: SignUpScreenProps) {
         <LinearGradient colors={['#0A0A0F', '#0D0D18', '#0A0A0F']} style={StyleSheet.absoluteFill} />
         <Animated.View entering={FadeInDown.duration(500)} style={styles.successWrapper}>
           <SuccessCheck />
+          <View style={styles.successText}>
+            <Text style={styles.successTitle}>Account created!</Text>
+            <Text style={styles.successSubtitle}>
+              Check your email for a confirmation link, then sign in to start competing.
+            </Text>
+          </View>
           <TouchableOpacity
             style={styles.primaryButton}
-            onPress={async () => {
-              // If Supabase auto-confirmed, auth listener already logged us in.
-              // If not, manually trigger login with demo data as fallback.
-              const { useUserStore } = require('../../store/userStore');
-              if (!useUserStore.getState().isAuthenticated) {
-                useUserStore.getState().login();
-              }
-            }}
+            onPress={() => navigation.navigate('SignIn')}
           >
             <LinearGradient colors={[Colors.primary, '#00C96A']} style={styles.primaryGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-              <Text style={styles.primaryButtonText}>Let's Go →</Text>
+              <View style={styles.primaryButtonContent}>
+                <Text style={styles.primaryButtonText}>Go to Sign In</Text>
+                <AppIcon name="chevron-right" size={18} color="#0A0A0F" />
+              </View>
             </LinearGradient>
           </TouchableOpacity>
         </Animated.View>
@@ -423,14 +433,17 @@ export default function SignUpScreen({ navigation }: SignUpScreenProps) {
                   onBlur={() => setFocusedField(null)}
                 />
                 <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
-                  <Text style={styles.eyeIcon}>{showPassword ? '🙈' : '👁'}</Text>
+                  <AppIcon name={showPassword ? 'eye-off' : 'eye'} size={18} />
                 </TouchableOpacity>
               </View>
             </View>
 
             <TouchableOpacity style={styles.primaryButton} onPress={nextStep} activeOpacity={0.85}>
               <LinearGradient colors={[Colors.primary, '#00C96A']} style={styles.primaryGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-                <Text style={styles.primaryButtonText}>Continue →</Text>
+                <View style={styles.primaryButtonContent}>
+                  <Text style={styles.primaryButtonText}>Continue</Text>
+                  <AppIcon name="chevron-right" size={18} color="#0A0A0F" />
+                </View>
               </LinearGradient>
             </TouchableOpacity>
 
@@ -480,12 +493,18 @@ export default function SignUpScreen({ navigation }: SignUpScreenProps) {
                   onBlur={() => setFocusedField(null)}
                 />
               </View>
-              <Text style={styles.hint}>🏫 Pre-filled for Rutgers — change if needed</Text>
+              <View style={styles.hintRow}>
+                <AppIcon name="school" size={13} />
+                <Text style={styles.hint}>Pre-filled for Rutgers — change if needed</Text>
+              </View>
             </View>
 
             <TouchableOpacity style={styles.primaryButton} onPress={nextStep} activeOpacity={0.85}>
               <LinearGradient colors={[Colors.primary, '#00C96A']} style={styles.primaryGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-                <Text style={styles.primaryButtonText}>Continue →</Text>
+                <View style={styles.primaryButtonContent}>
+                  <Text style={styles.primaryButtonText}>Continue</Text>
+                  <AppIcon name="chevron-right" size={18} color="#0A0A0F" />
+                </View>
               </LinearGradient>
             </TouchableOpacity>
           </Animated.View>
@@ -515,10 +534,16 @@ export default function SignUpScreen({ navigation }: SignUpScreenProps) {
                   >
                     {active && (
                       <View style={[styles.goalCheckBadge, { backgroundColor: g.accentColor }]}>
-                        <Text style={styles.goalCheck}>✓</Text>
+                        <AppIcon name="checkmark" size={12} color="#0A0A0F" strokeWidth={3} />
                       </View>
                     )}
-                    <Text style={styles.goalEmoji}>{g.emoji}</Text>
+                    {g.icon === 'flame' ? (
+                      <View style={styles.goalArt}><PixelFlame size={28} animated={active} /></View>
+                    ) : (
+                      <View style={styles.goalArt}>
+                        <AppIcon name={g.icon} size={28} color={active ? g.accentColor : Colors.textSecondary} />
+                      </View>
+                    )}
                     <Text style={[styles.goalLabel, active && { color: g.accentColor }]}>{g.label}</Text>
                     <Text style={styles.goalDesc}>{g.description}</Text>
                   </TouchableOpacity>
@@ -528,7 +553,10 @@ export default function SignUpScreen({ navigation }: SignUpScreenProps) {
 
             <TouchableOpacity style={styles.primaryButton} onPress={nextStep} activeOpacity={0.85}>
               <LinearGradient colors={[Colors.primary, '#00C96A']} style={styles.primaryGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-                <Text style={styles.primaryButtonText}>Continue →</Text>
+                <View style={styles.primaryButtonContent}>
+                  <Text style={styles.primaryButtonText}>Continue</Text>
+                  <AppIcon name="chevron-right" size={18} color="#0A0A0F" />
+                </View>
               </LinearGradient>
             </TouchableOpacity>
           </Animated.View>
@@ -597,7 +625,10 @@ export default function SignUpScreen({ navigation }: SignUpScreenProps) {
                 {loading ? (
                   <ActivityIndicator color="#0A0A0F" />
                 ) : (
-                  <Text style={styles.primaryButtonText}>Join MacroLeague 🏆</Text>
+                  <View style={styles.primaryButtonContent}>
+                    <Text style={styles.primaryButtonText}>Join MacroLeague</Text>
+                    <AppIcon name="trophy" size={18} color="#0A0A0F" />
+                  </View>
                 )}
               </LinearGradient>
             </TouchableOpacity>
@@ -612,6 +643,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   scroll: { flexGrow: 1, paddingHorizontal: 24, paddingTop: Platform.OS === 'ios' ? 60 : 40, paddingBottom: 48 },
   successWrapper: { flex: 1, justifyContent: 'center', paddingHorizontal: 28, gap: 32 },
+  successText: { gap: 8 },
+  successTitle: { fontFamily: FontFamily.displayBold, fontSize: 28, color: Colors.textPrimary, textAlign: 'center' },
+  successSubtitle: { fontFamily: FontFamily.body, fontSize: 14, color: Colors.textSecondary, textAlign: 'center', lineHeight: 20 },
 
   topRow: {
     flexDirection: 'row',
@@ -635,7 +669,8 @@ const styles = StyleSheet.create({
   },
   title: { fontFamily: FontFamily.displayBold, fontSize: 38, color: Colors.textPrimary, letterSpacing: 0.5 },
   subtitle: { fontFamily: FontFamily.body, fontSize: 14, color: Colors.textSecondary, lineHeight: 20 },
-  hint: { fontFamily: FontFamily.body, fontSize: 12, color: Colors.textSecondary, marginTop: 4 },
+  hint: { fontFamily: FontFamily.body, fontSize: 12, color: Colors.textSecondary },
+  hintRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4 },
 
   // Form
   fieldWrapper: { gap: 8 },
@@ -656,7 +691,6 @@ const styles = StyleSheet.create({
   },
   input: { flex: 1, fontFamily: FontFamily.body, fontSize: 15, color: Colors.textPrimary },
   eyeButton: { padding: 4 },
-  eyeIcon: { fontSize: 16 },
 
   // Google
   googleButton: {
@@ -684,6 +718,7 @@ const styles = StyleSheet.create({
   },
   primaryGradient: { height: 54, alignItems: 'center', justifyContent: 'center' },
   primaryButtonText: { fontFamily: FontFamily.bodySemiBold, fontSize: 16, color: '#0A0A0F', letterSpacing: 0.3 },
+  primaryButtonContent: { flexDirection: 'row', alignItems: 'center', gap: 8 },
 
   // Sign in link
   signInRow: { flexDirection: 'row', justifyContent: 'center', paddingVertical: 4 },
@@ -704,7 +739,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   goalCheck: { color: '#0A0A0F', fontSize: 11, fontWeight: '700' },
-  goalEmoji: { fontSize: 28 },
+  goalArt: { height: 34, justifyContent: 'center' },
   goalLabel: { fontFamily: FontFamily.bodySemiBold, fontSize: 15, color: Colors.textPrimary },
   goalDesc: { fontFamily: FontFamily.body, fontSize: 12, color: Colors.textSecondary, lineHeight: 16 },
 

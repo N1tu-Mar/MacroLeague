@@ -24,6 +24,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Colors, FontFamily } from '../../theme';
 import { signInWithEmail, signInWithGoogle } from '../../lib/auth';
 import type { SignInScreenProps } from '../../navigation/types';
+import AppIcon from '../../components/ui/AppIcon';
 
 export default function SignInScreen({ navigation }: SignInScreenProps) {
   const [email, setEmail] = useState('');
@@ -99,7 +100,7 @@ export default function SignInScreen({ navigation }: SignInScreenProps) {
         {/* Back button */}
         <Animated.View entering={FadeInDown.duration(400)} style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Text style={styles.backArrow}>←</Text>
+            <AppIcon name="back" size={24} color={Colors.textPrimary} />
           </TouchableOpacity>
         </Animated.View>
 
@@ -169,7 +170,7 @@ export default function SignInScreen({ navigation }: SignInScreenProps) {
                 onPress={() => setShowPassword(!showPassword)}
                 style={styles.eyeButton}
               >
-                <Text style={styles.eyeIcon}>{showPassword ? '🙈' : '👁'}</Text>
+                <AppIcon name={showPassword ? 'eye-off' : 'eye'} size={18} />
               </TouchableOpacity>
             </View>
           </View>
@@ -334,9 +335,6 @@ const styles = StyleSheet.create({
   },
   eyeButton: {
     padding: 4,
-  },
-  eyeIcon: {
-    fontSize: 16,
   },
   primaryButton: {
     borderRadius: 50,

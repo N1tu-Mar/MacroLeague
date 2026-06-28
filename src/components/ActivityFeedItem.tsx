@@ -2,11 +2,13 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Colors, FontFamily, FontSize, Spacing, alpha } from '../theme';
 import Avatar from './ui/Avatar';
+import PixelFlame from './PixelFlame';
+import AppIcon, { AppIconName } from './ui/AppIcon';
 
 interface ActivityFeedItemProps {
   name: string;
-  /** Emoji icon describing the activity (supplied by activityService). */
-  icon: string;
+  /** Activity icon, or the reserved "streak" key for the sourced flame art. */
+  icon: AppIconName | 'streak';
   text: string;
   minutesAgo: number;
   reactions?: number;
@@ -28,13 +30,15 @@ export default function ActivityFeedItem({ name, icon, text, minutesAgo, reactio
         <Text style={styles.text} numberOfLines={2}>
           {text}
         </Text>
-        <Text style={styles.meta}>
-          {icon} · {relativeTime(minutesAgo)} ago
-        </Text>
+        <View style={styles.metaRow}>
+          {icon === 'streak' ? <PixelFlame size={11} /> : <AppIcon name={icon} size={11} />}
+          <Text style={styles.meta}>· {relativeTime(minutesAgo)} ago</Text>
+        </View>
       </View>
       {reactions > 0 ? (
         <View style={styles.reactions}>
-          <Text style={styles.reactionText}>👏 {reactions}</Text>
+          <AppIcon name="reaction" size={12} color={Colors.textSecondary} />
+          <Text style={styles.reactionText}>{reactions}</Text>
         </View>
       ) : null}
     </View>
@@ -51,8 +55,12 @@ const styles = StyleSheet.create({
   body: { flex: 1 },
   text: { fontFamily: FontFamily.body, fontSize: FontSize.label, color: Colors.textSecondary, lineHeight: 19 },
   name: { fontFamily: FontFamily.bodySemiBold, color: Colors.textPrimary },
-  meta: { fontFamily: FontFamily.body, fontSize: FontSize.micro, color: Colors.textTertiary, marginTop: 2 },
+  meta: { fontFamily: FontFamily.body, fontSize: FontSize.micro, color: Colors.textTertiary },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 },
   reactions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     backgroundColor: alpha(Colors.primary, 0.1),
     paddingHorizontal: Spacing.sm,
     paddingVertical: 4,

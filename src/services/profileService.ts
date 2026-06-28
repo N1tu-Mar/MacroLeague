@@ -8,6 +8,10 @@ const MISSING_PROFILE_MESSAGE =
 
 export interface OnboardingProfileUpdate {
   username: string;
+  /** Human-facing name shown in Profile (kept separate from the unique username). */
+  displayName: string;
+  university: string;
+  goalType: string;
   goalCalories: number;
   goalProteinG: number;
   goalCarbsG: number;
@@ -17,7 +21,7 @@ export interface OnboardingProfileUpdate {
 /**
  * Saves onboarding data into the profile row created by the auth trigger.
  * If the chosen username is already taken, falls back to keeping the
- * auto-generated one and still saves the macro goals.
+ * auto-generated one and still saves the display name and onboarding data.
  */
 export async function updateOnboardingProfile(
   userId: string,
@@ -25,6 +29,9 @@ export async function updateOnboardingProfile(
 ): Promise<void> {
   const payload = {
     username: update.username,
+    display_name: update.displayName.trim(),
+    university: update.university.trim(),
+    goal_type: update.goalType,
     goal_calories: update.goalCalories,
     goal_protein_g: update.goalProteinG,
     goal_carbs_g: update.goalCarbsG,
@@ -43,12 +50,15 @@ export async function updateOnboardingProfile(
     .maybeSingle();
 
   if (error) {
-    // 23505 = unique_violation — username taken; retry without overwriting it
+    // 23505 = unique_violation — username taken. Keep the generated unique
+    // username, but still save the human-facing name and all onboarding fields.
+    // Previously this retry left display_name unset, which exposed user_<id> in
+    // the Profile screen.
     if (error.code === '23505') {
-      const { username: _omit, ...macrosOnly } = payload;
+      const { username: _omit, ...withoutUsername } = payload;
       const { data: retryData, error: retryError } = await supabase
         .from('profiles')
-        .update(macrosOnly)
+        .update(withoutUsername)
         .eq('id', userId)
         .select('id')
         .maybeSingle();
@@ -201,6 +211,15 @@ export interface ProfileIdentity {
   goalType: string | null;
 }
 
+/** Matches usernames created by the profile trigger before onboarding finishes. */
+function isGeneratedUsername(username: string | null): boolean {
+  return /^user_[0-9a-f]{8,24}$/i.test(username ?? '');
+}
+
+function nonEmptyString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
 /**
  * Loads the user-editable identity/display fields (added in migration 0006) so the
  * app can show the real saved name/university/goal instead of placeholders derived
@@ -221,9 +240,25 @@ export async function getProfileIdentity(userId: string): Promise<ProfileIdentit
   if (error) throw error;
   if (!data) throw new Error(MISSING_PROFILE_MESSAGE);
 
+  let displayName = nonEmptyString(data.display_name);
+
+  // OAuth users can predate the onboarding display_name write. Do not replace
+  // their real auth-provider name with the trigger's temporary user_<id> value.
+  // This also repairs the visible name for existing affected accounts without
+  // guessing a name from the UUID.
+  if (!displayName && isGeneratedUsername(data.username)) {
+    const { data: authData } = await supabase.auth.getUser();
+    if (authData.user?.id === userId) {
+      displayName =
+        nonEmptyString(authData.user.user_metadata?.full_name) ??
+        nonEmptyString(authData.user.user_metadata?.name) ??
+        nonEmptyString(authData.user.email?.split('@')[0]);
+    }
+  }
+
   return {
     username: data.username ?? 'user',
-    displayName: data.display_name,
+    displayName,
     university: data.university,
     goalType: data.goal_type,
   };

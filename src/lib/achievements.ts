@@ -1,4 +1,5 @@
 import { ProfileStats } from '../services/profileService';
+import type { AppIconName } from '../components/ui/AppIcon';
 
 // Achievements DERIVED from the user's real backend-owned stats. Replaces the
 // former MOCK_ACHIEVEMENTS list, so an unlocked badge always reflects something the
@@ -8,7 +9,7 @@ export interface Achievement {
   id: string;
   name: string;
   description: string;
-  icon: string;
+  icon: AppIconName | 'streak';
   unlocked: boolean;
 }
 
@@ -18,42 +19,42 @@ export function deriveAchievements(stats: ProfileStats): Achievement[] {
       id: 'first_log',
       name: 'First Log',
       description: 'Log your first meal',
-      icon: '🍽️',
+      icon: 'meal',
       unlocked: stats.totalMealsLogged >= 1,
     },
     {
       id: 'streak_7',
       name: '7-Day Streak',
       description: 'Log meals 7 days in a row',
-      icon: '🔥',
+      icon: 'streak',
       unlocked: stats.longestStreak >= 7,
     },
     {
       id: 'level_5',
       name: 'Competitor',
       description: 'Reach level 5',
-      icon: '⭐',
+      icon: 'star',
       unlocked: stats.level >= 5,
     },
     {
       id: 'century',
       name: 'Century Club',
       description: 'Log 100 meals total',
-      icon: '💯',
+      icon: 'century',
       unlocked: stats.totalMealsLogged >= 100,
     },
     {
       id: 'streak_30',
       name: '30-Day Streak',
       description: 'Log meals 30 days straight',
-      icon: '💎',
+      icon: 'gem',
       unlocked: stats.longestStreak >= 30,
     },
     {
       id: 'challenge_win',
       name: 'Challenge Winner',
       description: 'Win your first challenge',
-      icon: '🏆',
+      icon: 'trophy',
       unlocked: stats.challengesWon >= 1,
     },
   ];

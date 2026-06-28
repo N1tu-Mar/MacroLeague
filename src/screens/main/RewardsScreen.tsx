@@ -19,6 +19,17 @@ import {
   RewardCatalogItem,
 } from '../../services/rewardService';
 import { getEarnRules, EarnRule } from '../../services/ruleSetService';
+import AppIcon, { AppIconName } from '../../components/ui/AppIcon';
+
+function rewardIcon(reward: RewardCatalogItem): AppIconName {
+  if (reward.category === 'Fitness') return 'protein';
+  if (reward.category === 'Drinks') {
+    return reward.partnerName.toLowerCase().includes('café') ? 'coffee' : 'drink';
+  }
+  if (reward.partnerName.toLowerCase().includes('bowl')) return 'bowl';
+  if (reward.partnerName.toLowerCase().includes('meal')) return 'meal-plan';
+  return 'gift';
+}
 
 export default function RewardsScreen() {
   const user = useUserStore((s) => s.user);
@@ -101,7 +112,8 @@ export default function RewardsScreen() {
 
         {showConfetti && (
           <View style={styles.confettiOverlay}>
-            <Text style={styles.confettiText}>🎉 Reward Unlocked! 🎉</Text>
+            <AppIcon name="party" size={22} color={Colors.gold} />
+            <Text style={styles.confettiText}>Reward Unlocked</Text>
           </View>
         )}
 
@@ -124,12 +136,17 @@ export default function RewardsScreen() {
                   onPress={() => !isRedeemed && setSelectedReward(reward)}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.rewardLogo}>{reward.partnerLogo}</Text>
+                  <View style={styles.rewardIcon}>
+                    <AppIcon name={rewardIcon(reward)} size={36} color={Colors.gold} />
+                  </View>
                   <Text style={styles.rewardPartner}>{reward.partnerName}</Text>
                   <Text style={styles.rewardDesc}>{reward.description}</Text>
                   <View style={styles.rewardFooter}>
                     {isRedeemed ? (
-                      <Text style={styles.redeemedBadge}>✓ Redeemed</Text>
+                      <View style={styles.redeemedRow}>
+                        <AppIcon name="check" size={14} color={Colors.primary} />
+                        <Text style={styles.redeemedBadge}>Redeemed</Text>
+                      </View>
                     ) : (
                       <View style={[styles.costBadge, !canAfford && { opacity: 0.4 }]}>
                         <Text style={styles.costText}>{reward.pointsCost} pts</Text>
@@ -153,7 +170,7 @@ export default function RewardsScreen() {
           onPress={() => setEarnExpanded(!earnExpanded)}
         >
           <Text style={styles.sectionTitle}>HOW TO EARN</Text>
-          <Text style={styles.expandArrow}>{earnExpanded ? '▲' : '▼'}</Text>
+          <AppIcon name={earnExpanded ? 'chevron-up' : 'chevron-down'} size={17} />
         </TouchableOpacity>
         {earnExpanded && (
           <View style={styles.earnCard}>
@@ -179,7 +196,9 @@ export default function RewardsScreen() {
           <View style={styles.modalCard}>
             {selectedReward && (
               <>
-                <Text style={styles.modalLogo}>{selectedReward.partnerLogo}</Text>
+                <View style={styles.modalIcon}>
+                  <AppIcon name={rewardIcon(selectedReward)} size={48} color={Colors.gold} />
+                </View>
                 <Text style={styles.modalPartner}>{selectedReward.partnerName}</Text>
                 <Text style={styles.modalDesc}>{selectedReward.description}</Text>
 
@@ -247,6 +266,9 @@ const styles = StyleSheet.create({
   balanceValue: { fontFamily: FontFamily.displayBold, fontSize: 42, color: Colors.primary, marginVertical: 4 },
   balanceSub: { fontFamily: FontFamily.body, fontSize: 12, color: Colors.textSecondary },
   confettiOverlay: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
     backgroundColor: Colors.gold + '18',
     borderRadius: 12,
     padding: 16,
@@ -275,7 +297,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   rewardCardRedeemed: { borderColor: Colors.primary + '44', backgroundColor: Colors.primary + '08' },
-  rewardLogo: { fontSize: 36, marginBottom: 8 },
+  rewardIcon: { marginBottom: 8 },
   rewardPartner: { fontFamily: FontFamily.displayBold, fontSize: 14, color: Colors.textPrimary, textAlign: 'center' },
   rewardDesc: { fontFamily: FontFamily.body, fontSize: 12, color: Colors.textSecondary, textAlign: 'center', marginTop: 4 },
   rewardFooter: { marginTop: 10 },
@@ -287,9 +309,9 @@ const styles = StyleSheet.create({
   },
   costText: { fontFamily: FontFamily.displayBold, fontSize: 12, color: Colors.primary },
   redeemedBadge: { fontFamily: FontFamily.bodySemiBold, fontSize: 12, color: Colors.primary },
+  redeemedRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   rewardExpiry: { fontFamily: FontFamily.body, fontSize: 10, color: Colors.textSecondary, marginTop: 6 },
   earnHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  expandArrow: { fontFamily: FontFamily.body, fontSize: 12, color: Colors.textSecondary },
   earnCard: {
     backgroundColor: Colors.surface,
     borderRadius: 14,
@@ -322,7 +344,7 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
   },
-  modalLogo: { fontSize: 48, marginBottom: 12 },
+  modalIcon: { marginBottom: 12 },
   modalPartner: { fontFamily: FontFamily.displayBold, fontSize: 22, color: Colors.textPrimary },
   modalDesc: { fontFamily: FontFamily.bodyMedium, fontSize: 15, color: Colors.textSecondary, marginTop: 4, textAlign: 'center' },
   qrPlaceholder: {

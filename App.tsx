@@ -11,18 +11,29 @@ import {
   Nunito_700Bold,
   Nunito_800ExtraBold,
 } from '@expo-google-fonts/nunito';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import AuthNavigator from './src/navigation/AuthNavigator';
 import MainNavigator from './src/navigation/MainNavigator';
+import ReactivateAccountScreen from './src/screens/main/ReactivateAccountScreen';
+import OnboardingGoalsScreen from './src/screens/onboarding/OnboardingGoalsScreen';
+import TutorialScreen from './src/screens/onboarding/TutorialScreen';
 import { useUserStore } from './src/store/userStore';
 import { supabase } from './src/lib/supabase';
 import { Colors } from './src/theme';
 
+const TUTORIAL_KEY = 'ml_tutorial_seen';
+
 export default function App() {
   const isAuthenticated = useUserStore((s) => s.isAuthenticated);
+  const isDeactivated = useUserStore((s) => s.isDeactivated);
+  const needsOnboarding = useUserStore((s) => s.needsOnboarding);
   const login = useUserStore((s) => s.login);
   const logout = useUserStore((s) => s.logout);
   const refreshStats = useUserStore((s) => s.refreshStats);
+  const refreshAccountStatus = useUserStore((s) => s.refreshAccountStatus);
   const [loading, setLoading] = useState(true);
+  // null = not yet read from AsyncStorage (still loading); true/false = known
+  const [tutorialSeen, setTutorialSeen] = useState<boolean | null>(null);
 
   const [fontsLoaded] = useFonts({
     Nunito_400Regular,
@@ -32,10 +43,20 @@ export default function App() {
     Nunito_800ExtraBold,
   });
 
-  // Listen for Supabase auth state changes
   useEffect(() => {
-    // Check initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    let active = true;
+
+    async function init() {
+      // Run auth check and tutorial-seen read in parallel to keep startup fast
+      const [{ data: { session } }, seenRaw] = await Promise.all([
+        supabase.auth.getSession(),
+        AsyncStorage.getItem(TUTORIAL_KEY).catch(() => null),
+      ]);
+
+      if (!active) return;
+
+      setTutorialSeen(seenRaw === 'true');
+
       if (session?.user) {
         login({
           id: session.user.id,
@@ -55,13 +76,18 @@ export default function App() {
           createdAt: session.user.created_at,
         });
         // login() seeds zeros; immediately hydrate the real backend-owned
-        // XP/points/streak/level so the UI never shows a stale zeroed account.
+        // XP/points/streak/level and the needsOnboarding flag from the DB.
         void refreshStats();
+        // Check whether this account is archived for deletion.
+        void refreshAccountStatus();
       }
-      setLoading(false);
-    });
 
-    // Listen for auth changes (login/logout)
+      setLoading(false);
+    }
+
+    void init();
+
+    // Listen for auth changes (login/logout/OAuth callback)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (event === 'SIGNED_IN' && session?.user) {
@@ -82,18 +108,29 @@ export default function App() {
             points: 0,
             createdAt: session.user.created_at,
           });
-          // Hydrate real backend stats right after a fresh sign-in.
+          // Hydrate real stats — this also resolves needsOnboarding from the DB.
           void refreshStats();
+          void refreshAccountStatus();
         } else if (event === 'SIGNED_OUT') {
           logout();
         }
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
-  if (!fontsLoaded || loading) {
+  async function markTutorialSeen() {
+    try {
+      await AsyncStorage.setItem(TUTORIAL_KEY, 'true');
+    } catch {}
+    setTutorialSeen(true);
+  }
+
+  if (!fontsLoaded || loading || tutorialSeen === null) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator color={Colors.primary} size="large" />
@@ -104,7 +141,19 @@ export default function App() {
   return (
     <NavigationContainer>
       <StatusBar style="light" />
-      {isAuthenticated ? <MainNavigator /> : <AuthNavigator />}
+      {isAuthenticated ? (
+        isDeactivated ? (
+          <ReactivateAccountScreen />
+        ) : needsOnboarding ? (
+          <OnboardingGoalsScreen />
+        ) : !tutorialSeen ? (
+          <TutorialScreen onDone={markTutorialSeen} />
+        ) : (
+          <MainNavigator />
+        )
+      ) : (
+        <AuthNavigator />
+      )}
     </NavigationContainer>
   );
 }

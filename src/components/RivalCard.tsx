@@ -3,6 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Colors, FontFamily, FontSize, Spacing, alpha } from '../theme';
 import Card from './ui/Card';
 import Avatar from './ui/Avatar';
+import AppIcon from './ui/AppIcon';
 
 interface RivalCardProps {
   myName: string;
@@ -59,7 +60,12 @@ export default function RivalCard({
         <Text style={styles.rivalScore}>{rivalPoints.toLocaleString()}</Text>
       </View>
 
-      {suggestedAction ? <Text style={styles.action}>💡 {suggestedAction}</Text> : null}
+      {suggestedAction ? (
+        <View style={styles.action}>
+          <AppIcon name="idea" size={15} color={Colors.accent} />
+          <Text style={styles.actionText}>{suggestedAction}</Text>
+        </View>
+      ) : null}
     </Card>
   );
 }
@@ -85,12 +91,13 @@ const styles = StyleSheet.create({
   myScore: { fontFamily: FontFamily.bodySemiBold, fontSize: FontSize.meta, color: Colors.primary },
   rivalScore: { fontFamily: FontFamily.bodySemiBold, fontSize: FontSize.meta, color: Colors.accent },
   action: {
-    fontFamily: FontFamily.body,
-    fontSize: FontSize.label,
-    color: Colors.textSecondary,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.sm,
     marginTop: Spacing.md,
     paddingTop: Spacing.md,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
   },
+  actionText: { flex: 1, fontFamily: FontFamily.body, fontSize: FontSize.label, color: Colors.textSecondary },
 });

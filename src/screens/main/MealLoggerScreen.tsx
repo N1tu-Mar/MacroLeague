@@ -18,6 +18,7 @@ import { useUserStore } from '../../store/userStore';
 import { BASE_MEAL_XP, BASE_MEAL_POINTS } from '../../services/gamificationService';
 import FloatingXP from '../../components/FloatingXP';
 import { Colors, FontFamily } from '../../theme';
+import AppIcon from '../../components/ui/AppIcon';
 
 type EntryMode = 'manual' | 'describe';
 
@@ -62,11 +63,8 @@ function formatGoal(value: number | null | undefined, unit: string): string {
  * day where only some meals had the breakdown.
  */
 function formatSubtype(total: FatSubtypeTotal): string {
-  if (total.knownCount === 0) {
-    return 'Not available';
-  }
   const grams = `${formatMacro(total.grams)}g`;
-  return total.missingCount > 0 ? `${grams} (partial)` : grams;
+  return total.knownCount === 0 ? '0g' : total.missingCount > 0 ? `${grams} (partial)` : grams;
 }
 
 function formatMealTime(eatenAt: string): string {
@@ -108,7 +106,7 @@ export default function MealLoggerScreen() {
     await refreshStats();
     const streak = useUserStore.getState().user?.streakCount ?? 0;
     if (streak > 0) {
-      setToast(`+${BASE_MEAL_XP} XP · +${BASE_MEAL_POINTS} pts · 🔥 ${streak}-day streak`);
+      setToast(`+${BASE_MEAL_XP} XP · +${BASE_MEAL_POINTS} pts · STREAK ${streak} days`);
     }
 
     if (toastTimer.current) {
@@ -478,9 +476,10 @@ function CandidateCard({
       {candidate.warnings && candidate.warnings.length > 0 && (
         <View style={styles.warningBox}>
           {candidate.warnings.map((warning, index) => (
-            <Text key={`warning-${index}`} style={styles.warningText}>
-              ⚠ {warning}
-            </Text>
+            <View key={`warning-${index}`} style={styles.warningRow}>
+              <AppIcon name="warning" size={14} color={Colors.warning} />
+              <Text style={styles.warningText}>{warning}</Text>
+            </View>
           ))}
         </View>
       )}
@@ -694,7 +693,8 @@ const styles = StyleSheet.create({
   },
   assumptionText: { fontFamily: FontFamily.body, fontSize: 10, color: Colors.textSecondary },
   warningBox: { marginBottom: 10, gap: 3 },
-  warningText: { fontFamily: FontFamily.body, fontSize: 10, color: Colors.accent },
+  warningRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 5 },
+  warningText: { flex: 1, fontFamily: FontFamily.body, fontSize: 10, color: Colors.accent },
   useButton: {
     alignSelf: 'flex-start',
     paddingHorizontal: 14,

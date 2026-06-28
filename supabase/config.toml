@@ -421,3 +421,27 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 # ingredient parsing. Both are server-side function secrets — never EXPO_PUBLIC_*.
 # When absent, the function serves only the direct whole-query USDA candidates.
 verify_jwt = true
+
+[functions.chat]
+# MacroCoach AI nutrition advisor. Requires a valid user JWT; the function also
+# re-checks the caller so anonymous clients cannot reach the LLM. The
+# OPENAI_API_KEY secret is set via `supabase secrets set` and is never bundled
+# into the Expo app — it is the SAME key the estimate-meal composite parser uses,
+# so one key powers both features. OPENAI_MODEL optionally overrides the default
+# model. The function reads the caller's own profile + today's meals (service
+# role) only to personalize the system prompt.
+verify_jwt = true
+
+[functions.account-lifecycle]
+# In-app soft delete + recovery. Requires a valid user JWT; the function acts ONLY
+# on the caller's own account (auth.uid()) via the request_account_deletion /
+# reactivate_account RPCs. Optional secrets for the notification email:
+# RESEND_API_KEY and ACCOUNT_EMAIL_FROM. Without them the action still succeeds
+# (the email is skipped) — never set an email key as EXPO_PUBLIC_*.
+verify_jwt = true
+
+[functions.purge-accounts]
+# Permanent purge of accounts past their recovery window. NOT user-facing: it is
+# driven by a schedule and authenticated with the ACCOUNT_PURGE_SECRET function
+# secret via the `x-cron-secret` header, so verify_jwt is OFF (no user JWT).
+verify_jwt = false

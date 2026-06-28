@@ -10,6 +10,8 @@ import MacroProgressBar from '../../components/MacroProgressBar';
 import StreakCard from '../../components/StreakCard';
 import RivalCard from '../../components/RivalCard';
 import ActivityFeedItem from '../../components/ActivityFeedItem';
+import AppIcon from '../../components/ui/AppIcon';
+import RotatingTrophy from '../../components/animations/RotatingTrophy';
 import FoodLogItem from '../../components/FoodLogItem';
 import { getLeaderboard, LeaderboardUser } from '../../services/leaderboardService';
 import { getProfileIdentity } from '../../services/profileService';
@@ -153,7 +155,10 @@ export default function HomeScreen({ navigation }: any) {
           onPress={() => navigation.navigate('Rewards')}
           activeOpacity={0.85}
         >
-          <Text style={styles.pointsValue}>⭐ {user?.points?.toLocaleString() ?? 0}</Text>
+          <View style={styles.pointsValueRow}>
+            <AppIcon name="star" size={15} color={Colors.gold} />
+            <Text style={styles.pointsValue}>{user?.points?.toLocaleString() ?? 0}</Text>
+          </View>
           <Text style={styles.pointsLabel}>Lv {user?.level ?? 1}</Text>
         </TouchableOpacity>
       </View>
@@ -161,7 +166,10 @@ export default function HomeScreen({ navigation }: any) {
       {/* HERO: real leaderboard standing */}
       <Card variant="hero" onPress={() => navigation.navigate('Leaderboard')} accent={alpha(Colors.primary, 0.35)}>
         <View style={styles.heroTop}>
-          <Text style={styles.heroTitle}>🏆 Global Leaderboard</Text>
+          <View style={styles.heroTitleRow}>
+            <RotatingTrophy size={19} />
+            <Text style={styles.heroTitle}>Global Leaderboard</Text>
+          </View>
           <Text style={styles.heroWindow}>last 2 weeks</Text>
         </View>
         {me ? (
@@ -176,16 +184,19 @@ export default function HomeScreen({ navigation }: any) {
                 <Text style={styles.heroPointsLabel}>pts</Text>
               </View>
             </View>
-            <Text style={styles.heroChase}>
+            <View style={styles.heroChase}>
               {rival && rivalGap > 0 ? (
-                <>
+                <Text style={styles.heroChaseText}>
                   <Text style={styles.heroChaseStrong}>{rivalGap} pts</Text> behind{' '}
                   {rival.displayName ?? rival.username}
-                </>
+                </Text>
               ) : (
-                'You lead the league 👑'
+                <>
+                  <Text style={styles.heroChaseText}>You lead the league</Text>
+                  <AppIcon name="crown" size={15} color={Colors.gold} />
+                </>
               )}
-            </Text>
+            </View>
           </>
         ) : (
           <View style={styles.heroEmpty}>
@@ -228,7 +239,7 @@ export default function HomeScreen({ navigation }: any) {
           <Text style={styles.ctaLabel}>{nextActionText}</Text>
           <Text style={styles.ctaSub}>Earn points and climb the board</Text>
         </View>
-        <Text style={styles.ctaArrow}>＋</Text>
+        <AppIcon name="plus" size={28} color={Colors.textPrimary} strokeWidth={2.5} />
       </TouchableOpacity>
 
       {/* Streak */}
@@ -261,7 +272,7 @@ export default function HomeScreen({ navigation }: any) {
           <Text style={styles.notice}>Loading your meals…</Text>
         ) : daily.meals.length === 0 ? (
           <Card style={styles.emptyMeals}>
-            <Text style={styles.emptyIcon}>🍽️</Text>
+            <AppIcon name="meal" size={32} color={Colors.textSecondary} />
             <Text style={styles.emptyText}>No meals logged yet today</Text>
             <Text style={styles.emptySub}>Log one to earn points and climb the league.</Text>
           </Card>
@@ -316,9 +327,11 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
   },
   pointsValue: { fontFamily: FontFamily.displayBold, fontSize: FontSize.body, color: Colors.gold },
+  pointsValueRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   pointsLabel: { fontFamily: FontFamily.bodyMedium, fontSize: FontSize.micro, color: Colors.textSecondary, marginTop: 1 },
 
   heroTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.base },
+  heroTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   heroTitle: { fontFamily: FontFamily.displayBold, fontSize: FontSize.subhead, color: Colors.gold },
   heroWindow: { fontFamily: FontFamily.body, fontSize: FontSize.meta, color: Colors.textSecondary },
   heroRankRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: Spacing.md },
@@ -326,7 +339,8 @@ const styles = StyleSheet.create({
   heroRank: { fontFamily: FontFamily.displayBold, fontSize: FontSize.hero, color: Colors.textPrimary, lineHeight: FontSize.hero + 2 },
   heroPoints: { fontFamily: FontFamily.displayBold, fontSize: FontSize.heading, color: Colors.primary },
   heroPointsLabel: { fontFamily: FontFamily.body, fontSize: FontSize.meta, color: Colors.textSecondary },
-  heroChase: { fontFamily: FontFamily.body, fontSize: FontSize.label, color: Colors.textSecondary, borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: Spacing.md },
+  heroChase: { flexDirection: 'row', alignItems: 'center', gap: 6, borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: Spacing.md },
+  heroChaseText: { fontFamily: FontFamily.body, fontSize: FontSize.label, color: Colors.textSecondary },
   heroChaseStrong: { fontFamily: FontFamily.displayBold, color: Colors.textPrimary },
   heroEmpty: { paddingVertical: Spacing.sm },
   heroEmptyText: { fontFamily: FontFamily.displayBold, fontSize: FontSize.subhead, color: Colors.textPrimary },
@@ -360,13 +374,11 @@ const styles = StyleSheet.create({
   },
   ctaLabel: { fontFamily: FontFamily.displayBold, fontSize: FontSize.subhead, color: Colors.textPrimary },
   ctaSub: { fontFamily: FontFamily.bodyMedium, fontSize: FontSize.meta, color: alpha(Colors.textPrimary, 0.75), marginTop: 2 },
-  ctaArrow: { fontFamily: FontFamily.displayBold, fontSize: 32, color: Colors.textPrimary },
 
   feedCard: { paddingHorizontal: Spacing.base },
   feedDivider: { borderTopWidth: 1, borderTopColor: Colors.border },
 
-  emptyMeals: { alignItems: 'center', paddingVertical: Spacing.xl },
-  emptyIcon: { fontSize: 32, marginBottom: Spacing.sm },
+  emptyMeals: { alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.xl },
   emptyText: { fontFamily: FontFamily.bodySemiBold, fontSize: FontSize.body, color: Colors.textPrimary },
   emptySub: { fontFamily: FontFamily.body, fontSize: FontSize.label, color: Colors.textSecondary, marginTop: 4, textAlign: 'center' },
 

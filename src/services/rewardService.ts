@@ -3,7 +3,6 @@ import { supabase } from '../lib/supabase';
 export interface RewardCatalogItem {
   id: string;
   partnerName: string;
-  partnerLogo: string;
   description: string;
   pointsCost: number;
   category: string;
@@ -13,7 +12,6 @@ export interface RewardCatalogItem {
 type RewardRow = {
   id: string;
   partner_name: string;
-  partner_logo: string;
   description: string;
   points_cost: number;
   category: string;
@@ -24,7 +22,7 @@ type RewardRow = {
 export async function listRewards(): Promise<RewardCatalogItem[]> {
   const { data, error } = await supabase
     .from('rewards')
-    .select('id, partner_name, partner_logo, description, points_cost, category, expiry_date')
+    .select('id, partner_name, description, points_cost, category, expiry_date')
     .eq('active', true)
     .order('points_cost', { ascending: true });
 
@@ -33,7 +31,6 @@ export async function listRewards(): Promise<RewardCatalogItem[]> {
   return ((data ?? []) as RewardRow[]).map((row) => ({
     id: row.id,
     partnerName: row.partner_name,
-    partnerLogo: row.partner_logo,
     description: row.description,
     pointsCost: row.points_cost,
     category: row.category,

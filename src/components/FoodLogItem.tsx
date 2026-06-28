@@ -5,23 +5,24 @@ import { Colors, FontFamily } from '../theme';
 // `../types` MealLog. Macros are per-serving, so each is multiplied by quantity
 // for display — matching how daily totals are summed.
 import { MealLog } from '../services/mealLogService';
+import AppIcon, { AppIconName } from './ui/AppIcon';
 
 interface FoodLogItemProps {
   meal: MealLog;
 }
 
 // Provenance badge. A null source is a legacy row → treated/labeled as manual.
-const SOURCE_ICONS: Record<string, string> = {
-  user_estimate: '✨',
-  usda_fdc: '🔍',
-  manual: '✏️',
+const SOURCE_ICONS: Record<string, AppIconName> = {
+  user_estimate: 'sparkles',
+  usda_fdc: 'search',
+  manual: 'edit',
 };
 
-const MEAL_ICONS: Record<string, string> = {
-  breakfast: '🌅',
-  lunch: '☀️',
-  dinner: '🌙',
-  snack: '🍎',
+const MEAL_ICONS: Record<string, AppIconName> = {
+  breakfast: 'sunrise',
+  lunch: 'sun',
+  dinner: 'moon',
+  snack: 'apple',
 };
 
 function formatMacro(value: number): string {
@@ -50,13 +51,15 @@ export default function FoodLogItem({ meal }: FoodLogItemProps) {
   return (
     <View style={styles.container}>
       <View style={styles.iconCol}>
-        <Text style={styles.mealIcon}>{MEAL_ICONS[meal.mealType] ?? '🍽️'}</Text>
+        <AppIcon name={MEAL_ICONS[meal.mealType] ?? 'meal'} size={22} color={Colors.accent} />
       </View>
       <View style={styles.info}>
         <Text style={styles.name} numberOfLines={1}>{meal.freeText}</Text>
-        <Text style={styles.meta}>
-          {time} · {SOURCE_ICONS[sourceKey(meal.source)] ?? ''} {sourceLabel(meal.source)}
-        </Text>
+        <View style={styles.metaRow}>
+          <Text style={styles.meta}>{time} ·</Text>
+          <AppIcon name={SOURCE_ICONS[sourceKey(meal.source)] ?? 'edit'} size={11} />
+          <Text style={styles.meta}>{sourceLabel(meal.source)}</Text>
+        </View>
       </View>
       <View style={styles.macros}>
         <Text style={styles.cal}>{formatMacro(calories)} cal</Text>
@@ -80,10 +83,10 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   iconCol: { width: 36, alignItems: 'center' },
-  mealIcon: { fontSize: 22 },
   info: { flex: 1, marginLeft: 8 },
   name: { fontFamily: FontFamily.bodyMedium, fontSize: 14, color: Colors.textPrimary },
-  meta: { fontFamily: FontFamily.body, fontSize: 11, color: Colors.textSecondary, marginTop: 2 },
+  meta: { fontFamily: FontFamily.body, fontSize: 11, color: Colors.textSecondary },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 },
   macros: { alignItems: 'flex-end' },
   cal: { fontFamily: FontFamily.displayBold, fontSize: 15, color: Colors.textPrimary },
   macroDetail: { fontFamily: FontFamily.body, fontSize: 10, color: Colors.textSecondary, marginTop: 2 },
