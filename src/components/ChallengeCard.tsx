@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Colors, FontFamily } from '../theme';
 import { ChallengeStatus, ChallengeType } from '../services/challengeService';
+import AppIcon from './ui/AppIcon';
 
 interface ChallengeCardProps {
   name: string;
@@ -65,7 +66,8 @@ export default function ChallengeCard({
         </Text>
         {joined && (
           <View style={styles.joinedPill}>
-            <Text style={styles.joinedText}>✓ Joined</Text>
+            <AppIcon name="check" size={13} color={Colors.primary} />
+            <Text style={styles.joinedText}>Joined</Text>
           </View>
         )}
       </View>
@@ -92,6 +94,9 @@ const styles = StyleSheet.create({
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   participants: { fontFamily: FontFamily.bodyMedium, fontSize: 12, color: Colors.textSecondary },
   joinedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     backgroundColor: Colors.primary + '14',
     borderRadius: 8,
     paddingHorizontal: 10,

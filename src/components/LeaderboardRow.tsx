@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Colors, FontFamily, FontSize, Spacing, Radius, alpha } from '../theme';
 import Avatar from './ui/Avatar';
 import RankMovement from './ui/RankMovement';
+import PixelFlame from './PixelFlame';
+import AppIcon from './ui/AppIcon';
 
 // Visual zone tint for a leaderboard row. Local type (no longer sourced from mock
 // league data); 'safe' is the neutral default used by the real global leaderboard.
@@ -22,7 +24,11 @@ export interface LeaderboardRowProps {
   onPress?: () => void;
 }
 
-const MEDAL: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
+const MEDAL_COLOR: Record<number, string> = {
+  1: Colors.gold,
+  2: '#BFC5CC',
+  3: '#C9824A',
+};
 
 /**
  * One league-table row. Conveys a lot at a glance: rank/medal, movement vs last
@@ -67,8 +73,8 @@ export default function LeaderboardRow({
       ]}
     >
       <View style={styles.rankCol}>
-        {MEDAL[rank] ? (
-          <Text style={styles.medal}>{MEDAL[rank]}</Text>
+        {MEDAL_COLOR[rank] ? (
+          <AppIcon name="medal" size={19} color={MEDAL_COLOR[rank]} strokeWidth={2.4} />
         ) : (
           <Text style={[styles.rankNum, isCurrentUser && { color: Colors.primary }]}>{rank}</Text>
         )}
@@ -85,7 +91,7 @@ export default function LeaderboardRow({
           <Text style={styles.badge} numberOfLines={1}>{badge}</Text>
         ) : (
           <View style={styles.streakRow}>
-            <Text style={styles.streakIcon}>🔥</Text>
+            <PixelFlame size={12} />
             <Text style={styles.streakText}>{streak}-day</Text>
           </View>
         )}
@@ -122,13 +128,11 @@ const styles = StyleSheet.create({
     borderColor: alpha(Colors.accent, 0.35),
   },
   rankCol: { width: 30, alignItems: 'center', gap: 2 },
-  medal: { fontSize: 18 },
   rankNum: { fontFamily: FontFamily.displayBold, fontSize: FontSize.subhead, color: Colors.textSecondary },
   info: { flex: 1 },
   name: { fontFamily: FontFamily.bodySemiBold, fontSize: FontSize.body, color: Colors.textPrimary },
   badge: { fontFamily: FontFamily.bodyMedium, fontSize: FontSize.meta, color: Colors.accent, marginTop: 1 },
   streakRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 1 },
-  streakIcon: { fontSize: FontSize.micro },
   streakText: { fontFamily: FontFamily.body, fontSize: FontSize.meta, color: Colors.textSecondary },
   pointsCol: { alignItems: 'flex-end' },
   points: { fontFamily: FontFamily.displayBold, fontSize: FontSize.subhead, color: Colors.textPrimary },

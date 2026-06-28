@@ -14,6 +14,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Colors, FontFamily } from '../../theme';
 import { useUserStore } from '../../store/userStore';
 import ChallengeCard from '../../components/ChallengeCard';
+import AppIcon, { AppIconName } from '../../components/ui/AppIcon';
+import RotatingTrophy from '../../components/animations/RotatingTrophy';
 import {
   listChallenges,
   getChallengeDetail,
@@ -81,7 +83,7 @@ export default function ChallengesScreen() {
           </View>
         ) : challenges.length === 0 ? (
           <View style={styles.emptyBox}>
-            <Text style={styles.emptyIcon}>⚔️</Text>
+            <AppIcon name="challenges" size={40} />
             <Text style={styles.emptyTitle}>No challenges yet</Text>
             <Text style={styles.emptySub}>Create the first one and invite your friends to compete.</Text>
           </View>
@@ -94,7 +96,8 @@ export default function ChallengesScreen() {
         )}
 
         <TouchableOpacity style={styles.createBtn} onPress={() => setShowCreate(true)}>
-          <Text style={styles.createBtnText}>+ CREATE CHALLENGE</Text>
+          <AppIcon name="plus" size={17} color={Colors.primary} />
+          <Text style={styles.createBtnText}>CREATE CHALLENGE</Text>
         </TouchableOpacity>
       </ScrollView>
 
@@ -138,10 +141,10 @@ function renderSection(
 
 // ── Create Challenge Modal ────────────────────────────────
 
-const GOAL_OPTIONS: { key: ChallengeGoalType; label: string }[] = [
-  { key: 'protein', label: '💪 Protein' },
-  { key: 'meal_count', label: '🍱 Meals' },
-  { key: 'streak', label: '📆 Streak' },
+const GOAL_OPTIONS: { key: ChallengeGoalType; label: string; icon: AppIconName | 'streak' }[] = [
+  { key: 'protein', label: 'Protein', icon: 'protein' },
+  { key: 'meal_count', label: 'Meals', icon: 'meal-goal' },
+  { key: 'streak', label: 'Streak', icon: 'calendar' },
 ];
 
 function CreateChallengeModal({
@@ -209,9 +212,16 @@ function CreateChallengeModal({
                   style={[createStyles.optionBtn, type === t && createStyles.optionBtnActive]}
                   onPress={() => setType(t)}
                 >
-                  <Text style={[createStyles.optionText, type === t && createStyles.optionTextActive]}>
-                    {t === 'solo' ? '🎯 Solo' : '⚔️ Team'}
-                  </Text>
+                  <View style={createStyles.optionContent}>
+                    <AppIcon
+                      name={t === 'solo' ? 'solo' : 'challenges'}
+                      size={15}
+                      color={type === t ? Colors.primary : Colors.textSecondary}
+                    />
+                    <Text style={[createStyles.optionText, type === t && createStyles.optionTextActive]}>
+                      {t === 'solo' ? 'Solo' : 'Team'}
+                    </Text>
+                  </View>
                 </TouchableOpacity>
               ))}
             </View>
@@ -224,9 +234,16 @@ function CreateChallengeModal({
                   style={[createStyles.optionBtn, goalType === g.key && createStyles.optionBtnActive]}
                   onPress={() => setGoalType(g.key)}
                 >
-                  <Text style={[createStyles.optionText, goalType === g.key && createStyles.optionTextActive]}>
-                    {g.label}
-                  </Text>
+                  <View style={createStyles.optionContent}>
+                    <AppIcon
+                      name={g.icon === 'streak' ? 'calendar' : g.icon}
+                      size={15}
+                      color={goalType === g.key ? Colors.primary : Colors.textSecondary}
+                    />
+                    <Text style={[createStyles.optionText, goalType === g.key && createStyles.optionTextActive]}>
+                      {g.label}
+                    </Text>
+                  </View>
                 </TouchableOpacity>
               ))}
             </View>
@@ -298,6 +315,7 @@ const createStyles = StyleSheet.create({
     borderColor: Colors.border,
   },
   optionBtnActive: { backgroundColor: Colors.primary + '14', borderColor: Colors.primary + '44' },
+  optionContent: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   optionText: { fontFamily: FontFamily.bodyMedium, fontSize: 13, color: Colors.textSecondary },
   optionTextActive: { color: Colors.primary },
   createBtn: { backgroundColor: Colors.primary, borderRadius: 50, paddingVertical: 16, alignItems: 'center', marginTop: 24 },
@@ -357,7 +375,8 @@ function ChallengeDetail({ challengeId, onBack }: { challengeId: string; onBack:
     return (
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-          <Text style={styles.backText}>← Back</Text>
+          <AppIcon name="back" size={17} color={Colors.primary} />
+          <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
         <View style={styles.errorBanner}>
           <Text style={styles.errorText}>{error ?? 'Challenge not found.'}</Text>
@@ -379,7 +398,8 @@ function ChallengeDetail({ challengeId, onBack }: { challengeId: string; onBack:
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-        <Text style={styles.backText}>← Back</Text>
+        <AppIcon name="back" size={17} color={Colors.primary} />
+        <Text style={styles.backText}>Back</Text>
       </TouchableOpacity>
 
       <Text style={styles.detailTitle}>{detail.name}</Text>
@@ -437,7 +457,7 @@ function ChallengeDetail({ challengeId, onBack }: { challengeId: string; onBack:
           <Text style={styles.sectionTitle}>GOALS</Text>
           {detail.goals.map((g) => (
             <View key={g.id} style={styles.goalRow}>
-              <Text style={{ fontSize: 16 }}>🎯</Text>
+              <AppIcon name="target" size={17} color={Colors.primary} />
               <View style={styles.goalInfo}>
                 <Text style={styles.goalName}>{g.description}</Text>
                 <Text style={styles.goalPts}>+{g.pointsValue} pts</Text>
@@ -449,13 +469,17 @@ function ChallengeDetail({ challengeId, onBack }: { challengeId: string; onBack:
 
       {/* Stakes */}
       <View style={styles.stakesCard}>
-        <Text style={styles.stakesLabel}>🏆 STAKES</Text>
+        <View style={styles.stakesTitleRow}>
+          <RotatingTrophy size={16} />
+          <Text style={styles.stakesLabel}>STAKES</Text>
+        </View>
         <Text style={styles.stakesValue}>{detail.stakesText}</Text>
       </View>
 
       {detail.joined ? (
         <View style={styles.participatingBadge}>
-          <Text style={styles.participatingText}>✓ You're in this challenge</Text>
+          <AppIcon name="check" size={16} color={Colors.primary} />
+          <Text style={styles.participatingText}>You're in this challenge</Text>
         </View>
       ) : detail.status !== 'completed' ? (
         <TouchableOpacity style={[styles.joinBtn, joining && { opacity: 0.6 }]} onPress={handleJoin} disabled={joining}>
@@ -489,10 +513,12 @@ const styles = StyleSheet.create({
   },
   errorText: { fontFamily: FontFamily.bodyMedium, fontSize: 13, color: Colors.error },
   emptyBox: { alignItems: 'center', paddingVertical: 40, gap: 6 },
-  emptyIcon: { fontSize: 40 },
   emptyTitle: { fontFamily: FontFamily.displayBold, fontSize: 18, color: Colors.textPrimary },
   emptySub: { fontFamily: FontFamily.body, fontSize: 13, color: Colors.textSecondary, textAlign: 'center' },
   createBtn: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 7,
     borderWidth: 1.5,
     borderColor: Colors.primary,
     borderRadius: 50,
@@ -503,7 +529,7 @@ const styles = StyleSheet.create({
   },
   createBtnText: { fontFamily: FontFamily.displayBold, fontSize: 15, color: Colors.primary },
   // Detail
-  backBtn: { marginBottom: 16 },
+  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 16 },
   backText: { fontFamily: FontFamily.bodyMedium, fontSize: 15, color: Colors.primary },
   detailTitle: { fontFamily: FontFamily.displayBold, fontSize: 28, color: Colors.textPrimary, marginBottom: 4 },
   detailMeta: { fontFamily: FontFamily.body, fontSize: 14, color: Colors.textSecondary, marginBottom: 24, textTransform: 'capitalize' },
@@ -562,11 +588,15 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 20,
   },
-  stakesLabel: { fontFamily: FontFamily.displayBold, fontSize: 13, color: Colors.gold, marginBottom: 4 },
+  stakesLabel: { fontFamily: FontFamily.displayBold, fontSize: 13, color: Colors.gold },
+  stakesTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
   stakesValue: { fontFamily: FontFamily.bodyMedium, fontSize: 15, color: Colors.textPrimary },
   joinBtn: { backgroundColor: Colors.primary, borderRadius: 50, paddingVertical: 16, alignItems: 'center' },
   joinBtnText: { fontFamily: FontFamily.displayBold, fontSize: 16, color: Colors.background },
   participatingBadge: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 7,
     backgroundColor: Colors.primary + '12',
     borderRadius: 12,
     borderWidth: 1,

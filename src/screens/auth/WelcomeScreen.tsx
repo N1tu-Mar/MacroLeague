@@ -26,6 +26,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Colors, FontFamily } from '../../theme';
 import { signInWithGoogle } from '../../lib/auth';
 import type { WelcomeScreenProps } from '../../navigation/types';
+import AppIcon from '../../components/ui/AppIcon';
 
 const { width, height } = Dimensions.get('window');
 const NUM_PARTICLES = 18;
@@ -165,7 +166,7 @@ export default function WelcomeScreen({ navigation }: WelcomeScreenProps) {
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
             >
-              <Text style={styles.logoIcon}>⚡</Text>
+              <AppIcon name="bolt" size={38} color="#0A0A0F" strokeWidth={2.5} />
             </LinearGradient>
           </View>
           <Text style={styles.appName}>MACROLEAGUE</Text>
@@ -240,7 +241,8 @@ export default function WelcomeScreen({ navigation }: WelcomeScreenProps) {
 
       {/* Bottom badge */}
       <Animated.View entering={FadeIn.delay(1000).duration(600)} style={styles.badgeRow}>
-        <Text style={styles.badgeText}>🏫 Rutgers University MVP</Text>
+        <AppIcon name="school" size={15} color={Colors.textSecondary} />
+        <Text style={styles.badgeText}>Rutgers University MVP</Text>
       </Animated.View>
     </View>
   );
@@ -297,9 +299,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  logoIcon: {
-    fontSize: 36,
   },
   appName: {
     fontFamily: FontFamily.displayBold,
@@ -428,7 +427,9 @@ const styles = StyleSheet.create({
     color: Colors.primary,
   },
   badgeRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
     paddingBottom: Platform.OS === 'ios' ? 36 : 20,
   },
   badgeText: {

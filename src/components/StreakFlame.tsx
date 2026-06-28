@@ -8,6 +8,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { Colors, FontFamily } from '../theme';
+import PixelFlame from './PixelFlame';
 
 interface StreakFlameProps {
   count: number;
@@ -38,9 +39,9 @@ export default function StreakFlame({ count, size = 'small' }: StreakFlameProps)
 
   return (
     <View style={styles.row}>
-      <Animated.Text style={[{ fontSize: flameSize }, animatedStyle]}>
-        🔥
-      </Animated.Text>
+      <Animated.View style={animatedStyle}>
+        <PixelFlame size={flameSize} animated />
+      </Animated.View>
       <Text
         style={[
           styles.count,

@@ -4,6 +4,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Colors, FontFamily, FontSize, Spacing, Radius, alpha } from '../../theme';
 import { useUserStore } from '../../store/userStore';
 import LeaderboardRow from '../../components/LeaderboardRow';
+import AppIcon from '../../components/ui/AppIcon';
+import RotatingTrophy from '../../components/animations/RotatingTrophy';
 import {
   getLeaderboard,
   LeaderboardUser,
@@ -102,7 +104,7 @@ export default function LeaderboardScreen() {
             </View>
           ) : rows.length === 0 ? (
             <View style={styles.center}>
-              <Text style={styles.emptyIcon}>🏆</Text>
+              <RotatingTrophy size={40} />
               <Text style={styles.emptyTitle}>No rankings yet</Text>
               <Text style={styles.notice}>Log meals to earn points and enter the leaderboard.</Text>
             </View>
@@ -152,7 +154,11 @@ export default function LeaderboardScreen() {
 
       {tab !== 'global' && (
         <View style={styles.center}>
-          <Text style={styles.emptyIcon}>{tab === 'friends' ? '👥' : '⚔️'}</Text>
+          <AppIcon
+            name={tab === 'friends' ? 'users' : 'challenges'}
+            size={40}
+            color={Colors.textSecondary}
+          />
           <Text style={styles.emptyTitle}>
             {tab === 'friends' ? 'Friends leaderboard' : 'Team leaderboard'}
           </Text>
@@ -202,7 +208,6 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: Spacing.lg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl, gap: Spacing.sm },
   notice: { fontFamily: FontFamily.body, fontSize: FontSize.label, color: Colors.textSecondary, textAlign: 'center' },
-  emptyIcon: { fontSize: 40 },
   emptyTitle: { fontFamily: FontFamily.displayBold, fontSize: FontSize.subhead, color: Colors.textPrimary },
 
   youCard: {

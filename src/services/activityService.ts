@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import type { AppIconName } from '../components/ui/AppIcon';
 
 /**
  * Reads the signed-in user's OWN real activity (RLS restricts to own rows) for the
@@ -50,7 +51,7 @@ export async function getRecentDailyActivity(days = 7): Promise<DailyActivityPoi
 
 export interface ActivityFeedEntry {
   id: string;
-  icon: string;
+  icon: AppIconName | 'streak';
   text: string;
   occurredAt: string;
   /** Whole minutes since the event, for relative display. */
@@ -65,27 +66,27 @@ type EventRow = {
   metadata: Record<string, any> | null;
 };
 
-function describeEvent(row: EventRow): { icon: string; text: string } {
+function describeEvent(row: EventRow): { icon: AppIconName | 'streak'; text: string } {
   const m = row.metadata ?? {};
   switch (row.event_type) {
     case 'meal_logged':
-      return { icon: '🍽️', text: `Logged a meal · +${row.points_delta} pts` };
+      return { icon: 'meal', text: `Logged a meal · +${row.points_delta} pts` };
     case 'meal_count_goal_hit':
-      return { icon: '🍱', text: `Hit your meal-count goal · +${row.points_delta} pts` };
+      return { icon: 'meal-goal', text: `Hit your meal-count goal · +${row.points_delta} pts` };
     case 'daily_protein_goal_hit':
-      return { icon: '💪', text: `Locked your protein goal · +${row.points_delta} pts` };
+      return { icon: 'protein', text: `Locked your protein goal · +${row.points_delta} pts` };
     case 'daily_macro_accuracy_hit':
-      return { icon: '🎯', text: `Nailed your macro accuracy · +${row.points_delta} pts` };
+      return { icon: 'target', text: `Nailed your macro accuracy · +${row.points_delta} pts` };
     case 'streak_milestone':
-      return { icon: '🔥', text: `Reached a ${m.streak ?? ''}-day streak · +${row.points_delta} pts` };
+      return { icon: 'streak', text: `Reached a ${m.streak ?? ''}-day streak · +${row.points_delta} pts` };
     case 'streak_bonus':
-      return { icon: '🔥', text: `Streak bonus · +${row.points_delta} pts` };
+      return { icon: 'streak', text: `Streak bonus · +${row.points_delta} pts` };
     case 'challenge_win':
-      return { icon: '🏆', text: `Won a challenge · +${row.points_delta} pts` };
+      return { icon: 'trophy', text: `Won a challenge · +${row.points_delta} pts` };
     case 'reward_redemption':
-      return { icon: '🎁', text: `Redeemed a reward · ${row.points_delta} pts` };
+      return { icon: 'gift', text: `Redeemed a reward · ${row.points_delta} pts` };
     default:
-      return { icon: '⭐', text: `Earned ${row.points_delta} pts` };
+      return { icon: 'star', text: `Earned ${row.points_delta} pts` };
   }
 }
 

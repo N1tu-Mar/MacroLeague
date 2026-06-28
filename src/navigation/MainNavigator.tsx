@@ -7,6 +7,7 @@ import { Colors, FontFamily, FontSize, Shadow } from '../theme';
 import HomeScreen from '../screens/main/HomeScreen';
 import MealLoggerScreen from '../screens/main/MealLoggerScreen';
 import ChallengesScreen from '../screens/main/ChallengesScreen';
+import CoachScreen from '../screens/main/CoachScreen';
 import LeaderboardScreen from '../screens/main/LeaderboardScreen';
 import ProfileScreen from '../screens/main/ProfileScreen';
 import RewardsScreen from '../screens/main/RewardsScreen';
@@ -14,14 +15,25 @@ import EditGoalsScreen from '../screens/main/EditGoalsScreen';
 import NotificationsSettingsScreen from '../screens/main/NotificationsSettingsScreen';
 import UniversitySettingsScreen from '../screens/main/UniversitySettingsScreen';
 import RuleSettingsScreen from '../screens/main/RuleSettingsScreen';
+import AppIcon, { AppIconName } from '../components/ui/AppIcon';
+import RotatingTrophy from '../components/animations/RotatingTrophy';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
-function TabIcon({ icon, label, focused }: { icon: string; label: string; focused: boolean }) {
+function TabIcon({ icon, label, focused }: { icon: AppIconName; label: string; focused: boolean }) {
   return (
     <View style={styles.tabIcon}>
-      <Text style={[styles.tabEmoji, { opacity: focused ? 1 : 0.55 }]}>{icon}</Text>
+      {icon === 'league' ? (
+        <RotatingTrophy size={21} color={focused ? Colors.primary : Colors.textSecondary} />
+      ) : (
+        <AppIcon
+          name={icon}
+          size={21}
+          color={focused ? Colors.primary : Colors.textSecondary}
+          strokeWidth={focused ? 2.5 : 2}
+        />
+      )}
       <Text style={[styles.tabLabel, focused && styles.tabLabelActive]}>{label}</Text>
     </View>
   );
@@ -32,7 +44,7 @@ function RaisedLogButton({ onPress }: { onPress?: (e: GestureResponderEvent) => 
   return (
     <View style={styles.raisedWrap}>
       <TouchableOpacity style={styles.raisedButton} onPress={onPress} activeOpacity={0.85}>
-        <Text style={styles.raisedPlus}>＋</Text>
+        <AppIcon name="plus" size={28} color={Colors.textPrimary} strokeWidth={2.5} />
       </TouchableOpacity>
       <Text style={styles.raisedLabel}>Log</Text>
     </View>
@@ -51,12 +63,12 @@ function HomeTabs() {
       <Tab.Screen
         name="Home"
         component={HomeScreen}
-        options={{ tabBarIcon: ({ focused }) => <TabIcon icon="🏠" label="Home" focused={focused} /> }}
+        options={{ tabBarIcon: ({ focused }) => <TabIcon icon="home" label="Home" focused={focused} /> }}
       />
       <Tab.Screen
         name="Leaderboard"
         component={LeaderboardScreen}
-        options={{ tabBarIcon: ({ focused }) => <TabIcon icon="🏆" label="League" focused={focused} /> }}
+        options={{ tabBarIcon: ({ focused }) => <TabIcon icon="league" label="League" focused={focused} /> }}
       />
       <Tab.Screen
         name="Log"
@@ -68,12 +80,17 @@ function HomeTabs() {
       <Tab.Screen
         name="Challenges"
         component={ChallengesScreen}
-        options={{ tabBarIcon: ({ focused }) => <TabIcon icon="⚔️" label="Challenges" focused={focused} /> }}
+        options={{ tabBarIcon: ({ focused }) => <TabIcon icon="challenges" label="Challenges" focused={focused} /> }}
+      />
+      <Tab.Screen
+        name="Coach"
+        component={CoachScreen}
+        options={{ tabBarIcon: ({ focused }) => <TabIcon icon="coach" label="Coach" focused={focused} /> }}
       />
       <Tab.Screen
         name="Profile"
         component={ProfileScreen}
-        options={{ tabBarIcon: ({ focused }) => <TabIcon icon="👤" label="Profile" focused={focused} /> }}
+        options={{ tabBarIcon: ({ focused }) => <TabIcon icon="profile" label="Profile" focused={focused} /> }}
       />
     </Tab.Navigator>
   );
@@ -101,8 +118,7 @@ const styles = StyleSheet.create({
     paddingBottom: 22,
     paddingTop: 10,
   },
-  tabIcon: { alignItems: 'center', justifyContent: 'center', gap: 3, width: 64 },
-  tabEmoji: { fontSize: 20 },
+  tabIcon: { alignItems: 'center', justifyContent: 'center', gap: 3, width: 54 },
   tabLabel: { fontFamily: FontFamily.bodyMedium, fontSize: FontSize.micro, color: Colors.textSecondary },
   tabLabelActive: { color: Colors.primary, fontFamily: FontFamily.bodySemiBold },
 
@@ -119,6 +135,5 @@ const styles = StyleSheet.create({
     borderColor: Colors.background,
     ...Shadow.floating,
   },
-  raisedPlus: { fontFamily: FontFamily.displayBold, fontSize: 30, color: Colors.textPrimary, marginTop: -2 },
   raisedLabel: { fontFamily: FontFamily.bodySemiBold, fontSize: FontSize.micro, color: Colors.primary, marginTop: 2 },
 });

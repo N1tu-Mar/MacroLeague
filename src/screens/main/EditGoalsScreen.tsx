@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { Colors, FontFamily } from '../../theme';
+import AppIcon from '../../components/ui/AppIcon';
 import { useUserStore } from '../../store/userStore';
 import { supabase } from '../../lib/supabase';
 import { getProfileGoals, updateProfileGoals } from '../../services/profileService';
@@ -125,7 +126,8 @@ export default function EditGoalsScreen({ navigation }: any) {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-        <Text style={styles.backText}>← Back</Text>
+        <AppIcon name="back" size={17} color={Colors.primary} />
+        <Text style={styles.backText}>Back</Text>
       </TouchableOpacity>
 
       <Text style={styles.title}>EDIT MACRO GOALS</Text>
@@ -256,7 +258,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   loadingBox: { alignItems: 'center', justifyContent: 'center' },
   content: { padding: 20, paddingTop: 60 },
-  backBtn: { marginBottom: 16 },
+  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 16 },
   backText: { fontFamily: FontFamily.bodyMedium, fontSize: 15, color: Colors.primary },
   title: { fontFamily: FontFamily.displayBold, fontSize: 24, color: Colors.textPrimary, letterSpacing: 1, marginBottom: 4 },
   subtitle: { fontFamily: FontFamily.body, fontSize: 14, color: Colors.textSecondary, marginBottom: 24 },

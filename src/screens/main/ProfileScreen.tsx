@@ -5,15 +5,22 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Colors, FontFamily } from '../../theme';
 import { useUserStore } from '../../store/userStore';
 import { signOut } from '../../lib/auth';
+import { requestAccountDeletion } from '../../services/accountService';
 import StreakFlame from '../../components/StreakFlame';
 import { LEVEL_TITLES, getXpForLevel } from '../../lib/leveling';
 import { deriveAchievements } from '../../lib/achievements';
 import { getRecentDailyActivity } from '../../services/activityService';
+import PixelFlame from '../../components/PixelFlame';
+import AppIcon, { AppIconName } from '../../components/ui/AppIcon';
+import ElectricBolt from '../../components/animations/ElectricBolt';
+import RotatingTrophy from '../../components/animations/RotatingTrophy';
+import ClashingUtensils from '../../components/animations/ClashingUtensils';
 
 interface WeeklyPoint {
   label: string;
@@ -40,6 +47,34 @@ export default function ProfileScreen({ navigation }: any) {
   const dailyGoals = useUserStore((s) => s.dailyGoals);
   const logout = useUserStore((s) => s.logout);
   const refreshStats = useUserStore((s) => s.refreshStats);
+  const setAccountLifecycle = useUserStore((s) => s.setAccountLifecycle);
+
+  // Two-step confirmation before archiving the account. On success we flip the
+  // local lifecycle flag so App.tsx routes to the reactivation gate immediately.
+  const onDeleteAccount = useCallback(() => {
+    Alert.alert(
+      'Delete account?',
+      'Your account will be archived and permanently deleted in 14 days. You can sign back in any time before then to recover everything.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete account',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const scheduledAt = await requestAccountDeletion();
+              setAccountLifecycle(true, scheduledAt);
+            } catch (err) {
+              Alert.alert(
+                'Could not delete account',
+                err instanceof Error ? err.message : 'Please try again.',
+              );
+            }
+          },
+        },
+      ],
+    );
+  }, [setAccountLifecycle]);
 
   const [weekly, setWeekly] = useState<WeeklyPoint[]>([]);
 
@@ -86,11 +121,11 @@ export default function ProfileScreen({ navigation }: any) {
   const xpProgress = (user.xp % 500) / 500;
   const levelTitle = LEVEL_TITLES[user.level] ?? 'Legend';
 
-  const settingsItems = [
-    { label: 'Edit Macro Goals', icon: '🎯', screen: 'EditGoals' },
-    { label: 'Scoring Rules', icon: '🏅', screen: 'RuleSettings' },
-    { label: 'Notification Preferences', icon: '🔔', screen: 'NotificationSettings' },
-    { label: 'Linked University', icon: '🏫', screen: 'UniversitySettings' },
+  const settingsItems: { label: string; icon: AppIconName; screen: string }[] = [
+    { label: 'Edit Macro Goals', icon: 'target', screen: 'EditGoals' },
+    { label: 'Scoring Rules', icon: 'medal', screen: 'RuleSettings' },
+    { label: 'Notification Preferences', icon: 'bell', screen: 'NotificationSettings' },
+    { label: 'Linked University', icon: 'school', screen: 'UniversitySettings' },
   ];
 
   return (
@@ -123,10 +158,14 @@ export default function ProfileScreen({ navigation }: any) {
 
       {/* Stats Grid */}
       <View style={styles.statsGrid}>
-        <StatCard label="Longest Streak" value={`${user.longestStreak} days`} icon="🔥" />
-        <StatCard label="Meals Logged" value={`${user.totalMealsLogged}`} icon="🍽️" />
-        <StatCard label="Challenges Won" value={`${user.challengesWon}`} icon="🏆" />
-        <StatCard label="Total XP" value={`${user.xp.toLocaleString()}`} icon="⚡" />
+        <StatCard
+          label="Longest Streak"
+          value={`${user.longestStreak} days`}
+          icon={<PixelFlame size={24} animated />}
+        />
+        <StatCard label="Meals Logged" value={`${user.totalMealsLogged}`} icon={<ClashingUtensils size={24} />} />
+        <StatCard label="Challenges Won" value={`${user.challengesWon}`} icon={<RotatingTrophy size={24} />} />
+        <StatCard label="Total XP" value={`${user.xp.toLocaleString()}`} icon={<ElectricBolt size={24} />} />
       </View>
 
       {/* Points / Rewards Link */}
@@ -134,7 +173,7 @@ export default function ProfileScreen({ navigation }: any) {
         style={styles.rewardsLink}
         onPress={() => navigation.navigate('Rewards')}
       >
-        <Text style={{ fontSize: 22 }}>🎁</Text>
+        <AppIcon name="gift" size={22} color={Colors.gold} />
         <View style={{ flex: 1, marginLeft: 12 }}>
           <Text style={styles.rewardsLinkTitle}>My Rewards</Text>
           <Text style={styles.rewardsLinkSub}>{user.points.toLocaleString()} points available</Text>
@@ -151,9 +190,15 @@ export default function ProfileScreen({ navigation }: any) {
               key={ach.id}
               style={[styles.badgeCard, !ach.unlocked && styles.badgeLocked]}
             >
-              <Text style={[styles.badgeIcon, !ach.unlocked && { opacity: 0.3 }]}>
-                {ach.icon}
-              </Text>
+              <View style={[styles.badgeIconWrap, !ach.unlocked && { opacity: 0.3 }]}>
+                {ach.icon === 'streak' ? (
+                  <PixelFlame size={30} animated={ach.unlocked} />
+                ) : ach.icon === 'trophy' ? (
+                  <RotatingTrophy size={28} />
+                ) : (
+                  <AppIcon name={ach.icon} size={28} color={ach.unlocked ? Colors.gold : Colors.textSecondary} />
+                )}
+              </View>
               <Text style={[styles.badgeName, !ach.unlocked && { color: Colors.textSecondary }]}>
                 {ach.name}
               </Text>
@@ -215,7 +260,7 @@ export default function ProfileScreen({ navigation }: any) {
             style={styles.settingsRow}
             onPress={() => navigation.navigate(item.screen)}
           >
-            <Text style={{ fontSize: 18 }}>{item.icon}</Text>
+            <AppIcon name={item.icon} size={18} />
             <Text style={styles.settingsText}>{item.label}</Text>
             <Text style={styles.settingsArrow}>›</Text>
           </TouchableOpacity>
@@ -233,15 +278,19 @@ export default function ProfileScreen({ navigation }: any) {
         <Text style={styles.logoutText}>Sign Out</Text>
       </TouchableOpacity>
 
+      <TouchableOpacity style={styles.deleteBtn} onPress={onDeleteAccount}>
+        <Text style={styles.deleteText}>Delete Account</Text>
+      </TouchableOpacity>
+
       <View style={{ height: 40 }} />
     </ScrollView>
   );
 }
 
-function StatCard({ label, value, icon }: { label: string; value: string; icon: string }) {
+function StatCard({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
   return (
     <View style={statStyles.card}>
-      <Text style={statStyles.icon}>{icon}</Text>
+      <View style={statStyles.icon}>{typeof icon === 'string' ? <Text style={statStyles.iconText}>{icon}</Text> : icon}</View>
       <Text style={statStyles.value}>{value}</Text>
       <Text style={statStyles.label}>{label}</Text>
     </View>
@@ -259,7 +308,8 @@ const statStyles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 10,
   },
-  icon: { fontSize: 24, marginBottom: 6 },
+  icon: { height: 38, marginBottom: 6, alignItems: 'center', justifyContent: 'center' },
+  iconText: { fontSize: 24 },
   value: { fontFamily: FontFamily.displayBold, fontSize: 20, color: Colors.textPrimary },
   label: { fontFamily: FontFamily.body, fontSize: 11, color: Colors.textSecondary, marginTop: 4 },
 });
@@ -322,7 +372,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   badgeLocked: { opacity: 0.5 },
-  badgeIcon: { fontSize: 28, marginBottom: 6 },
+  badgeIconWrap: { height: 36, marginBottom: 6, alignItems: 'center', justifyContent: 'center' },
   badgeName: { fontFamily: FontFamily.bodySemiBold, fontSize: 11, color: Colors.textPrimary, textAlign: 'center' },
   badgeDesc: { fontFamily: FontFamily.body, fontSize: 9, color: Colors.textSecondary, textAlign: 'center', marginTop: 3 },
   badgeDate: { fontFamily: FontFamily.body, fontSize: 8, color: Colors.primary, marginTop: 4 },
@@ -366,4 +416,10 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   logoutText: { fontFamily: FontFamily.bodyMedium, fontSize: 14, color: Colors.error },
+  deleteBtn: {
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  deleteText: { fontFamily: FontFamily.body, fontSize: 13, color: Colors.textSecondary, textDecorationLine: 'underline' },
 });

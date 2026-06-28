@@ -8,6 +8,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
 import { Colors, FontFamily, FontSize, Spacing, Motion, alpha } from '../theme';
+import AppIcon from './ui/AppIcon';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -110,8 +111,13 @@ export default function NutritionScoreCard({ score, delta, status, size = 132 }:
         <Text style={styles.label}>Nutrition Score</Text>
         <View style={styles.deltaRow}>
           <View style={[styles.deltaPill, { backgroundColor: alpha(deltaUp ? PHILIPPINE_SILVER : Colors.error, 0.14) }]}>
+            <AppIcon
+              name={deltaUp ? 'trend-up' : 'trend-down'}
+              size={13}
+              color={deltaUp ? PHILIPPINE_SILVER : Colors.error}
+            />
             <Text style={[styles.deltaText, { color: deltaUp ? PHILIPPINE_SILVER : Colors.error }]}>
-              {deltaUp ? '▲' : '▼'} {Math.abs(delta)} today
+              {Math.abs(delta)} today
             </Text>
           </View>
         </View>
@@ -135,7 +141,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   deltaRow: { flexDirection: 'row' },
-  deltaPill: { paddingHorizontal: Spacing.md, paddingVertical: 4, borderRadius: 999, alignSelf: 'flex-start' },
+  deltaPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: Spacing.md, paddingVertical: 4, borderRadius: 999, alignSelf: 'flex-start' },
   deltaText: { fontFamily: FontFamily.bodySemiBold, fontSize: FontSize.label },
   status: { fontFamily: FontFamily.bodySemiBold, fontSize: FontSize.subhead },
 });
