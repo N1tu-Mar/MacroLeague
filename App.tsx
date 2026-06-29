@@ -21,9 +21,13 @@ import { useUserStore } from './src/store/userStore';
 import { supabase } from './src/lib/supabase';
 import { Colors } from './src/theme';
 
-const TUTORIAL_KEY = 'ml_tutorial_seen';
+// The tutorial (the "what is MacroLeague" intro slides) is shown exactly once
+// per account. We scope the seen-flag to the user id so it survives across
+// sessions for that account but a brand-new account always sees it once.
+const tutorialKeyFor = (userId: string) => `ml_tutorial_seen:${userId}`;
 
 export default function App() {
+  const userId = useUserStore((s) => s.user?.id ?? null);
   const isAuthenticated = useUserStore((s) => s.isAuthenticated);
   const isDeactivated = useUserStore((s) => s.isDeactivated);
   const needsOnboarding = useUserStore((s) => s.needsOnboarding);
@@ -47,17 +51,16 @@ export default function App() {
     let active = true;
 
     async function init() {
-      // Run auth check and tutorial-seen read in parallel to keep startup fast
-      const [{ data: { session } }, seenRaw] = await Promise.all([
-        supabase.auth.getSession(),
-        AsyncStorage.getItem(TUTORIAL_KEY).catch(() => null),
-      ]);
+      const { data: { session } } = await supabase.auth.getSession();
 
       if (!active) return;
 
-      setTutorialSeen(seenRaw === 'true');
-
       if (session?.user) {
+        // Read the per-account tutorial flag now that we know who is signed in.
+        const seenRaw = await AsyncStorage.getItem(tutorialKeyFor(session.user.id)).catch(() => null);
+        if (!active) return;
+        setTutorialSeen(seenRaw === 'true');
+
         login({
           id: session.user.id,
           username: session.user.email?.split('@')[0] ?? 'user',
@@ -80,6 +83,10 @@ export default function App() {
         void refreshStats();
         // Check whether this account is archived for deletion.
         void refreshAccountStatus();
+      } else {
+        // No session: the tutorial gate is irrelevant (AuthNavigator renders),
+        // so unblock the loading spinner.
+        setTutorialSeen(true);
       }
 
       setLoading(false);
@@ -91,6 +98,14 @@ export default function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (event === 'SIGNED_IN' && session?.user) {
+          // Resolve the per-account tutorial flag for this user.
+          AsyncStorage.getItem(tutorialKeyFor(session.user.id))
+            .then((seenRaw) => {
+              if (active) setTutorialSeen(seenRaw === 'true');
+            })
+            .catch(() => {
+              if (active) setTutorialSeen(false);
+            });
           login({
             id: session.user.id,
             username: session.user.email?.split('@')[0] ?? 'user',
@@ -125,7 +140,7 @@ export default function App() {
 
   async function markTutorialSeen() {
     try {
-      await AsyncStorage.setItem(TUTORIAL_KEY, 'true');
+      if (userId) await AsyncStorage.setItem(tutorialKeyFor(userId), 'true');
     } catch {}
     setTutorialSeen(true);
   }

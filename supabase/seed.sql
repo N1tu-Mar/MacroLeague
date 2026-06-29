@@ -1,0 +1,20 @@
+-- Local development seed data.
+--
+-- This file is referenced by `[db.seed] sql_paths = ["./seed.sql"]` in
+-- config.toml and is loaded automatically after migrations during
+-- `supabase db reset`. Without it, `db reset` errors out because the configured
+-- seed path does not resolve.
+--
+-- IMPORTANT: all SYSTEM data the app needs to function is already seeded by the
+-- migrations themselves, not here:
+--   * gamification_rule_sets — the system default rule set (migration 0006)
+--   * rewards                — the 5 redeemable rewards          (migration 0006)
+-- So a fresh `db reset` already produces a fully working economy with zero rows
+-- added below.
+--
+-- Per-user seed data (profiles, meal_logs, gamification_events, …) cannot be
+-- inserted here generically: profiles.id is a FK to auth.users, so seeded users
+-- must first exist in auth.users. Add local-only test fixtures below when needed,
+-- e.g. with `auth.admin` inserts or by signing up through the local Auth API.
+--
+-- Intentionally a no-op by default so `supabase db reset` succeeds cleanly.

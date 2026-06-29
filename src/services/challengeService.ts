@@ -229,3 +229,54 @@ export async function joinChallenge(challengeId: string, teamName = 'My Team'): 
     throw error;
   }
 }
+
+// ── Challenge invites (migration 0011) ────────────────────────────
+
+export interface ChallengeInvite {
+  inviteId: string;
+  challengeId: string;
+  challengeName: string;
+  goalType: string;
+  endDate: string;
+  inviterId: string;
+  inviterName: string;
+  createdAt: string;
+}
+
+/**
+ * Invites a specific user into a challenge the caller participates in. Returns the
+ * invite id. Throws if the caller isn't a participant or the target already is.
+ */
+export async function inviteToChallenge(challengeId: string, inviteeId: string): Promise<string> {
+  const { data, error } = await supabase.rpc('invite_to_challenge', {
+    p_challenge_id: challengeId,
+    p_invitee: inviteeId,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+/** Accept (auto-joins) or decline a challenge invite addressed to the caller. */
+export async function respondChallengeInvite(inviteId: string, accept: boolean): Promise<void> {
+  const { error } = await supabase.rpc('respond_challenge_invite', {
+    p_invite_id: inviteId,
+    p_accept: accept,
+  });
+  if (error) throw error;
+}
+
+/** The caller's pending incoming challenge invites. */
+export async function getChallengeInvites(): Promise<ChallengeInvite[]> {
+  const { data, error } = await supabase.rpc('get_challenge_invites');
+  if (error) throw error;
+  return ((data ?? []) as any[]).map((r) => ({
+    inviteId: r.invite_id,
+    challengeId: r.challenge_id,
+    challengeName: r.challenge_name,
+    goalType: r.goal_type,
+    endDate: r.end_date,
+    inviterId: r.inviter_id,
+    inviterName: r.inviter_name,
+    createdAt: r.created_at,
+  }));
+}

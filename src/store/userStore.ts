@@ -149,8 +149,10 @@ export const useUserStore = create<UserState>((set, get) => ({
           carbs: goals.goalCarbsG,
           fats: goals.goalUnsaturatedFatG,
         },
-        // goal_calories === 0 means the user never completed goal/macro setup.
-        needsOnboarding: goals.goalCalories === 0,
+        // Force onboarding until BOTH are true: goals are set (goal_calories > 0)
+        // and the user saved a real display name. A nameless account must never
+        // reach the app or appear on the leaderboard as a placeholder.
+        needsOnboarding: goals.goalCalories === 0 || !identity.hasName,
       });
     } catch (caughtError) {
       // Don't crash the UI if a migration isn't deployed yet (columns missing):

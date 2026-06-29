@@ -24,6 +24,30 @@ export interface LeaderboardUser {
   rank: number;
 }
 
+/**
+ * Matches the placeholder usernames the profile trigger / OAuth fallback creates
+ * before a real name is set (`user_<hex>`). These are derived from the user's
+ * UUID and must never be shown publicly — they leak an internal identifier and
+ * look broken on the leaderboard.
+ */
+const GENERATED_USERNAME = /^user_[0-9a-f]{6,}$/i;
+
+/**
+ * Resolves the name to render publicly for a leaderboard entry. Prefers the
+ * user's chosen display name, then a non-generated username, and otherwise falls
+ * back to a generic label — it will NEVER return the UUID-derived `user_<hex>`
+ * placeholder.
+ */
+export function publicLeaderboardName(u: { displayName: string | null; username: string | null }): string {
+  const displayName = u.displayName?.trim();
+  if (displayName) return displayName;
+
+  const username = u.username?.trim();
+  if (username && !GENERATED_USERNAME.test(username)) return username;
+
+  return 'Athlete';
+}
+
 type LeaderboardRow = {
   user_id: string;
   username: string;

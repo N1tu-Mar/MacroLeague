@@ -169,11 +169,18 @@ export default function OnboardingGoalsScreen() {
   }
 
   async function finish() {
+    // A real name is mandatory — never silently substitute a placeholder, or the
+    // account would slip past the name gate and show a fallback on the leaderboard.
+    const displayName = name.trim();
+    if (!displayName) {
+      Alert.alert('Enter your name to continue');
+      setStep(0);
+      return;
+    }
     setSaving(true);
     try {
       const { data, error } = await supabase.auth.getUser();
       if (error || !data.user) throw new Error('Not signed in');
-      const displayName = name.trim() || 'Athlete';
       await updateOnboardingProfile(data.user.id, {
         username: slugifyUsername(displayName),
         displayName,

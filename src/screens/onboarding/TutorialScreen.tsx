@@ -1,12 +1,9 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  Dimensions,
-  FlatList,
-  ViewToken,
 } from 'react-native';
 import Animated, {
   FadeIn,
@@ -18,8 +15,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { Colors, FontFamily } from '../../theme';
 import AppIcon, { AppIconName } from '../../components/ui/AppIcon';
-
-const { width, height } = Dimensions.get('window');
 
 interface Slide {
   id: string;
@@ -77,20 +72,24 @@ const SLIDES: Slide[] = [
 
 function SlideView({ slide }: { slide: Slide }) {
   return (
-    <View style={slide_s.container}>
-      <Animated.View entering={FadeIn.duration(400)} style={[slide_s.iconCircle, { backgroundColor: slide.iconBg }]}>
+    // `key` forces a remount on slide change so the FadeIn entrance animation
+    // replays for each slide — the transition the buttons drive.
+    <Animated.View key={slide.id} entering={FadeIn.duration(350)} style={slide_s.container}>
+      <View style={[slide_s.iconCircle, { backgroundColor: slide.iconBg }]}>
         <AppIcon name={slide.icon} size={52} color={slide.iconColor} />
-      </Animated.View>
+      </View>
       <Text style={slide_s.headline}>{slide.headline}</Text>
       <Text style={slide_s.body}>{slide.body}</Text>
-    </View>
+    </Animated.View>
   );
 }
 
 const slide_s = StyleSheet.create({
   container: {
-    width,
     flex: 1,
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 32,
@@ -153,30 +152,25 @@ interface Props {
 
 export default function TutorialScreen({ onDone }: Props) {
   const [activeIndex, setActiveIndex] = useState(0);
-  const flatRef = useRef<FlatList<Slide>>(null);
   const btnScale = useSharedValue(1);
 
   const btnStyle = useAnimatedStyle(() => ({
     transform: [{ scale: btnScale.value }],
   }));
 
-  const onViewableItemsChanged = useRef(
-    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      if (viewableItems[0]?.index != null) {
-        setActiveIndex(viewableItems[0].index);
-      }
-    },
-  ).current;
-
   function goNext() {
+    btnScale.value = withSpring(0.95, { damping: 8 }, () => {
+      btnScale.value = withSpring(1);
+    });
     if (activeIndex < SLIDES.length - 1) {
-      flatRef.current?.scrollToIndex({ index: activeIndex + 1, animated: true });
+      setActiveIndex((i) => i + 1);
     } else {
-      btnScale.value = withSpring(0.95, { damping: 8 }, () => {
-        btnScale.value = withSpring(1);
-      });
       onDone();
     }
+  }
+
+  function goBack() {
+    if (activeIndex > 0) setActiveIndex((i) => i - 1);
   }
 
   const isLast = activeIndex === SLIDES.length - 1;
@@ -186,25 +180,20 @@ export default function TutorialScreen({ onDone }: Props) {
       <StatusBar style="light" />
       <LinearGradient colors={['#0A0A0F', '#0D0D18', '#0A0A0F']} style={StyleSheet.absoluteFill} />
 
-      {/* Skip button */}
+      {/* Top bar: Back (when applicable) + Skip */}
+      {activeIndex > 0 ? (
+        <TouchableOpacity style={s.backButton} onPress={goBack} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+          <AppIcon name="back" size={22} color={Colors.textSecondary} />
+        </TouchableOpacity>
+      ) : null}
+
       <TouchableOpacity style={s.skipButton} onPress={onDone} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
         <Text style={s.skipText}>Skip</Text>
       </TouchableOpacity>
 
-      {/* Slide list */}
-      <FlatList
-        ref={flatRef}
-        data={SLIDES}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <SlideView slide={item} />}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={{ viewAreaCoveragePercentThreshold: 50 }}
-        style={s.list}
-        bounces={false}
-      />
+      {/* Current slide — driven entirely by the Next/Back buttons so it works
+          identically on web and native. */}
+      <SlideView slide={SLIDES[activeIndex]} />
 
       {/* Bottom controls */}
       <View style={s.bottom}>
@@ -237,6 +226,14 @@ export default function TutorialScreen({ onDone }: Props) {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
 
+  backButton: {
+    position: 'absolute',
+    top: 56,
+    left: 24,
+    zIndex: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+  },
   skipButton: {
     position: 'absolute',
     top: 56,
@@ -251,9 +248,10 @@ const s = StyleSheet.create({
     color: Colors.textSecondary,
   },
 
-  list: { flex: 1 },
-
   bottom: {
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
     paddingHorizontal: 28,
     paddingBottom: 48,
     gap: 24,

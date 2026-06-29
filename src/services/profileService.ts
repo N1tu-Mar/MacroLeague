@@ -209,6 +209,14 @@ export interface ProfileIdentity {
   displayName: string | null;
   university: string | null;
   goalType: string | null;
+  /**
+   * True only when the account has a real, user-chosen display name saved in the
+   * DB (onboarding completed the name step). This is the RAW signal — it is NOT
+   * affected by the auth-metadata fallback below that fills `displayName` for
+   * display. App.tsx uses it to force unfinished accounts back through onboarding
+   * so no nameless account can reach the app or the leaderboard.
+   */
+  hasName: boolean;
 }
 
 /** Matches usernames created by the profile trigger before onboarding finishes. */
@@ -241,6 +249,8 @@ export async function getProfileIdentity(userId: string): Promise<ProfileIdentit
   if (!data) throw new Error(MISSING_PROFILE_MESSAGE);
 
   let displayName = nonEmptyString(data.display_name);
+  // Raw, pre-fallback signal: did the user actually save a chosen name?
+  const hasName = displayName !== null;
 
   // OAuth users can predate the onboarding display_name write. Do not replace
   // their real auth-provider name with the trigger's temporary user_<id> value.
@@ -261,6 +271,7 @@ export async function getProfileIdentity(userId: string): Promise<ProfileIdentit
     displayName,
     university: data.university,
     goalType: data.goal_type,
+    hasName,
   };
 }
 

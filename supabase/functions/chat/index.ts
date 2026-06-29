@@ -187,21 +187,19 @@ HARD LIMITS:
   }
 
   if (!openaiResponse.ok) {
-    console.error('[chat] OpenAI error', openaiResponse.status);
-    // TEMPORARY DIAGNOSTIC: surface OpenAI's real error so we can tell apart
-    // insufficient_quota / invalid key / model access. Revert to a generic
-    // message once the coach is confirmed working.
+    // Log the provider's status + error code to the server logs ONLY (never
+    // returned to the client, which could echo the request or leak provider
+    // internals / billing state). Read just the error code/message for the log.
     let detail = '';
     try {
       const body = await openaiResponse.json();
       detail = body?.error?.code || body?.error?.message || '';
     } catch {
-      // ignore
+      // ignore — body may be empty or non-JSON
     }
-    return json(
-      { error: `OpenAI ${openaiResponse.status}${detail ? ': ' + detail : ''}` },
-      502,
-    );
+    console.error('[chat] OpenAI error', openaiResponse.status, detail);
+    // The client always gets a generic, safe message.
+    return json({ error: 'AI service returned an error. Please try again.' }, 502);
   }
 
   // deno-lint-ignore no-explicit-any

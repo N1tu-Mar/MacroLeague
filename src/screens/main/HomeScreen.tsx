@@ -13,7 +13,7 @@ import ActivityFeedItem from '../../components/ActivityFeedItem';
 import AppIcon from '../../components/ui/AppIcon';
 import RotatingTrophy from '../../components/animations/RotatingTrophy';
 import FoodLogItem from '../../components/FoodLogItem';
-import { getLeaderboard, LeaderboardUser } from '../../services/leaderboardService';
+import { getLeaderboard, LeaderboardUser, publicLeaderboardName } from '../../services/leaderboardService';
 import { getProfileIdentity } from '../../services/profileService';
 import {
   getRecentDailyActivity,
@@ -188,7 +188,7 @@ export default function HomeScreen({ navigation }: any) {
               {rival && rivalGap > 0 ? (
                 <Text style={styles.heroChaseText}>
                   <Text style={styles.heroChaseStrong}>{rivalGap} pts</Text> behind{' '}
-                  {rival.displayName ?? rival.username}
+                  {publicLeaderboardName(rival)}
                 </Text>
               ) : (
                 <>
@@ -251,10 +251,10 @@ export default function HomeScreen({ navigation }: any) {
           <RivalCard
             myName={firstName}
             myPoints={me.score}
-            rivalName={rival.displayName ?? rival.username}
+            rivalName={publicLeaderboardName(rival)}
             rivalPoints={rival.score}
             gap={rivalGap}
-            suggestedAction={`Hit your protein goal today to pass ${rival.displayName ?? rival.username}`}
+            suggestedAction={`Hit your protein goal today to pass ${publicLeaderboardName(rival)}`}
             onPress={() => navigation.navigate('Leaderboard')}
           />
         </View>
