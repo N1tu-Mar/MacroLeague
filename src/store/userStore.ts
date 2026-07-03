@@ -137,6 +137,7 @@ export const useUserStore = create<UserState>((set, get) => ({
                 name: identity.displayName ?? identity.username,
                 username: identity.username,
                 university: identity.university ?? state.user.university,
+                preferredDiningHall: identity.preferredDiningHall ?? state.user.preferredDiningHall,
                 goalType: coerceGoalType(identity.goalType),
               },
             }
