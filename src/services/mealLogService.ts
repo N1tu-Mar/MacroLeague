@@ -290,9 +290,29 @@ function validateFreeText(freeText: string): string {
   return trimmed;
 }
 
-function validateNumber(field: string, value: number, min: number, minLabel: string): void {
+// Per-meal upper bounds. These mirror the DB CHECK constraints (migration 0014)
+// so an absurd single-meal value is rejected with a clear message client-side
+// rather than as a raw DB error — and so it can't auto-satisfy every macro bonus.
+const MEAL_MAX = {
+  calories: 10000,
+  proteinG: 1000,
+  carbsG: 1000,
+  fatG: 1000,
+  quantity: 50,
+} as const;
+
+function validateNumber(
+  field: string,
+  value: number,
+  min: number,
+  minLabel: string,
+  max: number = Number.POSITIVE_INFINITY,
+): void {
   if (!Number.isFinite(value) || value < min) {
     throw new ValidationError(field, `${field} must be ${minLabel}.`);
+  }
+  if (value > max) {
+    throw new ValidationError(field, `${field} must be ${max} or less.`);
   }
 }
 
@@ -323,11 +343,11 @@ function validateLogMealParams(params: LogMealParams): ValidatedLogMealParams {
     eatenAt,
   };
 
-  validateNumber('calories', validated.calories, 0, 'a non-negative number');
-  validateNumber('proteinG', validated.proteinG, 0, 'a non-negative number');
-  validateNumber('carbsG', validated.carbsG, 0, 'a non-negative number');
-  validateNumber('fatG', validated.fatG, 0, 'a non-negative number');
-  validateNumber('quantity', validated.quantity, Number.MIN_VALUE, 'greater than 0');
+  validateNumber('calories', validated.calories, 0, 'a non-negative number', MEAL_MAX.calories);
+  validateNumber('proteinG', validated.proteinG, 0, 'a non-negative number', MEAL_MAX.proteinG);
+  validateNumber('carbsG', validated.carbsG, 0, 'a non-negative number', MEAL_MAX.carbsG);
+  validateNumber('fatG', validated.fatG, 0, 'a non-negative number', MEAL_MAX.fatG);
+  validateNumber('quantity', validated.quantity, Number.MIN_VALUE, 'greater than 0', MEAL_MAX.quantity);
   validateMealType(validated.mealType);
   validateDate('eatenAt', validated.eatenAt);
   validateClientRequestId(validated.clientRequestId);
@@ -405,19 +425,19 @@ function validateEditableFields(params: Partial<EditableMealFields>): Partial<Ed
     validated.freeText = validateFreeText(params.freeText);
   }
   if (params.calories !== undefined) {
-    validateNumber('calories', params.calories, 0, 'a non-negative number');
+    validateNumber('calories', params.calories, 0, 'a non-negative number', MEAL_MAX.calories);
   }
   if (params.proteinG !== undefined) {
-    validateNumber('proteinG', params.proteinG, 0, 'a non-negative number');
+    validateNumber('proteinG', params.proteinG, 0, 'a non-negative number', MEAL_MAX.proteinG);
   }
   if (params.carbsG !== undefined) {
-    validateNumber('carbsG', params.carbsG, 0, 'a non-negative number');
+    validateNumber('carbsG', params.carbsG, 0, 'a non-negative number', MEAL_MAX.carbsG);
   }
   if (params.fatG !== undefined) {
-    validateNumber('fatG', params.fatG, 0, 'a non-negative number');
+    validateNumber('fatG', params.fatG, 0, 'a non-negative number', MEAL_MAX.fatG);
   }
   if (params.quantity !== undefined) {
-    validateNumber('quantity', params.quantity, Number.MIN_VALUE, 'greater than 0');
+    validateNumber('quantity', params.quantity, Number.MIN_VALUE, 'greater than 0', MEAL_MAX.quantity);
   }
   if (params.mealType !== undefined) {
     validateMealType(params.mealType);

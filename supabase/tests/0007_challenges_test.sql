@@ -59,10 +59,19 @@ begin
   if v_parts <> 1 or v_goals <> 1 then
     raise exception 'TEST 1 FAILED: expected 1 participant + 1 goal, got parts=% goals=%', v_parts, v_goals;
   end if;
-  if not exists (select 1 from public.challenges where id = v_cid and created_by = u1 and type = 'team' and goal_type = 'protein') then
+  if not exists (
+    select 1
+    from public.challenges
+    where id = v_cid
+      and created_by = u1
+      and type = 'team'
+      and goal_type = 'protein'
+      and end_date - start_date + 1 = duration_days
+      and duration_days = 7
+  ) then
     raise exception 'TEST 1 FAILED: challenge row not created as expected';
   end if;
-  raise notice 'TEST 1 ok: create_challenge made challenge + creator participant + goal';
+  raise notice 'TEST 1 ok: create_challenge made an exact 7-day challenge + creator participant + goal';
 
   ------------------------------------------------------------------------------
   -- TEST 2: u2 joins as self; a duplicate join is rejected by the unique index.

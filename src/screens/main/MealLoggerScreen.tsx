@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useDailyTotals } from '../../hooks/useDailyTotals';
 import { FatSubtypeTotal, MealLog, MealType } from '../../services/mealLogService';
 import { useMealLogger, MealLogFields } from '../../hooks/useMealLogger';
@@ -64,7 +65,7 @@ function formatGoal(value: number | null | undefined, unit: string): string {
  */
 function formatSubtype(total: FatSubtypeTotal): string {
   const grams = `${formatMacro(total.grams)}g`;
-  return total.knownCount === 0 ? '0g' : total.missingCount > 0 ? `${grams} (partial)` : grams;
+  return total.knownCount === 0 ? 'Not available' : total.missingCount > 0 ? `${grams} (partial)` : grams;
 }
 
 function formatMealTime(eatenAt: string): string {
@@ -72,7 +73,7 @@ function formatMealTime(eatenAt: string): string {
 }
 
 export default function MealLoggerScreen() {
-  const today = useMemo(() => new Date(), []);
+  const [today, setToday] = useState(() => new Date());
   const logger = useMealLogger();
   const estimate = useMealEstimate();
   const daily = useDailyTotals(today);
@@ -82,6 +83,12 @@ export default function MealLoggerScreen() {
   const [showXp, setShowXp] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      setToday(new Date());
+    }, []),
+  );
 
   useEffect(() => {
     return () => {

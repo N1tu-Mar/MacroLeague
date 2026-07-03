@@ -39,6 +39,9 @@ export default function ChallengeCard({
   const [timeLeft, setTimeLeft] = useState(getTimeRemaining(endDate, status));
 
   useEffect(() => {
+    // Props can change after a refetch; update immediately instead of showing
+    // the previous challenge/status until the first one-minute timer tick.
+    setTimeLeft(getTimeRemaining(endDate, status));
     const timer = setInterval(() => setTimeLeft(getTimeRemaining(endDate, status)), 60000);
     return () => clearInterval(timer);
   }, [endDate, status]);

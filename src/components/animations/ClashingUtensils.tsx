@@ -37,22 +37,23 @@ export default function ClashingUtensils({ size = 26 }: ClashingUtensilsProps) {
     return () => cancelAnimation(clash);
   }, [clash, reduceMotion]);
 
+  // Explicit deps: required on web (no Reanimated Babel plugin there).
   const forkStyle = useAnimatedStyle(() => ({
     transform: [
       { translateX: interpolate(clash.value, [0, 1], [-1, 3]) },
       { rotate: `${interpolate(clash.value, [0, 1], [-12, 18])}deg` },
     ],
-  }));
+  }), [clash]);
   const knifeStyle = useAnimatedStyle(() => ({
     transform: [
       { translateX: interpolate(clash.value, [0, 1], [1, -3]) },
       { rotate: `${interpolate(clash.value, [0, 1], [12, -18])}deg` },
     ],
-  }));
+  }), [clash]);
   const flashStyle = useAnimatedStyle(() => ({
     opacity: interpolate(clash.value, [0, 0.82, 1], [0, 0, 1]),
     transform: [{ scale: interpolate(clash.value, [0, 1], [0.3, 1.25]) }],
-  }));
+  }), [clash]);
 
   return (
     <View style={[styles.frame, { width: size + 8, height: size + 8 }]}>

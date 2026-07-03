@@ -29,9 +29,10 @@ export default function StreakFlame({ count, size = 'small' }: StreakFlameProps)
     );
   }, []);
 
+  // Explicit deps: required on web (no Reanimated Babel plugin there).
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
-  }));
+  }), [scale]);
 
   const isLarge = size === 'large';
   const flameSize = isLarge ? 48 : 20;

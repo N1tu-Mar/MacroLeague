@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -14,16 +14,11 @@ import {
 } from 'react-native';
 import Animated, {
   FadeInDown,
-  FadeInUp,
-  FadeOutUp,
-  FadeOutDown,
   SlideInRight,
-  SlideOutLeft,
   useSharedValue,
   useAnimatedStyle,
   withTiming,
   withSpring,
-  withSequence,
   interpolate,
   Easing,
 } from 'react-native-reanimated';
@@ -31,7 +26,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { Colors, FontFamily } from '../../theme';
 import { signUpWithEmail, signInWithGoogle } from '../../lib/auth';
-import { calculateMacros, GoalType } from '../../lib/macros';
+import { calculateMacros, GoalType, validateMacroTargets } from '../../lib/macros';
 import { updateOnboardingProfile, slugifyUsername } from '../../services/profileService';
 import { useUserStore } from '../../store/userStore';
 import PixelFlame from '../../components/PixelFlame';
@@ -262,10 +257,20 @@ export default function SignUpScreen({ navigation }: SignUpScreenProps) {
   }
 
   async function handleSubmit() {
+    if (loading) return;
+    const macroError = validateMacroTargets(macros);
+    if (macroError) {
+      Alert.alert('Check your targets', macroError);
+      return;
+    }
     setLoading(true);
     try {
       const authData = await signUpWithEmail(email.trim(), password);
-      if (authData.user) {
+      // With email confirmation enabled, signUp creates the account but returns
+      // no session. Updating an RLS-protected profile at that point would fail
+      // and incorrectly tell the user account creation failed. In that mode the
+      // normal post-confirmation onboarding screen completes the profile.
+      if (authData.user && authData.session) {
         await updateOnboardingProfile(authData.user.id, {
           username: slugifyUsername(name || email.split('@')[0]),
           displayName: name,
@@ -357,12 +362,7 @@ export default function SignUpScreen({ navigation }: SignUpScreenProps) {
             <StepDots step={step - 1} total={3} />
           )}
 
-          {step > 0 && step < 3 && (
-            <TouchableOpacity onPress={() => { if (step === 3) { handleSubmit(); } else nextStep(); }}>
-              <Text style={styles.skipText}>Skip</Text>
-            </TouchableOpacity>
-          )}
-          {(step === 0 || step === 3) && <View style={{ width: 48 }} />}
+          <View style={{ width: 48 }} />
         </View>
 
         {/* ── STEP 0: Email + Password ─────────────────────────────── */}
@@ -576,7 +576,7 @@ export default function SignUpScreen({ navigation }: SignUpScreenProps) {
                 label="Calories"
                 value={macros.calories}
                 unit="kcal"
-                min={1200}
+                min={1500}
                 max={4000}
                 color={Colors.accent}
                 onChange={(v) => updateMacro('calories', v)}

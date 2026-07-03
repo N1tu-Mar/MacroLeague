@@ -33,12 +33,13 @@ export default function RotatingTrophy({ size = 24, color = Colors.gold }: Rotat
     return () => cancelAnimation(turn);
   }, [reduceMotion, turn]);
 
+  // Explicit deps: required on web (no Reanimated Babel plugin there).
   const turnStyle = useAnimatedStyle(() => ({
     transform: [{ perspective: 320 }, { rotateY: `${turn.value}deg` }],
-  }));
+  }), [turn]);
   const glintStyle = useAnimatedStyle(() => ({
     opacity: interpolate(turn.value, [0, 70, 90, 110, 250, 270, 290, 360], [0, 0, 0.9, 0, 0, 0.7, 0, 0]),
-  }));
+  }), [turn]);
 
   return (
     <View style={[styles.frame, { width: size + 6, height: size + 6 }]}>

@@ -40,3 +40,17 @@ yarn-error.*
 /ios
 /android
 .env
+
+# machine-local Claude Code settings (contains local paths, per-machine allowlist)
+.claude/settings.local.json
+
+# Gradle build cache for the android-auth subproject (machine-local binaries)
+android-auth/.gradle/
+
+# design-sync (regenerated build/scratch state — durable inputs in .design-sync/ ARE committed)
+.ds-sync/
+ds-bundle/
+dist/
+.design-sync/.cache/
+.design-sync/learnings/
+.design-sync/node_modules

@@ -51,6 +51,7 @@ export default function SignInScreen({ navigation }: SignInScreenProps) {
   }
 
   async function handleSignIn() {
+    if (loading || googleLoading) return;
     if (!email.trim() || !password) {
       shake();
       return;
@@ -68,6 +69,7 @@ export default function SignInScreen({ navigation }: SignInScreenProps) {
   }
 
   async function handleGoogleSignIn() {
+    if (loading || googleLoading) return;
     setGoogleLoading(true);
     try {
       await signInWithGoogle();
@@ -144,7 +146,7 @@ export default function SignInScreen({ navigation }: SignInScreenProps) {
           <View style={styles.fieldWrapper}>
             <View style={styles.fieldLabelRow}>
               <Text style={styles.fieldLabel}>Password</Text>
-              <TouchableOpacity>
+              <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
                 <Text style={styles.forgotLink}>Forgot?</Text>
               </TouchableOpacity>
             </View>
@@ -179,7 +181,7 @@ export default function SignInScreen({ navigation }: SignInScreenProps) {
           <TouchableOpacity
             style={styles.primaryButton}
             onPress={handleSignIn}
-            disabled={loading}
+            disabled={loading || googleLoading}
             activeOpacity={0.85}
           >
             <LinearGradient
@@ -212,7 +214,7 @@ export default function SignInScreen({ navigation }: SignInScreenProps) {
           <TouchableOpacity
             style={styles.googleButton}
             onPress={handleGoogleSignIn}
-            disabled={googleLoading}
+            disabled={loading || googleLoading}
             activeOpacity={0.85}
           >
             {googleLoading ? (

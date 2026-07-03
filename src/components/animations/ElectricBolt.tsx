@@ -38,15 +38,16 @@ export default function ElectricBolt({ size = 24 }: ElectricBoltProps) {
     return () => cancelAnimation(energy);
   }, [energy, reduceMotion]);
 
+  // Explicit deps: required on web (no Reanimated Babel plugin there).
   const outlineStyle = useAnimatedStyle(() => ({
     opacity: interpolate(energy.value, [0, 1], [0.18, 0.95]),
     transform: [{ scale: interpolate(energy.value, [0, 1], [1, 1.16]) }],
-  }));
+  }), [energy]);
 
   const sparkStyle = useAnimatedStyle(() => ({
     opacity: interpolate(energy.value, [0, 0.55, 1], [0, 0.2, 1]),
     transform: [{ scale: interpolate(energy.value, [0, 1], [0.4, 1.2]) }],
-  }));
+  }), [energy]);
 
   const frame = size + 10;
   return (

@@ -2,8 +2,17 @@ import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!.replace(/\/$/, '');
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
+const configuredUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+if (!configuredUrl || !supabaseAnonKey) {
+  throw new Error(
+    'Missing Expo configuration: set EXPO_PUBLIC_SUPABASE_URL and ' +
+      'EXPO_PUBLIC_SUPABASE_ANON_KEY before starting or building MacroLeague.',
+  );
+}
+
+const supabaseUrl = configuredUrl.replace(/\/$/, '');
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {

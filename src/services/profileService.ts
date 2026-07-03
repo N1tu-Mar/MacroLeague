@@ -29,8 +29,10 @@ export async function updateOnboardingProfile(
 ): Promise<void> {
   const payload = {
     username: update.username,
-    display_name: update.displayName.trim(),
-    university: update.university.trim(),
+    // Caps mirror the DB CHECK constraints (migration 0014) so an over-long
+    // value is trimmed here for a clean UX instead of a raw DB rejection.
+    display_name: update.displayName.trim().slice(0, 60),
+    university: update.university.trim().slice(0, 80),
     goal_type: update.goalType,
     goal_calories: update.goalCalories,
     goal_protein_g: update.goalProteinG,
@@ -162,8 +164,9 @@ export async function updateProfileUniversity(
   const { data, error } = await supabase
     .from('profiles')
     .update({
-      university: update.university,
-      preferred_dining_hall: update.preferredDiningHall,
+      // Caps mirror the DB CHECK constraints (migration 0014).
+      university: update.university.trim().slice(0, 80),
+      preferred_dining_hall: update.preferredDiningHall.trim().slice(0, 80),
     })
     .eq('id', userId)
     .select('id')

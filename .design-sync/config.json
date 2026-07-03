@@ -1,0 +1,36 @@
+{
+  "projectId": "6b6080a1-ca1a-4f13-b6e9-a48c8e0d8c3b",
+  "shape": "package",
+  "pkg": "macroleague",
+  "globalName": "MacroLeague",
+  "buildCmd": "node .design-sync/build-web-dist.mjs",
+  "entry": "./dist/design-system.js",
+  "tsconfig": "tsconfig.json",
+  "cssEntry": ".design-sync/tokens.css",
+  "extraFonts": [".design-sync/fonts.css"],
+  "guidelinesGlob": ["docs/icon-system.md"],
+  "overrides": {
+    "ActivityFeedItem": { "cardMode": "column" },
+    "Card": { "cardMode": "column" },
+    "ChallengeCard": { "cardMode": "column" },
+    "FoodLogItem": { "cardMode": "column" },
+    "LeaderboardRow": { "cardMode": "column" },
+    "MacroProgressBar": { "cardMode": "column" },
+    "MacroRing": { "cardMode": "column" },
+    "NutritionScoreCard": { "cardMode": "column" },
+    "PixelFlame": { "cardMode": "column" },
+    "RankMovement": { "cardMode": "column" },
+    "RivalCard": { "cardMode": "column" },
+    "RotatingTrophy": { "cardMode": "column" },
+    "StreakCard": { "cardMode": "column" }
+  },
+  "componentSrcMap": {
+    "Colors": null,
+    "FontFamily": null,
+    "FontSize": null,
+    "Spacing": null,
+    "Radius": null,
+    "Shadow": null,
+    "Motion": null
+  }
+}

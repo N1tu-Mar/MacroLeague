@@ -160,7 +160,10 @@ export default function RewardsScreen({ navigation }: any) {
                   </View>
                   {reward.expiryDate && (
                     <Text style={styles.rewardExpiry}>
-                      Expires {new Date(reward.expiryDate).toLocaleDateString()}
+                      {/* expiry_date is a date-only DB value. Adding local
+                          midnight prevents YYYY-MM-DD from parsing as UTC and
+                          displaying the previous day in western time zones. */}
+                      Expires {new Date(`${reward.expiryDate}T00:00:00`).toLocaleDateString()}
                     </Text>
                   )}
                 </TouchableOpacity>

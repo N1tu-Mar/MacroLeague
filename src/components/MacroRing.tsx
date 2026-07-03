@@ -29,14 +29,15 @@ export default function MacroRing({
   color,
 }: MacroRingProps) {
   const progress = useSharedValue(0);
-  const ratio = Math.min(current / goal, 1);
+  const rawRatio = goal > 0 ? current / goal : 0;
+  const ratio = Math.max(0, Math.min(rawRatio, 1));
 
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
 
   let ringColor = color ?? Colors.primary;
   if (!color) {
-    if (ratio > 1) ringColor = Colors.error;
+    if (rawRatio > 1) ringColor = Colors.error;
     else if (ratio < 0.5) ringColor = Colors.accent;
   }
 
@@ -44,9 +45,10 @@ export default function MacroRing({
     progress.value = withTiming(ratio, { duration: 1000, easing: Easing.out(Easing.cubic) });
   }, [ratio]);
 
+  // Explicit deps: required on web (no Reanimated Babel plugin there).
   const animatedProps = useAnimatedProps(() => ({
     strokeDashoffset: circumference * (1 - progress.value),
-  }));
+  }), [progress, circumference]);
 
   return (
     <View style={styles.container}>

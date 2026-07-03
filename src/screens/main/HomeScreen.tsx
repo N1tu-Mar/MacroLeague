@@ -36,7 +36,9 @@ export default function HomeScreen({ navigation }: any) {
   const user = useUserStore((s) => s.user);
   const refreshStats = useUserStore((s) => s.refreshStats);
 
-  const today = useMemo(() => new Date(), []);
+  // Refresh this value whenever the screen regains focus so a tab left mounted
+  // overnight does not keep querying and labeling yesterday as "today".
+  const [today, setToday] = useState(() => new Date());
   const daily = useDailyTotals(today);
   const totals = daily.totals;
   const goals = daily.goals;
@@ -70,6 +72,8 @@ export default function HomeScreen({ navigation }: any) {
   useFocusEffect(
     useCallback(() => {
       let active = true;
+      const currentDate = new Date();
+      setToday(currentDate);
       daily.refresh();
       void refreshStats();
       (async () => {
@@ -82,7 +86,11 @@ export default function HomeScreen({ navigation }: any) {
           if (!active) return;
           setLeaderboard(board);
           setFeed(recent);
-          const yKey = dateKey(new Date(Date.now() - 86400000));
+          // Calendar arithmetic stays on the previous local date across 23/25
+          // hour daylight-saving transitions; subtracting 86,400,000ms does not.
+          const yesterday = new Date(currentDate);
+          yesterday.setDate(yesterday.getDate() - 1);
+          const yKey = dateKey(yesterday);
           const yRow = activity.find((a) => a.date === yKey);
           setYesterdayScore(
             yRow

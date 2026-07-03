@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -7,22 +7,73 @@ import {
   TouchableOpacity,
   Switch,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors, FontFamily } from '../../theme';
 import AppIcon from '../../components/ui/AppIcon';
+import { useUserStore } from '../../store/userStore';
+
+type NotificationPreferences = {
+  streakReminder: boolean;
+  challengeUpdates: boolean;
+  teamAlerts: boolean;
+  goalReminders: boolean;
+  weeklyReport: boolean;
+};
+
+const DEFAULT_PREFERENCES: NotificationPreferences = {
+  streakReminder: true,
+  challengeUpdates: true,
+  teamAlerts: true,
+  goalReminders: false,
+  weeklyReport: true,
+};
 
 export default function NotificationsSettingsScreen({ navigation }: any) {
-  const [streakReminder, setStreakReminder] = useState(true);
-  const [challengeUpdates, setChallengeUpdates] = useState(true);
-  const [teamAlerts, setTeamAlerts] = useState(true);
-  const [goalReminders, setGoalReminders] = useState(false);
-  const [weeklyReport, setWeeklyReport] = useState(true);
+  const userId = useUserStore((s) => s.user?.id ?? 'anonymous');
+  const storageKey = `ml_notification_preferences:${userId}`;
+  const [preferences, setPreferences] = useState(DEFAULT_PREFERENCES);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setLoaded(false);
+    setPreferences(DEFAULT_PREFERENCES);
+    AsyncStorage.getItem(storageKey)
+      .then((raw) => {
+        if (!active || !raw) return;
+        const parsed = JSON.parse(raw) as Partial<NotificationPreferences>;
+        const safe = Object.fromEntries(
+          Object.entries(parsed).filter(([, value]) => typeof value === 'boolean'),
+        ) as Partial<NotificationPreferences>;
+        setPreferences({ ...DEFAULT_PREFERENCES, ...safe });
+      })
+      .catch(() => {
+        // Keep defaults if local preferences are absent or malformed.
+      })
+      .finally(() => {
+        if (active) setLoaded(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [storageKey]);
+
+  function updatePreference(key: keyof NotificationPreferences, value: boolean) {
+    setPreferences((current) => {
+      const next = { ...current, [key]: value };
+      void AsyncStorage.setItem(storageKey, JSON.stringify(next)).catch(() => {
+        // The switch still works for this session if local storage is unavailable.
+      });
+      return next;
+    });
+  }
 
   const settings = [
-    { label: 'Streak Reminders', desc: 'Daily reminder to keep your streak alive', value: streakReminder, onChange: setStreakReminder },
-    { label: 'Challenge Updates', desc: 'Score changes and challenge endings', value: challengeUpdates, onChange: setChallengeUpdates },
-    { label: 'Team Alerts', desc: 'When teammates log meals or hit goals', value: teamAlerts, onChange: setTeamAlerts },
-    { label: 'Goal Reminders', desc: 'Nudge when you\'re behind on daily macros', value: goalReminders, onChange: setGoalReminders },
-    { label: 'Weekly Report', desc: 'Summary of your weekly progress', value: weeklyReport, onChange: setWeeklyReport },
+    { key: 'streakReminder' as const, label: 'Streak Reminders', desc: 'Daily reminder to keep your streak alive' },
+    { key: 'challengeUpdates' as const, label: 'Challenge Updates', desc: 'Score changes and challenge endings' },
+    { key: 'teamAlerts' as const, label: 'Team Alerts', desc: 'When teammates log meals or hit goals' },
+    { key: 'goalReminders' as const, label: 'Goal Reminders', desc: 'Nudge when you\'re behind on daily macros' },
+    { key: 'weeklyReport' as const, label: 'Weekly Report', desc: 'Summary of your weekly progress' },
   ];
 
   return (
@@ -42,10 +93,11 @@ export default function NotificationsSettingsScreen({ navigation }: any) {
             <Text style={styles.rowDesc}>{s.desc}</Text>
           </View>
           <Switch
-            value={s.value}
-            onValueChange={s.onChange}
+            value={preferences[s.key]}
+            onValueChange={(value) => updatePreference(s.key, value)}
+            disabled={!loaded}
             trackColor={{ false: Colors.surface2, true: Colors.primary + '44' }}
-            thumbColor={s.value ? Colors.primary : Colors.textSecondary}
+            thumbColor={preferences[s.key] ? Colors.primary : Colors.textSecondary}
           />
         </View>
       ))}

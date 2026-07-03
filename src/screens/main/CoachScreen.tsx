@@ -14,7 +14,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, FontFamily, FontSize, Spacing, Radius, Shadow, alpha } from '../../theme';
 import AppIcon from '../../components/ui/AppIcon';
 import { sendChatMessage, ChatMessage } from '../../services/chatService';
-import { useUserStore } from '../../store/userStore';
 
 const SUGGESTED_QUESTIONS = [
   'What do trans fats actually do to my body?',
@@ -53,7 +52,6 @@ function TypingDots() {
 }
 
 export default function CoachScreen() {
-  const user = useUserStore((s) => s.user);
   const insets = useSafeAreaInsets();
 
   const [messages, setMessages] = useState<Message[]>([WELCOME]);

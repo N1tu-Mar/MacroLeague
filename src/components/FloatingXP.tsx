@@ -14,15 +14,24 @@ interface FloatingXPProps {
   amount: number;
   visible: boolean;
   onDone?: () => void;
+  /** Skip the entrance/exit animation for reduced-motion and static contexts. */
+  animated?: boolean;
 }
 
-export default function FloatingXP({ amount, visible, onDone }: FloatingXPProps) {
+export default function FloatingXP({ amount, visible, onDone, animated = true }: FloatingXPProps) {
   const translateY = useSharedValue(0);
   const opacity = useSharedValue(0);
   const scale = useSharedValue(0.5);
 
   useEffect(() => {
     if (visible) {
+      if (!animated) {
+        translateY.value = -40;
+        opacity.value = 1;
+        scale.value = 1;
+        return;
+      }
+
       translateY.value = 0;
       opacity.value = 0;
       scale.value = 0.5;
@@ -37,12 +46,13 @@ export default function FloatingXP({ amount, visible, onDone }: FloatingXPProps)
         })
       );
     }
-  }, [visible]);
+  }, [visible, animated]);
 
+  // Explicit deps: required on web (no Reanimated Babel plugin there).
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }, { scale: scale.value }],
     opacity: opacity.value,
-  }));
+  }), [translateY, scale, opacity]);
 
   if (!visible) return null;
 

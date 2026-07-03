@@ -1,0 +1,39 @@
+/* Brand font: Nunito, loaded at runtime by expo-font in the app. The theme's
+   FontFamily tokens are the literal loaded names (e.g. "Nunito_800ExtraBold"),
+   so each @font-face family must match those names exactly for react-native-web
+   styles to resolve. TTFs come from the repo's own @expo-google-fonts packages. */
+
+@font-face {
+  font-family: 'Nunito_400Regular';
+  src: url('../node_modules/@expo-google-fonts/nunito/400Regular/Nunito_400Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Nunito_500Medium';
+  src: url('../node_modules/@expo-google-fonts/nunito/500Medium/Nunito_500Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Nunito_600SemiBold';
+  src: url('../node_modules/@expo-google-fonts/nunito/600SemiBold/Nunito_600SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Nunito_700Bold';
+  src: url('../node_modules/@expo-google-fonts/nunito/700Bold/Nunito_700Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Nunito_800ExtraBold';
+  src: url('../node_modules/@expo-google-fonts/nunito/800ExtraBold/Nunito_800ExtraBold.ttf') format('truetype');
+  font-weight: 800;
+  font-style: normal;
+}

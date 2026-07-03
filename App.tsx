@@ -15,10 +15,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import AuthNavigator from './src/navigation/AuthNavigator';
 import MainNavigator from './src/navigation/MainNavigator';
 import ReactivateAccountScreen from './src/screens/main/ReactivateAccountScreen';
+import ResetPasswordScreen from './src/screens/auth/ResetPasswordScreen';
 import OnboardingGoalsScreen from './src/screens/onboarding/OnboardingGoalsScreen';
 import TutorialScreen from './src/screens/onboarding/TutorialScreen';
 import { useUserStore } from './src/store/userStore';
 import { supabase } from './src/lib/supabase';
+import { setMonitoringUser } from './src/lib/monitoring';
 import { Colors } from './src/theme';
 
 // The tutorial (the "what is MacroLeague" intro slides) is shown exactly once
@@ -38,6 +40,10 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   // null = not yet read from AsyncStorage (still loading); true/false = known
   const [tutorialSeen, setTutorialSeen] = useState<boolean | null>(null);
+  // True after the user follows a password-reset link (Supabase PASSWORD_RECOVERY
+  // event). While true we render the "set a new password" screen over everything
+  // else, since the recovery session is only meant for exactly that.
+  const [passwordRecovery, setPasswordRecovery] = useState(false);
 
   const [fontsLoaded] = useFonts({
     Nunito_400Regular,
@@ -56,6 +62,7 @@ export default function App() {
       if (!active) return;
 
       if (session?.user) {
+        setMonitoringUser(session.user.id);
         // Read the per-account tutorial flag now that we know who is signed in.
         const seenRaw = await AsyncStorage.getItem(tutorialKeyFor(session.user.id)).catch(() => null);
         if (!active) return;
@@ -97,7 +104,14 @@ export default function App() {
     // Listen for auth changes (login/logout/OAuth callback)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        if (event === 'PASSWORD_RECOVERY') {
+          // The recovery link put us in a temporary session. Show the reset
+          // screen; ResetPasswordScreen signs out on success.
+          setPasswordRecovery(true);
+          return;
+        }
         if (event === 'SIGNED_IN' && session?.user) {
+          setMonitoringUser(session.user.id);
           // Resolve the per-account tutorial flag for this user.
           AsyncStorage.getItem(tutorialKeyFor(session.user.id))
             .then((seenRaw) => {
@@ -127,6 +141,8 @@ export default function App() {
           void refreshStats();
           void refreshAccountStatus();
         } else if (event === 'SIGNED_OUT') {
+          setMonitoringUser(null);
+          setPasswordRecovery(false);
           logout();
         }
       }
@@ -156,7 +172,9 @@ export default function App() {
   return (
     <NavigationContainer>
       <StatusBar style="light" />
-      {isAuthenticated ? (
+      {passwordRecovery ? (
+        <ResetPasswordScreen onDone={() => setPasswordRecovery(false)} />
+      ) : isAuthenticated ? (
         isDeactivated ? (
           <ReactivateAccountScreen />
         ) : needsOnboarding ? (

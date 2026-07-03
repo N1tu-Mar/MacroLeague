@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import { Colors, FontFamily, FontSize, Spacing, Radius, alpha } from '../../them
 import { useUserStore } from '../../store/userStore';
 import LeaderboardRow from '../../components/LeaderboardRow';
 import AppIcon from '../../components/ui/AppIcon';
+import Avatar from '../../components/ui/Avatar';
 import RotatingTrophy from '../../components/animations/RotatingTrophy';
 import {
   getLeaderboard,
@@ -236,6 +237,7 @@ function FriendsTab({
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<UserSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
+  const latestSearchId = useRef(0);
 
   const [requests, setRequests] = useState<FriendRequest[]>([]);
   const [standings, setStandings] = useState<FriendStanding[]>([]);
@@ -243,27 +245,30 @@ function FriendsTab({
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const load = useCallback(async (shouldApply: () => boolean = () => true) => {
+    if (shouldApply()) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const [reqs, board] = await Promise.all([getFriendRequests(), getFriendsLeaderboard(14)]);
+      if (!shouldApply()) return;
       setRequests(reqs);
       setStandings(board);
       onRequestsLoaded?.(reqs.length);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load friends.');
+      if (shouldApply()) {
+        setError(e instanceof Error ? e.message : 'Could not load friends.');
+      }
     } finally {
-      setLoading(false);
+      if (shouldApply()) setLoading(false);
     }
   }, [onRequestsLoaded]);
 
   useFocusEffect(
     useCallback(() => {
       let active = true;
-      (async () => {
-        await load();
-      })();
+      void load(() => active);
       return () => {
         active = false;
       };
@@ -271,19 +276,23 @@ function FriendsTab({
   );
 
   const runSearch = useCallback(async (text: string) => {
+    const searchId = ++latestSearchId.current;
     setQuery(text);
     if (text.trim().length < 2) {
       setResults([]);
+      setSearching(false);
       return;
     }
     setSearching(true);
     try {
       const found = await searchUsers(text);
-      setResults(found);
+      // Typing quickly can make an older, slower request finish last. Only the
+      // newest request may replace the results for the text currently shown.
+      if (searchId === latestSearchId.current) setResults(found);
     } catch {
-      setResults([]);
+      if (searchId === latestSearchId.current) setResults([]);
     } finally {
-      setSearching(false);
+      if (searchId === latestSearchId.current) setSearching(false);
     }
   }, []);
 
@@ -496,15 +505,6 @@ function StatusButton({
   );
 }
 
-function Avatar({ name, url }: { name: string; url: string | null }) {
-  const initial = (name?.trim()?.[0] ?? '?').toUpperCase();
-  return (
-    <View style={styles.avatar}>
-      <Text style={styles.avatarText}>{initial}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: { paddingTop: 60, paddingHorizontal: Spacing.lg, paddingBottom: Spacing.sm },
@@ -598,16 +598,6 @@ const styles = StyleSheet.create({
   rowName: { fontFamily: FontFamily.bodySemiBold, fontSize: FontSize.label, color: Colors.textPrimary },
   rowSub: { fontFamily: FontFamily.body, fontSize: FontSize.meta, color: Colors.textSecondary, marginTop: 1 },
   rank: { fontFamily: FontFamily.displayBold, fontSize: FontSize.label, color: Colors.textSecondary, width: 32 },
-
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: alpha(Colors.primary, 0.18),
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: { fontFamily: FontFamily.displayBold, fontSize: FontSize.label, color: Colors.primary },
 
   actionsRow: { flexDirection: 'row', gap: Spacing.xs },
   smallBtn: {

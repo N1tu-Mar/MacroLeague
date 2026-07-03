@@ -48,9 +48,10 @@ export default function NutritionScoreCard({ score, delta, status, size = 132 }:
   const [display, setDisplay] = useState(0);
   const rafRef = useRef<number | null>(null);
   useEffect(() => {
-    const start = Date.now();
-    const tick = () => {
-      const t = Math.min(1, (Date.now() - start) / Motion.countUp);
+    let start: number | null = null;
+    const tick = (timestamp: number) => {
+      start ??= timestamp;
+      const t = Math.min(1, (timestamp - start) / Motion.countUp);
       const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
       setDisplay(Math.round(eased * score));
       if (t < 1) rafRef.current = requestAnimationFrame(tick);
@@ -69,9 +70,10 @@ export default function NutritionScoreCard({ score, delta, status, size = 132 }:
       easing: Easing.out(Easing.cubic),
     });
   }, [ratio]);
+  // Explicit deps: required on web (no Reanimated Babel plugin there).
   const animatedProps = useAnimatedProps(() => ({
     strokeDashoffset: circumference * (1 - progress.value),
-  }));
+  }), [progress, circumference]);
 
   const deltaUp = delta >= 0;
 

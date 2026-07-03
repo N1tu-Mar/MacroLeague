@@ -1,0 +1,970 @@
+╭─── Claude Code v2.1.199 ─────────────────────────────────────────────────────╮
+│                                                    │ What's new              │
+│                 Welcome back Nitu!                 │ Stacked slash-skill in… │
+│                                                    │ Fixed SSL certificate … │
+│                       ▐▛███▜▌                      │ Fixed streaming respon… │
+│                      ▝▜█████▛▘                     │ /release-notes for more │
+│                        ▘▘ ▝▝                       │                         │
+│    Fable 5 · Claude Max ·                          │                         │
+│    nityanth.maramreddy@gmail.com's Organization    │                         │
+│            ~/Downloads/MacroLeagueDemo             │                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+ ▎ Fable 5 is back.
+ ▎ Until July 7, you can use up to 50% of your plan's weekly usage limit on Fable 5. If you hit your limit, you can continue on Fable 5 with usage credits. Fable 5 draws down usage faster than Opus 4.8. Learn more
+
+❯ Can you read through this Google file right here and let me know what         
+  specific next steps we should add in? I can also look through the codebase    
+  and the prompt files and markdown files and let me know, based on our chat    
+  histories, what else we should consider adding into this app so MacroLeague   
+  is a more fleshed out app that can actually work for real users, right, and   
+  it can be optimized for real users https://docs.google.com/document/d/1XM8sBE 
+  5s-hr9wF0UtLkUi5HgFCT3_fhpDYh7ejwVQ4o/edit?usp=sharing                        
+
+⏺ I'll read the Google Doc first, then survey the codebase and planning docs in
+  parallel.
+
+  Read 1 file, listed 3 directories, called Google Drive, ran 1 shell command (ctrl+o to expand)
+
+⏺ Explore(Verify doc next-steps in code)
+  ⎿  Done (22 tool uses · 54.0k tokens · 2m 45s)
+  (ctrl+o to expand)
+
+⏺ I've now got the full picture: the doc (build plan + the Jun 28 "NEXT STEPS"
+  list of 16 items), my notes from our past sessions, and a fresh verification
+  of every item against the current code. Here's what I'd change in the doc.
+
+  First: mark off what's already done (the Jun 28 list is stale)
+
+  Six of the 16 items are resolved or mostly resolved since the doc was written
+  — update them so the list reflects reality:
+
+  - #1 Signup "Let's Go" fallback — fixed. The success state now navigates to
+  Sign In; the argument-less login() call is gone.
+  - #2 Google sign-in skips onboarding — mostly fixed. Everyone now routes
+  through Goals → Tutorial before Main. Small residue: App.tsx still seeds
+  hardcoded 'Rutgers University' / 'muscle' placeholders before real data
+  hydrates — worth a cleanup line, not a full item.
+  - #3 Migrations 0008/0009 undeployed — done. Applied to the hosted project;
+  account deletion works end-to-end, and the purge cron is live
+  (migration 0010).
+  - #4 seed.sql missing — created.
+  - #5 No friendships / #6 No challenge invites — shipped (migration 0011):
+  request/accept friendships, user search, friends leaderboard, challenge
+  invites with accept-auto-joins, all through SECURITY DEFINER RPCs.
+  - #15 University settings dead end — partial. It now saves a university +
+  preferred dining hall (migration 0012), but nothing consumes that preference
+  yet.
+
+  Also, migrations now run through 0014 (0013 fixes challenge duration
+  off-by-one, 0014 adds input-bounding CHECK constraints).
+
+  New NEXT STEPS to add (prioritized, using the doc's own rules)
+
+  Step 0 — Commit the drift. Migrations 0013/0014 and several changed service
+  files are live in prod but untracked in git. The doc's own law is "every
+  schema change is a migration file in the repo" — this is currently violated.
+  One commit, five minutes, do it first.
+
+  Tier 1 — Correctness & trust (the doc's "not okay to cut" column):
+
+  1. Challenge finalization. Still the biggest broken promise: challenges_won is
+  0 for everyone and the advertised +250 pts win reward never fires because
+  nothing marks a winner when end_date passes. Build it as an idempotent
+  scheduled job (the pg_cron + vault pattern from migration 0010 is reusable)
+  writing a challenge_win ledger event keyed per (challenge, user) so a double
+  run can't double-award. This is literally the doc's "settlement" interview
+  story.
+  2. Edits/deletes must reverse awards. Known deferred gap: the gamification
+  trigger is INSERT-only, so deleting a meal leaves its XP behind — a user can
+  log→earn→delete→relog to farm points. The doc's failure-modes section names
+  this exact case. Fix with compensating ledger entries, which the
+  immutable-ledger design was chosen to enable.
+  3. Per-day award caps. Migration 0014's header explicitly defers meal-count
+  farming (many valid meals = repeated base awards). Close it in the trigger
+  before real Rutgers users compete for real rewards.
+  4. Rate-limit the chat and estimate-meal edge functions. Both are
+  authenticated but unthrottled — one motivated user is an unbounded OpenAI/USDA
+  bill.
+  5. Minimum observability. No Sentry, no failed-write tracking, ~6
+  console.warns total. The doc has a whole section requiring this before
+  anything rank-or-reward-shaped goes live, and a leaderboard with prizes is
+  already live.
+
+  Tier 2 — Retention & real-user readiness (PMF):
+
+  6. Push notifications — streak reminder, "challenge ends in 24h," friend
+  request received. Also: the NotificationsSettings toggles are currently pure
+  decoration (in-memory state, wired to nothing) — wire them or remove the
+  screen; a fake settings screen fails the doc's honesty bar.
+  7. Real redemption codes. The redeem RPC is atomic and correct, but the modal
+  still shows a literal [ QR CODE ] placeholder. Server-generate a short unique
+  code per redemption — even without partner integration, the user gets
+  something to show.
+  8. Rank movement arrows. Still movement={0} everywhere. A nightly
+  rank-snapshot table (same cron pattern) makes the promotion/relegation visual
+  real — cheap and high-visibility.
+  9. Make the feed social. Friendships now exist, so the deferred half of the
+  social layer is unblocked: friends' events in the Home feed, humanized copy
+  ("Sarah hit her protein goal" instead of "Earned 10 pts"), and a rival card
+  based on an actual friend rather than whoever is one global rank up.
+  10. Food search/browse. Logging friction is the core-loop killer. A searchable
+  picker on top of the existing USDA estimate-meal/foods-cache architecture
+  (type "chicken breast," pick, adjust portion) — the backend is largely built
+  already.
+  11. Avatar upload via Supabase Storage (0014 already constrains avatar_url to
+  https).
+  12. Earn-rules fallback — RewardsScreen still shows "Scoring rules
+  unavailable" with no default; tiny fix.
+
+  Tier 3 — Bigger bets (only after tiers 1–2):
+
+  13. Photo meal scan — the original 30-second-log promise; mirrors the
+  estimate-meal edge-function architecture with a vision model.
+  14. Coach upgrades — conversation persistence (resets on every restart today)
+  and, from the original Coach! session goals, real tool-use/research instead of
+  a prompt that just sounds authoritative.
+  15. Offline write queue — a failed meal save is currently just an error;
+  queue-and-retry with the existing idempotency keys is the natural extension.
+  16. Dining hall data that does something — menus or hall-scoped foods, or
+  explicitly park it; right now it's a stored preference nothing reads.
+  17. A JS/TS test layer. All 5 test files are SQL; there's zero coverage on
+  services/hooks (day-boundary math, idempotent submit, totals). The doc's
+  testing plan calls for exactly this before more generated changes land.
+
+  The one-sentence version for the doc: the floor and the social layer are real 
+  now — the next sprint is making the game economy trustworthy (finalization, 
+  reversals, caps) and making the app sticky (notifications, social feed, 
+  search), in that order.
+
+  I can't edit the Google Doc directly (read-only access), but if you want, I
+  can produce this as a formatted replacement NEXT STEPS section you can paste
+  in — or start on Step 0/Tier 1 directly.
+
+✻ Sautéed for 5m 6s
+
+※ recap: You asked for updated next steps for MacroLeague's build-plan doc. I verified the Jun 28 list against the code: six items are done, and I gave a prioritized new roadmap. Next action: your call to paste it into the doc or start Tier 1. (disable recaps in /config)
+
+❯ /design-sync                                                                  
+
+  Listed 1 directory (ctrl+o to expand)
+
+⏺ User answered Claude's questions:
+  ⎿  · This is a first-time import and may take up to a few hours of build 
+     iteration and visual verification (significant token usage). How do you 
+     want to proceed? → Full high-fidelity sync (Recommended)
+
+⏺ Design: List design-system projects(List design-system projects)
+  ⎿  Error: DesignSync needs design-system authorization. Run /design-login to 
+     authorize it with your claude.ai account — this works even when this 
+     session authenticates with an API key or a provider token.
+
+⏺ DesignSync needs authorization before I can list or create projects. Please
+  run /design-login to authorize it with your claude.ai account — this works
+  even when this session authenticates with an API key or a provider token.
+
+  Once you've done that, tell me and I'll continue with picking a project name
+  and starting the sync.
+
+✻ Cogitated for 57s
+
+❯ /design-login                                                                 
+  ⎿  Design-system access authorized.
+
+❯ Okay then, go on.                                                             
+
+⏺ Design: List design-system projects(List design-system projects)
+
+⏺ No existing design-system projects, so no name collisions. Let me confirm the
+  project name before creating it.
+
+⏺ Claude asked:
+  ⎿  · What should the new Claude Design project be named? (MacroLeague Design 
+     System (Recommended) / MacroLeague UI)
+     ⏺ No response after 60s — continued without an answer
+⏺ No response — proceeding with the recommended name "MacroLeague Design System"
+  (you already told me to go on).
+
+⏺ Design: Create project "MacroLeague Design System"(Create project "MacroLeague
+                                                    Design System")
+
+⏺ Project created. Recording the pin in .design-sync/config.json immediately,
+  then routing the upload path and detecting the source shape.
+
+⏺ Write(.design-sync/config.json)
+  ⎿  Wrote 3 lines to .design-sync/config.json
+      1 {
+      2   "projectId": "6b6080a1-ca1a-4f13-b6e9-a48c8e0d8c3b"
+      3 }
+
+⏺ Design: List project files(List project files)
+
+  Listed 1 directory (ctrl+o to expand)
+
+⏺ Update(.design-sync/config.json)
+  ⎿  Added 2 lines, removed 1 line
+      1  {
+      2 -  "projectId": "6b6080a1-ca1a-4f13-b6e9-a48c8e0d8c3b"           
+      2 +  "projectId": "6b6080a1-ca1a-4f13-b6e9-a48c8e0d8c3b",          
+      3 +  "shape": "package"                                            
+      4  }
+
+  Read 2 files, listed 2 directories, ran 1 shell command (ctrl+o to expand)
+
+⏺ User answered Claude's questions:
+  ⎿  · Preview scope: all 22 components import fully functional either way — 
+     this decides which get rich authored preview cards (vs. an honest "not yet 
+     authored" floor card). Which do you want? → Author all 22 (Recommended)
+     · Verifying renders needs headless Chromium via Playwright (~200MB 
+     download, cached in ~/.cache/ms-playwright). OK to install? → Yes, install 
+     it (Recommended)
+
+⏺ Both approved — authoring all 22 with full machine verification. Setting up
+  the converter now.
+
+  Searched for 1 pattern, ran 2 shell commands (ctrl+o to expand)
+
+⏺ Chromium is downloading in the background. Now the critical question — how the
+  converter's esbuild resolves react-native imports (needs to go to
+  react-native-web).
+
+  Searched for 2 patterns, read 3 files, ran 1 shell command (ctrl+o to expand)
+
+⏺ Background command "Download headless Chromium for render checks (~200MB)"
+completed (exit code 0)
+  Listed 1 directory (ctrl+o to expand)
+
+⏺ Write(src/index.ts)
+  ⎿  Wrote 32 lines to src/index.ts
+       1 // Design-system entry point. Not imported by the app runtime (E
+       2 // the root index.ts) — this is the export surface for the web d
+       3 // build (.design-sync/build-web-dist.mjs), which bundles these 
+         components via
+       5 
+         tyFeedItem';
+         Card';
+       8 export { default as FloatingXP } from './components/FloatingXP';
+         ';
+         ardRow';
+     … +37 lines (ctrl+o to expand)
+
+⏺ Write(.design-sync/build-web-dist.mjs)
+  ⎿  Wrote 44 lines to .design-sync/build-web-dist.mjs
+       1 // Web design-system prebuild for design-sync.
+       3 // This Expo app has no dist/ — and the design-sync converter's 
+         own esbuild
+          →
+          packages).
+       6 // So this script produces a fully web-resolved ESM entry the co
+       7 // consume as if it were the package's published dist:
+       8 //   dist/design-system.js   — all components + theme, only reac
+       9 //   dist/types/**           — .d.ts tree (auto-discovered via t
+      10 //
+     … +46 lines (ctrl+o to expand)
+
+⏺ Write(.design-sync/tsconfig.dist.json)
+  ⎿  Wrote 12 lines to .design-sync/tsconfig.dist.json
+       1 {
+       2   "extends": "../tsconfig.json",
+       3   "compilerOptions": {
+       4     "noEmit": false,
+       5     "declaration": true,
+       6     "emitDeclarationOnly": true,
+       7     "outDir": "../dist/types",
+       8     "rootDir": "../src",
+       9     "skipLibCheck": true
+      10   },
+     … +2 lines (ctrl+o to expand)
+
+⏺ Write(.design-sync/fonts.css)
+  ⎿  Wrote 39 lines to .design-sync/fonts.css
+       1 /* Brand font: Nunito, loaded at runtime by expo-font in the app
+       2    FontFamily tokens are the literal loaded names (e.g. "Nunito_
+         800ExtraBold"),
+         react-native-web
+       4    styles to resolve. TTFs come from the repo's own @expo-google
+       5 
+       6 @font-face {
+       8   src: url('../node_modules/@expo-google-fonts/nunito/400Regular
+         /Nunito_400Regular.ttf') format('truetype');
+      10   font-style: normal;
+     … +38 lines (ctrl+o to expand)
+
+⏺ Write(.design-sync/tokens.css)
+  ⎿  Wrote 61 lines to .design-sync/tokens.css
+       1 /* MacroLeague design tokens as CSS custom properties.
+         ntSize).
+       3    Components do NOT read these vars (they bake theme values in 
+         via
+         e code and as
+       5    a machine-readable token reference. Keep in sync with the the
+       6 
+       7 :root {
+       8   /* Neutral grayscale foundation */
+      10   --ml-surface: #161616;
+     … +54 lines (ctrl+o to expand)
+
+⏺ Write(.design-sync/config.json)
+  ⎿  Added 17 lines, removed 1 line
+       1  {
+       2    "projectId": "6b6080a1-ca1a-4f13-b6e9-a48c8e0d8c3b",
+       3 -  "shape": "package"                                           
+       3 +  "shape": "package",                                          
+       4 +  "pkg": "macroleague",                                        
+       5 +  "globalName": "MacroLeague",                                 
+       6 +  "buildCmd": "node .design-sync/build-web-dist.mjs",          
+       7 +  "entry": "./dist/design-system.js",                          
+       8 +  "tsconfig": "tsconfig.json",                                 
+       9 +  "tokensGlob": [".design-sync/tokens.css"],                   
+      10 +  "extraFonts": [".design-sync/fonts.css"],                    
+      11 +  "componentSrcMap": {                                         
+      12 +    "Colors": null,                                            
+      13 +    "FontFamily": null,                                        
+      14 +    "FontSize": null,                                          
+      15 +    "Spacing": null,                                           
+      16 +    "Radius": null,                                            
+      17 +    "Shadow": null,                                            
+      18 +    "Motion": null                                             
+      19 +  }                                                            
+      20  }
+
+  Read 1 file, ran 1 shell command (ctrl+o to expand)
+
+⏺ esbuild bundled cleanly (989kb — reanimated included). tsc fails because
+  something in the component graph pulls in src/lib/supabase.ts. Let me trace
+  that import.
+
+  Searched for 2 patterns (ctrl+o to expand)
+
+⏺ Update(.design-sync/tsconfig.dist.json)
+  ⎿  Added 2 lines, removed 1 line
+       8      "rootDir": "../src",
+       9      "skipLibCheck": true
+      10    },
+      11 -  "files": ["../src/index.ts"]                                 
+      11 +  "files": ["../src/index.ts"],                                
+      12 +  "include": []                                                
+      13  }
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Still failing, and dist/types contains services/lib — something in the graph
+  does import them. Let me see the actual error and trace properly.
+
+  Ran 2 shell commands (ctrl+o to expand)
+⏺ Update(.design-sync/tsconfig.dist.json)
+  ⎿  Added 3 lines, removed 1 line
+       6      "emitDeclarationOnly": true,
+       7      "outDir": "../dist/types",
+       8      "rootDir": "../src",
+       9 -    "skipLibCheck": true                                       
+       9 +    "skipLibCheck": true,                                      
+      10 +    "typeRoots": ["../node_modules/@types", "../.ds-sync/node_m
+         +odules/@types"],                                               
+      11 +    "types": ["node"]                                          
+      12    },
+      13    "files": ["../src/index.ts"],
+      14    "include": []
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Prebuild is clean. Task 1 done — running the converter.
+
+  Read 1 file, ran 2 shell commands (ctrl+o to expand)
+
+⏺ Update(package.json)
+  ⎿  File must be read first
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(package.json)
+  ⎿  Added 1 line
+      2    "name": "macroleague",
+      3    "version": "1.0.0",
+      4    "main": "index.ts",
+      5 +  "types": "./dist/types/index.d.ts",                           
+      6    "scripts": {
+      7      "start": "expo start",
+      8      "android": "expo start --android",
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ All 22 failures share one root cause: bare process references survive into the
+  bundle. Let me find which:
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Update(.design-sync/build-web-dist.mjs)
+  ⎿  Added 4 lines
+      36      'process.env.NODE_ENV': '"development"',
+      37      'process.env.EXPO_OS': '"web"',
+      38    },
+      39 +  // Some deps (reanimated) probe process.env keys the define l
+         +ist can't cover                                                
+      40 +  // one by one; browsers have no process at all. Module-scoped
+         + shim covers the                                               
+      41 +  // whole bundle without leaking a global.                    
+      42 +  banner: { js: 'var process = globalThis.process ?? { env: { N
+         +ODE_ENV: "development" } };' },                                
+      43    minify: false,
+      44    logLevel: 'info',
+      45  });
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ process cleared; now RN's global. Same fix — extend the shim:
+
+⏺ Update(.design-sync/build-web-dist.mjs)
+  ⎿  Added 1 line, removed 1 line
+      39    // Some deps (reanimated) probe process.env keys the define l
+          ist can't cover
+      40    // one by one; browsers have no process at all. Module-scoped
+           shim covers the
+      41    // whole bundle without leaking a global.
+      42 -  banner: { js: 'var process = globalThis.process ?? { env: { N
+         -ODE_ENV: "development" } };' },                                
+      42 +  banner: { js: 'var process = globalThis.process ?? { env: { N
+         +ODE_ENV: "development" } };\nvar global = globalThis;' },      
+      43    minify: false,
+      44    logLevel: 'info',
+      45  });
+
+  Read 1 file, listed 1 directory, ran 1 shell command (ctrl+o to expand)
+⏺ Update(.design-sync/config.json)
+  ⎿  Added 1 line
+       8    "tsconfig": "tsconfig.json",
+       9    "tokensGlob": [".design-sync/tokens.css"],
+      10    "extraFonts": [".design-sync/fonts.css"],
+      11 +  "guidelinesGlob": ["docs/icon-system.md"],                   
+      12    "componentSrcMap": {
+      13      "Colors": null,
+      14      "FontFamily": null,
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Design: Upload design system (12 to upload, 6 to delete)(6b6080a1…)
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Write(.design-sync/previews/Pill.tsx)
+  ⎿  Wrote 39 lines to .design-sync/previews/Pill.tsx
+       1 import React from 'react';
+       2 import { Pill, Colors } from 'macroleague';
+       3 
+       5   <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alig
+         nItems: 'center', background: Colors.background, padding: 16, bo
+         rderRadius: 12 }}>
+       6     {children}
+       7   </div>
+       9 
+      10 export const Default = () => (
+     … +32 lines (ctrl+o to expand)
+
+⏺ Write(.design-sync/previews/MacroProgressBar.tsx)
+  ⎿  Wrote 34 lines to .design-sync/previews/MacroProgressBar.tsx
+       1 import React from 'react';
+       2 import { MacroProgressBar, Colors } from 'macroleague';
+       3 
+       4 const Panel = ({ children }: { children: React.ReactNode }) => (
+       5   <div style={{ width: 340, background: Colors.surface, border: 
+       6     {children}
+       7   </div>
+       8 );
+       9 
+      10 export const DailyMacros = () => (
+     … +27 lines (ctrl+o to expand)
+
+⏺ Write(.design-sync/previews/ChallengeCard.tsx)
+  ⎿  Wrote 50 lines to .design-sync/previews/ChallengeCard.tsx
+       1 import React from 'react';
+       2 import { ChallengeCard, Colors } from 'macroleague';
+       3 
+       4 const Stack = ({ children }: { children: React.ReactNode }) => (
+       5   <div style={{ width: 360, background: Colors.background, paddi
+       6     {children}
+       7   </div>
+       8 );
+       9 
+      10 export const ActiveSolo = () => (
+     … +41 lines (ctrl+o to expand)
+
+  Read 3 files, ran 2 shell commands (ctrl+o to expand)
+
+⏺ Capture reports zero errors yet blank pixels — let me inspect the DOM
+  directly:
+
+  Searched for 2 patterns, ran 2 shell commands (ctrl+o to expand)
+
+⏺ All simple worklets — adding deps arrays. Batch 1 edits:
+
+⏺ Update(src/components/ui/ProgressBar.tsx)
+  ⎿  File must be read first
+
+⏺ Update(src/components/FloatingXP.tsx)
+  ⎿  File must be read first
+
+⏺ Update(src/components/MacroRing.tsx)  ⎿  File must be read first
+
+⏺ Update(src/components/NutritionScoreCard.tsx)
+  ⎿  File must be read first
+
+⏺ Update(src/components/StreakFlame.tsx)
+  ⎿  File must be read first
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ The edit tool needs each file Read first. Reading all 8, then applying:
+
+  Read 8 files (ctrl+o to expand)
+
+⏺ Update(src/components/ui/ProgressBar.tsx)
+  ⎿  Added 3 lines, removed 1 line
+      46      }
+      47    }, [clamped, animated]);
+      48  
+      49 +  // Explicit deps: required on web (no Reanimated Babel plugin
+         + there); the                                                   
+      50 +  // plugin injects the same array on native.                  
+      51    const fillStyle = useAnimatedStyle(() => ({
+      52      width: `${width.value * 100}%`,
+      51 -  }));                                                         
+      53 +  }), [width]);                                                
+      54  
+      55    return (
+      56      <View style={[styles.track, { height, borderRadius: height 
+          / 2, backgroundColor: trackColor }, style]}>
+
+⏺ Update(src/components/FloatingXP.tsx)
+  ⎿  Added 2 lines, removed 1 line
+      39      }
+      40    }, [visible]);
+      41  
+      42 +  // Explicit deps: required on web (no Reanimated Babel plugin
+         + there).                                                       
+      43    const animatedStyle = useAnimatedStyle(() => ({
+      44      transform: [{ translateY: translateY.value }, { scale: scal
+          e.value }],
+      45      opacity: opacity.value,
+      45 -  }));                                                         
+      46 +  }), [translateY, scale, opacity]);                           
+      47  
+      48    if (!visible) return null;
+      49  
+
+⏺ Update(src/components/MacroRing.tsx)
+  ⎿  Added 2 lines, removed 1 line
+      44      progress.value = withTiming(ratio, { duration: 1000, easing
+          : Easing.out(Easing.cubic) });
+      45    }, [ratio]);
+      46  
+      47 +  // Explicit deps: required on web (no Reanimated Babel plugin
+         + there).                                                       
+      48    const animatedProps = useAnimatedProps(() => ({
+      49      strokeDashoffset: circumference * (1 - progress.value),
+      49 -  }));                                                         
+      50 +  }), [progress, circumference]);                              
+      51  
+      52    return (
+      53      <View style={styles.container}>
+
+⏺ Update(src/components/NutritionScoreCard.tsx)
+  ⎿  Added 2 lines, removed 1 line
+      69        easing: Easing.out(Easing.cubic),
+      70      });
+      71    }, [ratio]);
+      72 +  // Explicit deps: required on web (no Reanimated Babel plugin
+         + there).                                                       
+      73    const animatedProps = useAnimatedProps(() => ({
+      74      strokeDashoffset: circumference * (1 - progress.value),
+      74 -  }));                                                         
+      75 +  }), [progress, circumference]);                              
+      76  
+      77    const deltaUp = delta >= 0;
+      78  
+
+⏺ Update(src/components/StreakFlame.tsx)
+  ⎿  Added 2 lines, removed 1 line
+      29      );
+      30    }, []);
+      31  
+      32 +  // Explicit deps: required on web (no Reanimated Babel plugin
+         + there).                                                       
+      33    const animatedStyle = useAnimatedStyle(() => ({
+      34      transform: [{ scale: scale.value }],
+      34 -  }));                                                         
+      35 +  }), [scale]);                                                
+      36  
+      37    const isLarge = size === 'large';
+      38    const flameSize = isLarge ? 48 : 20;
+
+⏺ Update(src/components/animations/ElectricBolt.tsx)
+  ⎿  Added 3 lines, removed 2 lines
+      38      return () => cancelAnimation(energy);
+      39    }, [energy, reduceMotion]);
+      40  
+      41 +  // Explicit deps: required on web (no Reanimated Babel plugin
+         + there).                                                       
+      42    const outlineStyle = useAnimatedStyle(() => ({
+      43      opacity: interpolate(energy.value, [0, 1], [0.18, 0.95]),
+      44      transform: [{ scale: interpolate(energy.value, [0, 1], [1, 
+          1.16]) }],
+      44 -  }));                                                         
+      45 +  }), [energy]);                                               
+      46  
+      47    const sparkStyle = useAnimatedStyle(() => ({
+      48      opacity: interpolate(energy.value, [0, 0.55, 1], [0, 0.2, 1
+          ]),
+      49      transform: [{ scale: interpolate(energy.value, [0, 1], [0.4
+          , 1.2]) }],
+      49 -  }));                                                         
+      50 +  }), [energy]);                                               
+      51  
+      52    const frame = size + 10;
+      53    return (
+
+⏺ Update(src/components/animations/ClashingUtensils.tsx)
+  ⎿  Added 4 lines, removed 3 lines
+      37      return () => cancelAnimation(clash);
+      38    }, [clash, reduceMotion]);
+      39  
+      40 +  // Explicit deps: required on web (no Reanimated Babel plugin
+         + there).                                                       
+      41    const forkStyle = useAnimatedStyle(() => ({
+      42      transform: [
+      43        { translateX: interpolate(clash.value, [0, 1], [-1, 3]) }
+          ,
+      44        { rotate: `${interpolate(clash.value, [0, 1], [-12, 18])}
+          deg` },
+      45      ],
+      45 -  }));                                                         
+      46 +  }), [clash]);                                                
+      47    const knifeStyle = useAnimatedStyle(() => ({
+      48      transform: [
+      49        { translateX: interpolate(clash.value, [0, 1], [1, -3]) }
+          ,
+      50        { rotate: `${interpolate(clash.value, [0, 1], [12, -18])}
+          deg` },
+      51      ],
+      51 -  }));                                                         
+      52 +  }), [clash]);                                                
+      53    const flashStyle = useAnimatedStyle(() => ({
+      54      opacity: interpolate(clash.value, [0, 0.82, 1], [0, 0, 1]),
+      55      transform: [{ scale: interpolate(clash.value, [0, 1], [0.3,
+           1.25]) }],
+      55 -  }));                                                         
+      56 +  }), [clash]);                                                
+      57  
+      58    return (
+      59      <View style={[styles.frame, { width: size + 8, height: size
+           + 8 }]}>
+
+⏺ Update(src/components/animations/RotatingTrophy.tsx)
+  ⎿  Added 3 lines, removed 2 lines
+      33      return () => cancelAnimation(turn);
+      34    }, [reduceMotion, turn]);
+      35  
+      36 +  // Explicit deps: required on web (no Reanimated Babel plugin
+         + there).                                                       
+      37    const turnStyle = useAnimatedStyle(() => ({
+      38      transform: [{ perspective: 320 }, { rotateY: `${turn.value}
+          deg` }],
+      38 -  }));                                                         
+      39 +  }), [turn]);                                                 
+      40    const glintStyle = useAnimatedStyle(() => ({
+      41      opacity: interpolate(turn.value, [0, 70, 90, 110, 250, 270,
+           290, 360], [0, 0, 0.9, 0, 0, 0.7, 0, 0]),
+      41 -  }));                                                         
+      42 +  }), [turn]);                                                 
+      43  
+      44    return (
+      45      <View style={[styles.frame, { width: size + 6, height: size
+           + 6 }]}>
+
+⏺ All 12 hook sites patched. Fixing the ChallengeCard preview's silly "27623d
+  left" date, then a full rebuild + typecheck + recapture:
+
+⏺ Update(.design-sync/previews/ChallengeCard.tsx)
+  ⎿  Added 1 line, removed 1 line
+      13        name="Protein Week"
+      14        type="solo"
+      15        stakesText="Loser buys smoothies"
+      16 -      endDate="2099-12-31"                                     
+      16 +      endDate="2026-07-09"                                     
+      17        status="active"
+      18        participantCount={6}
+      19        joined
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Typecheck clean. Checking the fixed sheets:
+
+  Read 2 files (ctrl+o to expand)
+
+⏺ "785d left" — the capture harness likely freezes the clock for deterministic
+  screenshots. Checking:
+
+  Ran 1 shell command (ctrl+o to expand)
+⏺ Update(.design-sync/previews/ChallengeCard.tsx)
+  ⎿  Added 4 lines
+       7    </div>
+       8  );
+       9  
+      10 +// Relative to the viewer's clock so the active card always rea
+         +ds like a real                                                 
+      11 +// week-long challenge ("6d 11h left") instead of drifting stal
+         +e.                                                             
+      12 +const inDays = (d: number) => new Date(Date.now() + d * 8640000
+         +0).toISOString().slice(0, 10);                                 
+      13 +                                                               
+      14  export const ActiveSolo = () => (
+      15    <Stack>
+      16      <ChallengeCard
+
+⏺ Update(.design-sync/previews/ChallengeCard.tsx)
+  ⎿  Added 1 line, removed 1 line
+      17        name="Protein Week"
+      18        type="solo"
+      19        stakesText="Loser buys smoothies"
+      20 -      endDate="2026-07-09"                                     
+      20 +      endDate={inDays(6)}                                      
+      21        status="active"
+      22        participantCount={6}
+      23        joined
+
+⏺ Update(.design-sync/previews/ChallengeCard.tsx)
+  ⎿  Added 1 line, removed 1 line
+      31        name="Dorm vs Dorm: Clean Bulk"
+      32        type="team"
+      33        stakesText="Bragging rights"
+      34 -      endDate="2099-12-31"                                     
+      34 +      endDate={inDays(14)}                                     
+      35        status="upcoming"
+      36        participantCount={12}
+      37        joined={false}
+
+  Read 1 file, ran 1 shell command (ctrl+o to expand)
+
+⏺ Write(.design-sync/.cache/review/Pill.grade.json)
+  ⎿  Wrote 8 lines to .design-sync/.cache/review/Pill.grade.json
+      1 {
+      2   "cells": {
+      3     "Default": { "verdict": "good", "note": "Neutral tinted chip,
+      4     "SemanticColors": { "verdict": "good", "note": "All five sema
+        ntic tints render distinctly on dark bg" },
+      5     "Filled": { "verdict": "good", "note": "Solid fills with dark
+         on-brand text, vivid zone colors" },
+      6     "WithIcon": { "verdict": "good", "note": "Icon + label row al
+      7   }
+      8 }
+     … +2 lines (ctrl+o to expand)
+
+⏺ Write(.design-sync/.cache/review/MacroProgressBar.grade.json)
+  ⎿  Wrote 8 lines to
+     .design-sync/.cache/review/MacroProgressBar.grade.json
+      1 {
+      2   "cells": {
+      3     "DailyMacros": { "verdict": "good", "note": "Three labeled ro
+      4     "GoalMet": { "verdict": "good", "note": "Value and fill flip 
+        to success green at >= target" },
+      5     "CaloriesCustomColor": { "verdict": "good", "note": "kcal uni
+        t + accent orange override render correctly" },
+      6     "WithNote": { "verdict": "good", "note": "Note replaces value
+      7   }
+      8 }
+     … +2 lines (ctrl+o to expand)
+
+⏺ Write(.design-sync/.cache/review/ChallengeCard.grade.json)
+  ⎿  Wrote 7 lines to .design-sync/.cache/review/ChallengeCard.grade.json
+      1 {
+      2   "cells": {
+      3     "ActiveSolo": { "verdict": "good", "note": "Live countdown (6
+        d 15h left), Solo badge, joined pill, stakes text" },
+      4     "CompletedJoined": { "verdict": "good", "note": "Ended state 
+        with joined pill" },
+      5     "UpcomingTeam": { "verdict": "good", "note": "Starts soon + T
+        eam badge in accent orange" }
+      6   }
+      7 }
+
+  Listed 1 directory (ctrl+o to expand)
+
+⏺ First push — sentinel fence, then base files + the verified batch:
+
+  Listed 1 directory (ctrl+o to expand)
+
+⏺ Design: Write 1 file from disk(Write 1 file from disk)
+
+  Searched for 2 patterns, read 1 file (ctrl+o to expand)
+
+⏺ Update(.design-sync/config.json)
+  ⎿  Added 1 line, removed 1 line
+       6    "buildCmd": "node .design-sync/build-web-dist.mjs",
+       7    "entry": "./dist/design-system.js",
+       8    "tsconfig": "tsconfig.json",
+       9 -  "tokensGlob": [".design-sync/tokens.css"],                   
+       9 +  "cssEntry": ".design-sync/tokens.css",                       
+      10    "extraFonts": [".design-sync/fonts.css"],
+      11    "guidelinesGlob": ["docs/icon-system.md"],
+      12    "componentSrcMap": {
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Tokens now ship via _ds_bundle.css, but validate has 3 new errors —
+  inspecting:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ The three authored components now fail [RENDER] root empty in validate (they
+  rendered in capture). Checking the actual error:
+
+  Searched for 1 pattern, ran 14 shell commands (ctrl+o to expand)
+⏺ Update(.design-sync/build-web-dist.mjs)
+  ⎿  Added 1 line, removed 1 line
+      11  // Run from the repo root: node .design-sync/build-web-dist.mjs
+      12  import { build } from '../.ds-sync/node_modules/esbuild/lib/mai
+          n.js';
+      13  import { execSync } from 'node:child_process';
+      14 -import { rmSync } from 'node:fs';                              
+      14 +import { readFileSync, rmSync, writeFileSync } from 'node:fs'; 
+      15  
+      16  rmSync('dist', { recursive: true, force: true });
+      17  
+
+⏺ Update(.design-sync/build-web-dist.mjs)
+  ⎿  Added 8 lines
+      44    logLevel: 'info',
+      45  });
+      46  
+      47 +// react-native-web injects <style id="react-native-stylesheet"
+         +> into <head>;                                                 
+      48 +// that id collides with the design-sync render check's mount p
+         +robe                                                           
+      49 +// ([id^="r"]), which reads the (CSSOM-only, textually empty) s
+         +tyle tag as an                                                 
+      50 +// empty mount root. Rename the id — RNW only uses it for getEl
+         +ementById reuse,                                               
+      51 +// so a consistent rename is behavior-neutral.                 
+      52 +const out = 'dist/design-system.js';                           
+      53 +writeFileSync(out, readFileSync(out, 'utf8').replaceAll('react-
+         +native-stylesheet', 'ds-rnweb-stylesheet'));                   
+      54 +                                                               
+      55  execSync('npx tsc -p .design-sync/tsconfig.dist.json', { stdio:
+           'inherit' });
+      56  console.log('dist/design-system.js + dist/types ready');
+
+⏺ Update(.design-sync/config.json)
+  ⎿  Added 4 lines
+       9    "cssEntry": ".design-sync/tokens.css",
+      10    "extraFonts": [".design-sync/fonts.css"],
+      11    "guidelinesGlob": ["docs/icon-system.md"],
+      12 +  "overrides": {                                               
+      13 +    "ChallengeCard": { "cardMode": "column" },                 
+      14 +    "MacroProgressBar": { "cardMode": "column" }               
+      15 +  },                                                           
+      16    "componentSrcMap": {
+      17      "Colors": null,
+      18      "FontFamily": null,
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Validate is clean. Confirming grades carried through the config change, then
+  making the first push:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Design: Write 23 files from disk(Write 23 files from disk)
+
+⏺ Design: Write 6 files from disk(Write 6 files from disk)
+
+⏺ Design: Write 1 file from disk(Write 1 file from disk)
+
+⏺ 4 background agents launched (↓ to manage)
+   ├ Author previews wave A rows
+   ├ Author previews wave B metrics
+   ├ Author previews wave C primitives
+   └ Author previews wave D animations
+
+⏺ All four wave agents are running. While they work, I'll draft the durable
+  notes and conventions header (to be validated against the final build before
+  upload):
+
+⏺ Write(.design-sync/NOTES.md)
+  ⎿  Wrote 60 lines to .design-sync/NOTES.md
+       1 # design-sync notes — MacroLeague
+       3 Repo-specific gotchas for future syncs. The app is an Expo/React
+          Native app, not a
+         uild.
+       5 
+       7 
+       8 - **No dist in this repo.** `.design-sync/build-web-dist.mjs` (c
+       9   `dist/design-system.js` (ESM, fully web-resolved) + `dist/type
+         s/**` (tsc
+         kage.json `types`
+     … +84 lines (ctrl+o to expand)
+
+⏺ Write(.design-sync/conventions.md)  ⎿  Wrote 73 lines to .design-sync/conventions.md
+       1 # MacroLeague design system — build conventions
+       3 MacroLeague is a **dark-theme React Native (react-native-web) co
+         mponent library**
+         nents compiled
+       5 for the browser — they style themselves at runtime via injected 
+       6 **no utility classes**: never invent class names; style your own
+          layout glue with
+         `styles.css`'s
+       8 import closure).
+      10 ## Setup
+     … +91 lines (ctrl+o to expand)
+
+❯ /compact                                                                      
+
+⏺ Status while the wave runs — here's where things stand:
+
+  Live now at https://claude.ai/design/p/6b6080a1-ca1a-4f13-b6e9-a48c8e0d8c3b:
+  the full component bundle (all 22 components importable), Nunito fonts, theme
+  tokens, and the first three verified preview cards (Pill, MacroProgressBar,
+  ChallengeCard).
+
+  What it took to get RN components rendering in the browser (all recorded in
+  .design-sync/NOTES.md for future syncs):
+  - A custom prebuild (react-native → react-native-web, .web.* fork resolution,
+  process/global shims) feeding the converter a web-ready dist.
+  - A small source fix in 8 component files: reanimated's
+  useAnimatedStyle/useAnimatedProps need explicit dependency arrays on web (the
+  Babel plugin injects them on native, so behavior is unchanged) — without them
+  every animated component crashed blank.
+  - Renaming react-native-web's injected stylesheet id in the bundle, which was
+  colliding with the render-checker's mount probe and false-flagging working
+  previews.
+
+  Running now: 4 parallel agents authoring + grading previews for the remaining
+  19 components (rows/cards, metrics, primitives, animations). When they finish
+  I'll review their work, push verified batches, run the final validation gate,
+  and close out the upload. I'll report when the wave completes.
+
+✻ Cogitated for 31m 3s
+
+❯ /compact                                                                      
+
+❯ /compact                                                                      
+  ⎿  Compacted (ctrl+o to see full summary)
+  ⎿  Read .design-sync/conventions.md (74 lines)
+  ⎿  Read .design-sync/NOTES.md (61 lines)
+  ⎿  Read .design-sync/config.json (26 lines)
+  ⎿  Read .design-sync/build-web-dist.mjs (57 lines)
+  ⎿  Read ds-bundle/styles.css (3 lines)
+  ⎿  Skills restored (design-sync)
+
+⏺ Agent "Author previews wave A rows" finished · 3m 42s
+
+⏺ Agent "Author previews wave D animations" finished · 2m 52s
+
+⏺ Agent "Author previews wave C primitives" failed: Agent terminated early due
+to an API error: You've hit your session limit · resets 6:30am
+(America/New_York)
+
+⏺ Agent "Author previews wave B metrics" failed: Agent terminated early due to
+an API error: You've hit your session limit · resets 6:30am (America/New_York)
+  ⎿  You've hit your session limit · resets 6:30am (America/New_York)
+     /upgrade to increase your usage limit.
+
+✻ Sautéed for 0s

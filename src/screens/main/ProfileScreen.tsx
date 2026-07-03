@@ -118,7 +118,10 @@ export default function ProfileScreen({ navigation }: any) {
   if (!user) return null;
 
   const xpForNext = getXpForLevel(user.level);
-  const xpProgress = (user.xp % 500) / 500;
+  const xpAtLevelStart = getXpForLevel(user.level - 1);
+  const xpNeededThisLevel = Math.max(1, xpForNext - xpAtLevelStart);
+  const xpIntoLevel = Math.max(0, Math.min(xpNeededThisLevel, user.xp - xpAtLevelStart));
+  const xpProgress = xpIntoLevel / xpNeededThisLevel;
   const levelTitle = LEVEL_TITLES[user.level] ?? 'Legend';
 
   const settingsItems: { label: string; icon: AppIconName; screen: string }[] = [
@@ -152,7 +155,7 @@ export default function ProfileScreen({ navigation }: any) {
           <View style={styles.xpBarBg}>
             <View style={[styles.xpBarFill, { width: `${xpProgress * 100}%` }]} />
           </View>
-          <Text style={styles.xpText}>{user.xp} / {xpForNext} XP</Text>
+          <Text style={styles.xpText}>{xpIntoLevel} / {xpNeededThisLevel} XP</Text>
         </View>
       </View>
 

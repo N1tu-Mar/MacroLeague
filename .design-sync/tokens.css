@@ -1,0 +1,61 @@
+/* MacroLeague design tokens as CSS custom properties.
+   Source of truth: src/theme/index.ts (Colors/Spacing/Radius/FontSize).
+   Components do NOT read these vars (they bake theme values in via
+   react-native-web StyleSheet); these exist for design-time glue code and as
+   a machine-readable token reference. Keep in sync with the theme file. */
+
+:root {
+  /* Neutral grayscale foundation */
+  --ml-background: #0D0D0D;
+  --ml-surface: #161616;
+  --ml-surface-elevated: #1F1F1F;
+  --ml-track: #262626;
+  --ml-border: #7E2630;
+  --ml-border-strong: #A82C38;
+
+  /* Brand + accents */
+  --ml-primary: #A8141E;
+  --ml-primary-deep: #7C0F18;
+  --ml-accent: #FF8A4C;
+  --ml-gold: #FFC53D;
+  --ml-success: #2FD27A;
+  --ml-warning: #FFB020;
+  --ml-error: #FF5D5D;
+  --ml-promotion: #2FD27A;
+  --ml-relegation: #FF5D5D;
+
+  /* Text */
+  --ml-text-primary: #B3B3B3;
+  --ml-text-secondary: #8A8A8A;
+  --ml-text-tertiary: #5C5C5C;
+  --ml-text-on-brand: #0D0D0D;
+
+  /* Spacing (4-based scale) */
+  --ml-space-xs: 4px;
+  --ml-space-sm: 8px;
+  --ml-space-md: 12px;
+  --ml-space-base: 16px;
+  --ml-space-lg: 20px;
+  --ml-space-xl: 24px;
+  --ml-space-xxl: 32px;
+  --ml-space-xxxl: 40px;
+
+  /* Radius */
+  --ml-radius-sm: 10px;
+  --ml-radius-md: 14px;
+  --ml-radius-lg: 18px;
+  --ml-radius-xl: 24px;
+  --ml-radius-xxl: 28px;
+  --ml-radius-pill: 999px;
+
+  /* Type scale */
+  --ml-font-hero: 56px;
+  --ml-font-display: 40px;
+  --ml-font-title: 28px;
+  --ml-font-heading: 22px;
+  --ml-font-subhead: 18px;
+  --ml-font-body: 15px;
+  --ml-font-label: 13px;
+  --ml-font-meta: 11px;
+  --ml-font-micro: 10px;
+}
