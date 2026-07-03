@@ -142,6 +142,37 @@ export async function updateProfileGoals(
   if (!data) throw new Error(MISSING_PROFILE_MESSAGE);
 }
 
+export interface ProfileUniversityUpdate {
+  university: string;
+  /** Empty string clears the saved hall (e.g. university has no listed halls). */
+  preferredDiningHall: string;
+}
+
+/**
+ * Persists the user's university and preferred dining hall. Both columns are in
+ * the migration 0006/0012 column-level UPDATE allow-list. RLS ("update own
+ * profile") blocks writing another user's row. Mirrors updateProfileGoals:
+ * `.select('id').maybeSingle()` turns a zero-row match (missing profile) into a
+ * clear error instead of a silent no-op success.
+ */
+export async function updateProfileUniversity(
+  userId: string,
+  update: ProfileUniversityUpdate,
+): Promise<void> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({
+      university: update.university,
+      preferred_dining_hall: update.preferredDiningHall,
+    })
+    .eq('id', userId)
+    .select('id')
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error(MISSING_PROFILE_MESSAGE);
+}
+
 /**
  * Backend-owned gamification snapshot for a user. Every field here is written
  * ONLY by the database (migration 0005's meal-award trigger / future RPCs); the
@@ -209,6 +240,8 @@ export interface ProfileIdentity {
   displayName: string | null;
   university: string | null;
   goalType: string | null;
+  /** Saved preferred dining hall (migration 0012), or null if never set. */
+  preferredDiningHall: string | null;
   /**
    * True only when the account has a real, user-chosen display name saved in the
    * DB (onboarding completed the name step). This is the RAW signal — it is NOT
@@ -236,13 +269,14 @@ function nonEmptyString(value: unknown): string | null {
 export async function getProfileIdentity(userId: string): Promise<ProfileIdentity> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('username, display_name, university, goal_type')
+    .select('username, display_name, university, goal_type, preferred_dining_hall')
     .eq('id', userId)
     .maybeSingle<{
       username: string | null;
       display_name: string | null;
       university: string | null;
       goal_type: string | null;
+      preferred_dining_hall: string | null;
     }>();
 
   if (error) throw error;
@@ -271,6 +305,7 @@ export async function getProfileIdentity(userId: string): Promise<ProfileIdentit
     displayName,
     university: data.university,
     goalType: data.goal_type,
+    preferredDiningHall: data.preferred_dining_hall,
     hasName,
   };
 }

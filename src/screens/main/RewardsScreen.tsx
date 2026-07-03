@@ -31,7 +31,7 @@ function rewardIcon(reward: RewardCatalogItem): AppIconName {
   return 'gift';
 }
 
-export default function RewardsScreen() {
+export default function RewardsScreen({ navigation }: any) {
   const user = useUserStore((s) => s.user);
   const adjustPointsLocally = useUserStore((s) => s.adjustPointsLocally);
   const refreshStats = useUserStore((s) => s.refreshStats);
@@ -101,6 +101,11 @@ export default function RewardsScreen() {
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+          <AppIcon name="back" size={17} color={Colors.primary} />
+          <Text style={styles.backText}>Back</Text>
+        </TouchableOpacity>
+
         <Text style={styles.title}>REWARDS</Text>
 
         {/* Points Balance — real backend-owned points. */}
@@ -246,6 +251,8 @@ export default function RewardsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { padding: 20, paddingTop: 60 },
+  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 16 },
+  backText: { fontFamily: FontFamily.bodyMedium, fontSize: 15, color: Colors.primary },
   title: {
     fontFamily: FontFamily.displayBold,
     fontSize: 24,

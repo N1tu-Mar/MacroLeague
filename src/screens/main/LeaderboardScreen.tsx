@@ -46,6 +46,26 @@ export default function LeaderboardScreen() {
   const firstName = (user?.name ?? 'You').split(' ')[0];
 
   const [tab, setTab] = useState<Tab>('global');
+  // Pending incoming friend-request count, surfaced as a badge on the Friends
+  // tab. Refreshed on screen focus (any tab) and after FriendsTab loads/acts.
+  const [friendRequestCount, setFriendRequestCount] = useState(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      (async () => {
+        try {
+          const reqs = await getFriendRequests();
+          if (active) setFriendRequestCount(reqs.length);
+        } catch {
+          // Badge simply won't show if this fails (e.g. migration 0011 absent).
+        }
+      })();
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
 
   // ── Global board state ──────────────────────────────
   const [windowDays, setWindowDays] = useState<LeaderboardWindow>(14);
@@ -93,7 +113,11 @@ export default function LeaderboardScreen() {
             style={[styles.tab, tab === t.key && styles.tabActive]}
             onPress={() => setTab(t.key)}
           >
-            <Text style={[styles.tabText, tab === t.key && styles.tabTextActive]}>{t.label}</Text>
+            <Text style={[styles.tabText, tab === t.key && styles.tabTextActive]}>
+              {t.key === 'friends' && friendRequestCount > 0
+                ? `${t.label} (${friendRequestCount})`
+                : t.label}
+            </Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -177,6 +201,7 @@ export default function LeaderboardScreen() {
         <FriendsTab
           currentUserId={user?.id ?? null}
           firstName={firstName}
+          onRequestsLoaded={setFriendRequestCount}
           onChallengeFriend={(id, name) =>
             navigation.navigate('Challenges', { inviteFriend: { id, name } })
           }
@@ -201,10 +226,12 @@ function FriendsTab({
   currentUserId,
   firstName,
   onChallengeFriend,
+  onRequestsLoaded,
 }: {
   currentUserId: string | null;
   firstName: string;
   onChallengeFriend: (friendId: string, friendName: string) => void;
+  onRequestsLoaded?: (count: number) => void;
 }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<UserSearchResult[]>([]);
@@ -223,12 +250,13 @@ function FriendsTab({
       const [reqs, board] = await Promise.all([getFriendRequests(), getFriendsLeaderboard(14)]);
       setRequests(reqs);
       setStandings(board);
+      onRequestsLoaded?.(reqs.length);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load friends.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [onRequestsLoaded]);
 
   useFocusEffect(
     useCallback(() => {
@@ -318,6 +346,46 @@ function FriendsTab({
 
       {error && <Text style={[styles.notice, { marginBottom: Spacing.sm }]}>{error}</Text>}
 
+      {/* Incoming friend requests — rendered above search results so an incoming
+          request stays discoverable whether or not the user is searching. The
+          empty-state copy shows only when not searching, to keep search clean. */}
+      {!loading && (requests.length > 0 || !showingSearch) && (
+        <>
+          <Text style={styles.sectionLabel}>FRIEND REQUESTS</Text>
+          {requests.length === 0 ? (
+            <Text style={[styles.notice, { textAlign: 'left', marginBottom: Spacing.md }]}>
+              No pending friend requests. Search above to add friends.
+            </Text>
+          ) : (
+            requests.map((req) => (
+              <View key={req.userId} style={styles.row}>
+                <Avatar name={req.name} url={req.avatarUrl} />
+                <View style={styles.rowMain}>
+                  <Text style={styles.rowName}>{req.name}</Text>
+                  <Text style={styles.rowSub}>wants to be friends</Text>
+                </View>
+                <View style={styles.actionsRow}>
+                  <TouchableOpacity
+                    style={[styles.smallBtn, styles.smallBtnPrimary]}
+                    disabled={busyId === req.userId}
+                    onPress={() => onRespond(req.userId, true)}
+                  >
+                    <Text style={styles.smallBtnPrimaryText}>Accept</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.smallBtn}
+                    disabled={busyId === req.userId}
+                    onPress={() => onRespond(req.userId, false)}
+                  >
+                    <Text style={styles.smallBtnText}>Decline</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))
+          )}
+        </>
+      )}
+
       {/* Search results */}
       {showingSearch ? (
         searching ? (
@@ -345,38 +413,6 @@ function FriendsTab({
         <ActivityIndicator color={Colors.primary} style={{ marginTop: Spacing.lg }} />
       ) : (
         <>
-          {/* Incoming requests */}
-          {requests.length > 0 && (
-            <>
-              <Text style={styles.sectionLabel}>FRIEND REQUESTS</Text>
-              {requests.map((req) => (
-                <View key={req.userId} style={styles.row}>
-                  <Avatar name={req.name} url={req.avatarUrl} />
-                  <View style={styles.rowMain}>
-                    <Text style={styles.rowName}>{req.name}</Text>
-                    <Text style={styles.rowSub}>wants to be friends</Text>
-                  </View>
-                  <View style={styles.actionsRow}>
-                    <TouchableOpacity
-                      style={[styles.smallBtn, styles.smallBtnPrimary]}
-                      disabled={busyId === req.userId}
-                      onPress={() => onRespond(req.userId, true)}
-                    >
-                      <Text style={styles.smallBtnPrimaryText}>Accept</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.smallBtn}
-                      disabled={busyId === req.userId}
-                      onPress={() => onRespond(req.userId, false)}
-                    >
-                      <Text style={styles.smallBtnText}>Decline</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ))}
-            </>
-          )}
-
           {/* Friends leaderboard */}
           <Text style={[styles.sectionLabel, { marginTop: requests.length ? Spacing.lg : 0 }]}>
             FRIENDS LEADERBOARD

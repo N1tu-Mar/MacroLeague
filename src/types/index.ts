@@ -4,6 +4,7 @@ export interface UserProfile {
   name: string;
   email: string;
   university: string;
+  preferredDiningHall?: string | null;
   goalType: 'muscle' | 'lose_weight' | 'eat_cleaner' | 'just_track';
   avatarUrl: string | null;
   xp: number;
