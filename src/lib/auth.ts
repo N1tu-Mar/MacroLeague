@@ -156,6 +156,34 @@ export async function signInWithGoogle() {
 }
 
 /**
+ * Send a password-reset email. Supabase emails the user a recovery link that,
+ * when opened, returns them to the app in a temporary recovery session (the
+ * `PASSWORD_RECOVERY` auth event) where they can set a new password via
+ * `updatePassword`. `redirectTo` uses the same per-environment URI as OAuth so
+ * the link reopens the app (native) or the site (web).
+ *
+ * Note: we do NOT reveal whether the email exists — Supabase always resolves
+ * successfully — so this can't be used to enumerate accounts.
+ */
+export async function sendPasswordReset(email: string) {
+  const redirectTo = getRedirectUri();
+  const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+    redirectTo,
+  });
+  if (error) throw error;
+}
+
+/**
+ * Set a new password. Only works while a session exists — either the normal
+ * signed-in session (change password from settings) or the temporary recovery
+ * session established after following a reset link.
+ */
+export async function updatePassword(newPassword: string) {
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) throw error;
+}
+
+/**
  * Sign out
  */
 export async function signOut() {

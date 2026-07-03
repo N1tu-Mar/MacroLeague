@@ -1,0 +1,15 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "../dist/types",
+    "rootDir": "../src",
+    "skipLibCheck": true,
+    "typeRoots": ["../node_modules/@types", "../.ds-sync/node_modules/@types"],
+    "types": ["node"]
+  },
+  "files": ["../src/index.ts"],
+  "include": []
+}

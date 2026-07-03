@@ -219,18 +219,15 @@ export function useMealLogger(): {
     try {
       await deleteMeal(id);
       // If the row being deleted is the one loaded for editing, clear the form.
-      setEditingId((current) => {
-        if (current === id) {
-          reset();
-        }
-        return current === id ? null : current;
-      });
+      // Do not call reset() from inside another state updater; nested React state
+      // updates can be replayed and produce warnings in concurrent rendering.
+      if (editingId === id) reset();
       return true;
     } catch (caughtError) {
       setError(toUserFacingError(caughtError));
       return false;
     }
-  }, [reset]);
+  }, [editingId, reset]);
 
   const submit = useCallback(async (): Promise<{ logged: boolean }> => {
     if (isSubmitting) {

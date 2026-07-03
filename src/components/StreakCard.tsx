@@ -34,7 +34,8 @@ export default function StreakCard({ streakCount, nextMilestone }: StreakCardPro
 const styles = StyleSheet.create({
   card: { flexDirection: 'row', alignItems: 'center', gap: Spacing.base },
   flameWrap: {
-    width: 56,
+    minWidth: 72,
+    flexShrink: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },

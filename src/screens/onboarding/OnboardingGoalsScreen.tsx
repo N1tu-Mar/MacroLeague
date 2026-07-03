@@ -16,7 +16,7 @@ import Animated, { FadeInDown, SlideInRight } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { Colors, FontFamily } from '../../theme';
-import { calculateMacros, GoalType } from '../../lib/macros';
+import { calculateMacros, GoalType, validateMacroTargets } from '../../lib/macros';
 import { updateOnboardingProfile, slugifyUsername } from '../../services/profileService';
 import { useUserStore } from '../../store/userStore';
 import AppIcon, { AppIconName } from '../../components/ui/AppIcon';
@@ -169,12 +169,18 @@ export default function OnboardingGoalsScreen() {
   }
 
   async function finish() {
+    if (saving) return;
     // A real name is mandatory — never silently substitute a placeholder, or the
     // account would slip past the name gate and show a fallback on the leaderboard.
     const displayName = name.trim();
     if (!displayName) {
       Alert.alert('Enter your name to continue');
       setStep(0);
+      return;
+    }
+    const macroError = validateMacroTargets(macros);
+    if (macroError) {
+      Alert.alert('Check your targets', macroError);
       return;
     }
     setSaving(true);
@@ -366,7 +372,7 @@ export default function OnboardingGoalsScreen() {
             </View>
 
             <View style={s.macroCard}>
-              <MacroRow label="Calories" value={macros.calories} unit="kcal" min={1200} max={4000} color={Colors.accent} onChange={(v) => updateMacro('calories', v)} />
+              <MacroRow label="Calories" value={macros.calories} unit="kcal" min={1500} max={4000} color={Colors.accent} onChange={(v) => updateMacro('calories', v)} />
               <View style={s.macroDivider} />
               <MacroRow label="Protein" value={macros.protein} unit="g" min={50} max={300} color={Colors.primary} onChange={(v) => updateMacro('protein', v)} />
               <View style={s.macroDivider} />

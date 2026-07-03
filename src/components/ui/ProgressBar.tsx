@@ -46,9 +46,11 @@ export default function ProgressBar({
     }
   }, [clamped, animated]);
 
+  // Explicit deps: required on web (no Reanimated Babel plugin there); the
+  // plugin injects the same array on native.
   const fillStyle = useAnimatedStyle(() => ({
     width: `${width.value * 100}%`,
-  }));
+  }), [width]);
 
   return (
     <View style={[styles.track, { height, borderRadius: height / 2, backgroundColor: trackColor }, style]}>
