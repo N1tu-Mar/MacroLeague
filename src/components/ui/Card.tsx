@@ -1,12 +1,11 @@
 import React from 'react';
 import {
   View,
-  StyleSheet,
-  TouchableOpacity,
+  Pressable,
   ViewStyle,
   StyleProp,
 } from 'react-native';
-import { Colors, Radius, Shadow, Spacing } from '../../theme';
+import { Radius, Shadow, Spacing, useTheme } from '../../theme';
 
 type CardVariant = 'default' | 'elevated' | 'hero';
 
@@ -15,15 +14,15 @@ interface CardProps {
   variant?: CardVariant;
   style?: StyleProp<ViewStyle>;
   onPress?: () => void;
-  /** Accent border tint (e.g. a zone/rival highlight). */
+  /** Accent border tint (e.g. a rival/zone highlight). */
   accent?: string;
   padded?: boolean;
 }
 
 /**
- * Base surface primitive. `default` = normal card, `elevated` = a bit lighter +
- * stronger shadow for important content, `hero` = the dominant card on a screen.
- * Keeps radius/shadow/padding consistent so screens stop hand-rolling cards.
+ * Base surface primitive (spec: flat by default, border-only). `default` = a
+ * bordered card with no shadow, `elevated` = subtle shadow, `hero` = the
+ * dominant card (soft 20px shadow, 20-radius).
  */
 export default function Card({
   children,
@@ -33,44 +32,30 @@ export default function Card({
   accent,
   padded = true,
 }: CardProps) {
+  const { colors } = useTheme();
+
   const base: StyleProp<ViewStyle> = [
-    styles.base,
-    variant === 'elevated' && styles.elevated,
-    variant === 'hero' && styles.hero,
-    padded && styles.padded,
-    accent ? { borderColor: accent } : null,
+    {
+      backgroundColor: colors.card,
+      borderRadius: variant === 'hero' ? Radius.hero : Radius.card,
+      borderWidth: variant === 'hero' ? 0 : 1,
+      borderColor: accent ?? colors.borderCard,
+    },
+    variant === 'elevated' && Shadow.card,
+    variant === 'hero' && Shadow.hero,
+    padded && { padding: Spacing.base },
     style,
   ];
 
   if (onPress) {
     return (
-      <TouchableOpacity activeOpacity={0.85} onPress={onPress} style={base}>
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => [base, pressed && { opacity: 0.9 }]}
+      >
         {children}
-      </TouchableOpacity>
+      </Pressable>
     );
   }
   return <View style={base}>{children}</View>;
 }
-
-const styles = StyleSheet.create({
-  base: {
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    ...Shadow.card,
-  },
-  elevated: {
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: Radius.xl,
-  },
-  hero: {
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: Radius.xxl,
-    borderColor: Colors.borderStrong,
-    ...Shadow.hero,
-  },
-  padded: {
-    padding: Spacing.base,
-  },
-});

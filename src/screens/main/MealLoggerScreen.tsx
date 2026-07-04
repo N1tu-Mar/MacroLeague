@@ -1,15 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { View, TextInput, Pressable, Alert, ActivityIndicator } from 'react-native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import { FontFamily, Radius, useTheme } from '../../theme';
 import { useDailyTotals } from '../../hooks/useDailyTotals';
 import { FatSubtypeTotal, MealLog, MealType } from '../../services/mealLogService';
 import { useMealLogger, MealLogFields } from '../../hooks/useMealLogger';
@@ -18,488 +11,469 @@ import { MealEstimateCandidate } from '../../services/nutrition/types';
 import { useUserStore } from '../../store/userStore';
 import { BASE_MEAL_XP, BASE_MEAL_POINTS } from '../../services/gamificationService';
 import FloatingXP from '../../components/FloatingXP';
-import { Colors, FontFamily } from '../../theme';
-import AppIcon from '../../components/ui/AppIcon';
+import {
+  Screen,
+  Text,
+  Card,
+  Button,
+  Chip,
+  Badge,
+  SegmentedControl,
+  AppIcon,
+  Sheet,
+} from '../../components/ui';
 
-type EntryMode = 'manual' | 'describe';
+// Trans fat is a "keep it near zero" nutrient — the profile goal is fixed at 0,
+// so we warn (never block) once the day crosses this small health limit (~WHO
+// guidance). Logging is always allowed; this is purely a nudge.
+const TRANS_FAT_DAILY_LIMIT_G = 2;
 
+function num(s: string): number {
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : 0;
+}
+
+type EntryMode = 'describe' | 'manual';
 const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
-type FieldConfig = {
-  key: keyof MealLogFields;
-  label: string;
-  placeholder: string;
-  keyboardType?: 'default' | 'numeric' | 'decimal-pad';
-};
+type FieldConfig = { key: keyof MealLogFields; label: string; placeholder: string; keyboardType?: 'default' | 'decimal-pad' };
 
-// Required fields, in display order. `fatG` is TOTAL fat.
 const FIELD_CONFIGS: FieldConfig[] = [
   { key: 'freeText', label: 'Food name', placeholder: 'Chicken rice bowl' },
   { key: 'calories', label: 'Calories', placeholder: '520', keyboardType: 'decimal-pad' },
-  { key: 'proteinG', label: 'Protein', placeholder: '38', keyboardType: 'decimal-pad' },
-  { key: 'carbsG', label: 'Carbs', placeholder: '62', keyboardType: 'decimal-pad' },
-  { key: 'fatG', label: 'Total fat', placeholder: '14', keyboardType: 'decimal-pad' },
+  { key: 'proteinG', label: 'Protein (g)', placeholder: '38', keyboardType: 'decimal-pad' },
+  { key: 'carbsG', label: 'Carbs (g)', placeholder: '62', keyboardType: 'decimal-pad' },
+  { key: 'fatG', label: 'Total fat (g)', placeholder: '14', keyboardType: 'decimal-pad' },
   { key: 'quantity', label: 'Quantity', placeholder: '1', keyboardType: 'decimal-pad' },
 ];
 
-// Optional fat breakdown. Blank saves as NULL ("unknown"), never 0. An applied
-// USDA estimate pre-fills these; a pure manual entry can leave them empty.
 const OPTIONAL_FAT_CONFIGS: FieldConfig[] = [
   { key: 'saturatedFatG', label: 'Saturated fat', placeholder: 'optional', keyboardType: 'decimal-pad' },
   { key: 'transFatG', label: 'Trans fat', placeholder: 'optional', keyboardType: 'decimal-pad' },
   { key: 'unsaturatedFatG', label: 'Unsaturated fat', placeholder: 'optional', keyboardType: 'decimal-pad' },
 ];
 
-function formatMacro(value: number): string {
-  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+function fmt(v: number): string {
+  return Number.isInteger(v) ? String(v) : v.toFixed(1);
 }
-
-function formatGoal(value: number | null | undefined, unit: string): string {
-  return value === null || value === undefined ? 'No goal' : `${value}${unit}`;
-}
-
-/**
- * Honest display for a fat subtype total. Shows "Not available" when no meal in
- * the day reported the value (instead of a misleading 0), and flags a partial
- * day where only some meals had the breakdown.
- */
 function formatSubtype(total: FatSubtypeTotal): string {
-  const grams = `${formatMacro(total.grams)}g`;
-  return total.knownCount === 0 ? 'Not available' : total.missingCount > 0 ? `${grams} (partial)` : grams;
+  const grams = `${fmt(total.grams)}g`;
+  return total.knownCount === 0 ? '—' : total.missingCount > 0 ? `${grams}*` : grams;
 }
-
-function formatMealTime(eatenAt: string): string {
-  return new Date(eatenAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+function cap(s: string) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 export default function MealLoggerScreen() {
+  const { colors } = useTheme();
   const [today, setToday] = useState(() => new Date());
   const logger = useMealLogger();
   const estimate = useMealEstimate();
   const daily = useDailyTotals(today);
   const refreshStats = useUserStore((s) => s.refreshStats);
-  const [entryMode, setEntryMode] = useState<EntryMode>('manual');
-  // Post-log feedback: the floating "+XP" animation and a short-lived toast.
+  const navigation = useNavigation<any>();
+  const [entryMode, setEntryMode] = useState<EntryMode>('describe');
   const [showXp, setShowXp] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Non-blocking trans-fat nudge: the day's projected trans-fat total, or null.
+  const [transWarn, setTransWarn] = useState<number | null>(null);
 
-  useFocusEffect(
-    useCallback(() => {
-      setToday(new Date());
-    }, []),
-  );
+  useFocusEffect(useCallback(() => setToday(new Date()), []));
+  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
 
-  useEffect(() => {
-    return () => {
-      if (toastTimer.current) {
-        clearTimeout(toastTimer.current);
-      }
-    };
-  }, []);
+  const editing = !!logger.editingId;
+  const showManual = entryMode === 'manual' || editing;
 
-  async function handleSubmit(): Promise<void> {
+  async function handleSubmit() {
+    // Capture the meal's trans fat BEFORE submitting — submit() clears the form
+    // on success. `result.logged` is true only for a NEW insert (not edits), so
+    // the projected-total math below stays correct.
+    const mealTrans = num(logger.fields.transFatG);
+    const qty = num(logger.fields.quantity) || 1;
+    const priorTrans = daily.totals.transFat.grams;
+
     const result = await logger.submit();
     daily.refresh();
-    if (!result.logged) {
-      return;
-    }
-
-    // Optimistic, immediate feedback from the known base award (mirrors the DB
-    // trigger constants). The authoritative totals are pulled right after.
+    if (!result.logged) return;
     setShowXp(true);
-    setToast(`+${BASE_MEAL_XP} XP · +${BASE_MEAL_POINTS} pts`);
-
+    setToast(`+${BASE_MEAL_XP} XP · +${BASE_MEAL_POINTS} LP`);
     await refreshStats();
-    const streak = useUserStore.getState().user?.streakCount ?? 0;
-    if (streak > 0) {
-      setToast(`+${BASE_MEAL_XP} XP · +${BASE_MEAL_POINTS} pts · STREAK ${streak} days`);
-    }
-
-    if (toastTimer.current) {
-      clearTimeout(toastTimer.current);
-    }
+    if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 3000);
+
+    // Soft nudge (never blocks): flag when this meal pushes the day over the
+    // trans-fat health limit.
+    const projectedTrans = priorTrans + mealTrans * qty;
+    if (mealTrans > 0 && projectedTrans > TRANS_FAT_DAILY_LIMIT_G) {
+      setTransWarn(projectedTrans);
+    }
   }
 
-  function handleUseCandidate(candidate: MealEstimateCandidate): void {
-    logger.applyEstimate(candidate);
+  function handleUseCandidate(c: MealEstimateCandidate) {
+    logger.applyEstimate(c);
     setEntryMode('manual');
   }
-
-  // Editing happens in the manual form, so switch modes when an edit starts.
-  function handleBeginEdit(meal: MealLog): void {
+  function handleBeginEdit(meal: MealLog) {
     logger.beginEdit(meal);
     setEntryMode('manual');
   }
-
-  function handleDelete(meal: MealLog): void {
-    Alert.alert(
-      'Delete meal?',
-      `Remove "${meal.freeText}" from your log? This can't be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            const ok = await logger.removeMeal(meal.id);
-            if (ok) {
-              daily.refresh();
-            }
-          },
-        },
-      ],
-    );
+  function handleDelete(meal: MealLog) {
+    Alert.alert('Delete meal?', `Remove "${meal.freeText}" from your log?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => { if (await logger.removeMeal(meal.id)) daily.refresh(); } },
+    ]);
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.topBar}>
-        <Text style={styles.title}>LOG A MEAL</Text>
-      </View>
+    <Screen scroll bottomSpace={96}>
+      <Text variant="heading" color={colors.ink} style={{ marginBottom: 14 }}>Log a meal</Text>
 
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentInner}>
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>TODAY</Text>
-            <TouchableOpacity style={styles.refreshButton} onPress={daily.refresh}>
-              <Text style={styles.refreshText}>Refresh</Text>
-            </TouchableOpacity>
-          </View>
+      {/* Today snapshot */}
+      <Card style={{ marginBottom: 14 }}>
+        <Text variant="overline" color={colors.textSecondary} style={{ marginBottom: 10 }}>Today so far</Text>
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <MiniStat label="Calories" value={fmt(daily.totals.calories)} goal={daily.goals?.calories} />
+          <MiniStat label="Protein" value={`${fmt(daily.totals.proteinG)}g`} goal={daily.goals?.proteinG} unit="g" />
+          <MiniStat label="Carbs" value={`${fmt(daily.totals.carbsG)}g`} goal={daily.goals?.carbsG} unit="g" />
+          <MiniStat label="Unsat" value={formatSubtype(daily.totals.unsaturatedFat)} goal={daily.goals?.unsaturatedFatG} unit="g" />
+        </View>
+      </Card>
 
-          {daily.error && (
-            <View style={styles.errorBanner}>
-              <Text style={styles.errorText}>{daily.error.message}</Text>
-            </View>
-          )}
-
-          {daily.isLoading ? (
-            <View style={styles.loadingBox}>
-              <ActivityIndicator color={Colors.primary} />
-            </View>
-          ) : (
-            <View style={styles.totalsGrid}>
-              <TotalPill label="Cal" value={formatMacro(daily.totals.calories)} goal={formatGoal(daily.goals?.calories, '')} />
-              <TotalPill label="Protein" value={`${formatMacro(daily.totals.proteinG)}g`} goal={formatGoal(daily.goals?.proteinG, 'g')} />
-              <TotalPill label="Carbs" value={`${formatMacro(daily.totals.carbsG)}g`} goal={formatGoal(daily.goals?.carbsG, 'g')} />
-              {/* Total fat is labeled as TOTAL fat — not unsaturated. No total-fat
-                  goal exists in the schema, so the goal line stays empty here. */}
-              <TotalPill label="Total Fat" value={`${formatMacro(daily.totals.fatG)}g`} goal="" />
-              {/* Subtypes are coverage-aware: "Not available" until a meal reports them. */}
-              <TotalPill label="Unsat Fat" value={formatSubtype(daily.totals.unsaturatedFat)} goal={formatGoal(daily.goals?.unsaturatedFatG, 'g')} />
-              <TotalPill label="Sat Fat" value={formatSubtype(daily.totals.saturatedFat)} goal="" />
-              <TotalPill label="Trans Fat" value={formatSubtype(daily.totals.transFat)} goal={formatGoal(daily.goals?.transFatG, 'g')} />
-            </View>
-          )}
+      {/* Add / edit */}
+      <Card style={{ marginBottom: 14 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14 }}>
+          <Text variant="section" color={colors.ink} style={{ flex: 1 }}>{editing ? 'Edit meal' : 'Add a meal'}</Text>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{logger.editingId ? 'EDIT MEAL' : 'ADD A MEAL'}</Text>
+        {!editing ? (
+          <SegmentedControl
+            segments={['Describe', 'Manual']}
+            value={entryMode === 'describe' ? 0 : 1}
+            onChange={(i) => setEntryMode(i === 0 ? 'describe' : 'manual')}
+            style={{ marginBottom: 16 }}
+          />
+        ) : null}
 
-          {/* The Manual/Describe toggle is hidden during an edit: an existing
-              meal is always reconciled in the manual form, never re-estimated. */}
-          {!logger.editingId && (
-            <View style={styles.modeRow}>
-              <ModeButton
-                label="Manual"
-                active={entryMode === 'manual'}
-                onPress={() => setEntryMode('manual')}
-              />
-              <ModeButton
-                label="Describe"
-                active={entryMode === 'describe'}
-                onPress={() => setEntryMode('describe')}
-              />
-            </View>
-          )}
+        {!showManual ? (
+          <DescribePanel estimate={estimate} onUse={handleUseCandidate} />
+        ) : (
+          <View style={{ gap: 12 }}>
+            {logger.appliedEstimateName ? (
+              <View style={{ backgroundColor: colors.successTint, borderRadius: 12, padding: 10, paddingHorizontal: 12 }}>
+                <Text variant="label" color={colors.successDeep}>
+                  Estimated from “{logger.appliedEstimateName}”. Review and edit before saving.
+                </Text>
+              </View>
+            ) : null}
 
-          {entryMode === 'describe' && !logger.editingId ? (
-            <DescribePanel estimate={estimate} onUse={handleUseCandidate} />
-          ) : (
-            <>
-              {logger.appliedEstimateName && (
-                <View style={styles.estimateBanner}>
-                  <Text style={styles.estimateBannerText}>
-                    Estimated from “{logger.appliedEstimateName}”. Review and edit before saving.
-                  </Text>
-                </View>
-              )}
+            {FIELD_CONFIGS.map((f) => (
+              <Field key={f.key} config={f} value={logger.fields[f.key]} onChange={(v) => logger.setField(f.key, v)} />
+            ))}
 
-              {FIELD_CONFIGS.map((field) => (
-                <View key={field.key} style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>{field.label}</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder={field.placeholder}
-                    placeholderTextColor={Colors.textSecondary}
-                    value={logger.fields[field.key]}
-                    onChangeText={(value) => logger.setField(field.key, value)}
-                    keyboardType={field.keyboardType ?? 'default'}
-                  />
-                </View>
-              ))}
+            <Text variant="overline" color={colors.textSecondary} style={{ marginTop: 4 }}>Fat breakdown (optional)</Text>
+            {OPTIONAL_FAT_CONFIGS.map((f) => (
+              <Field key={f.key} config={f} value={logger.fields[f.key]} onChange={(v) => logger.setField(f.key, v)} />
+            ))}
 
-              {/* Optional fat breakdown. Visible + editable so an applied USDA
-                  estimate is never hidden; leaving these blank saves NULL. */}
-              <Text style={styles.optionalHeading}>FAT BREAKDOWN (OPTIONAL)</Text>
-              {OPTIONAL_FAT_CONFIGS.map((field) => (
-                <View key={field.key} style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>{field.label}</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder={field.placeholder}
-                    placeholderTextColor={Colors.textSecondary}
-                    value={logger.fields[field.key]}
-                    onChangeText={(value) => logger.setField(field.key, value)}
-                    keyboardType={field.keyboardType ?? 'default'}
-                  />
-                </View>
-              ))}
-
-              <View style={styles.mealTypeRow}>
-                {MEAL_TYPES.map((type) => (
-                  <TouchableOpacity
-                    key={type}
-                    style={[styles.mealTypeButton, logger.mealType === type && styles.mealTypeButtonActive]}
-                    onPress={() => logger.setMealType(type)}
-                  >
-                    <Text
-                      style={[styles.mealTypeText, logger.mealType === type && styles.mealTypeTextActive]}
-                    >
-                      {type.charAt(0).toUpperCase() + type.slice(1)}
-                    </Text>
-                  </TouchableOpacity>
+            <View>
+              <Text variant="label" color={colors.textSecondary} style={{ marginBottom: 8 }}>Meal</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                {MEAL_TYPES.map((t) => (
+                  <Chip key={t} label={cap(t)} selected={logger.mealType === t} onPress={() => logger.setMealType(t)} />
                 ))}
               </View>
-
-              {logger.error && (
-                <View style={styles.errorBanner}>
-                  <Text style={styles.errorText}>{logger.error}</Text>
-                </View>
-              )}
-
-              <TouchableOpacity
-                style={[styles.submitButton, logger.isSubmitting && styles.submitButtonDisabled]}
-                onPress={handleSubmit}
-                disabled={logger.isSubmitting}
-              >
-                <Text style={styles.submitButtonText}>
-                  {logger.isSubmitting
-                    ? 'SAVING...'
-                    : logger.editingId
-                      ? 'UPDATE MEAL'
-                      : 'SAVE MEAL'}
-                </Text>
-              </TouchableOpacity>
-
-              {logger.editingId && (
-                <TouchableOpacity
-                  style={styles.cancelButton}
-                  onPress={logger.cancelEdit}
-                  disabled={logger.isSubmitting}
-                >
-                  <Text style={styles.cancelButtonText}>CANCEL EDIT</Text>
-                </TouchableOpacity>
-              )}
-            </>
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>CONFIRMED MEALS</Text>
-          {daily.isLoading ? (
-            <View style={styles.loadingBox}>
-              <ActivityIndicator color={Colors.primary} />
             </View>
-          ) : daily.meals.length === 0 ? (
-            <Text style={styles.emptyText}>No meals logged yet.</Text>
-          ) : (
-            daily.meals.map((meal) => (
-              <MealRow
-                key={meal.id}
-                meal={meal}
-                isEditing={logger.editingId === meal.id}
-                onEdit={() => handleBeginEdit(meal)}
-                onDelete={() => handleDelete(meal)}
-              />
-            ))
-          )}
-        </View>
-      </ScrollView>
 
-      {/* Post-log feedback overlay. pointerEvents="none" so it never blocks taps. */}
-      {toast && (
-        <View style={styles.feedbackToast} pointerEvents="none">
-          <Text style={styles.feedbackToastText}>{toast}</Text>
-        </View>
+            {logger.error ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <AppIcon name="circle-alert" size={14} color={colors.error} />
+                <Text variant="label" color={colors.error} style={{ flex: 1 }}>{logger.error}</Text>
+              </View>
+            ) : null}
+
+            <Button
+              label={editing ? 'Update meal' : 'Save meal'}
+              loading={logger.isSubmitting}
+              loadingLabel="Saving…"
+              onPress={handleSubmit}
+            />
+            {editing ? <Button label="Cancel edit" variant="ghost" onPress={logger.cancelEdit} /> : null}
+          </View>
+        )}
+      </Card>
+
+      {/* Confirmed meals */}
+      <Text variant="section" color={colors.ink} style={{ marginBottom: 8, paddingHorizontal: 2 }}>Confirmed meals</Text>
+      {daily.meals.length === 0 ? (
+        <Card style={{ alignItems: 'center', paddingVertical: 24 }}>
+          <AppIcon name="meal" size={30} color={colors.textTertiary} />
+          <Text variant="label" color={colors.textSecondary} style={{ marginTop: 8 }}>No meals logged yet today.</Text>
+        </Card>
+      ) : (
+        <Card padded={false} style={{ overflow: 'hidden' }}>
+          {daily.meals.map((meal, i) => (
+            <MealRow
+              key={meal.id}
+              meal={meal}
+              showDivider={i > 0}
+              isEditing={logger.editingId === meal.id}
+              onEdit={() => handleBeginEdit(meal)}
+              onDelete={() => handleDelete(meal)}
+            />
+          ))}
+        </Card>
       )}
+
+      {toast ? (
+        <Animated.View
+          entering={FadeInDown.duration(200)}
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: 64,
+            alignSelf: 'center',
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            backgroundColor: colors.ink,
+            borderRadius: 99,
+            paddingVertical: 10,
+            paddingHorizontal: 16,
+          }}
+        >
+          <AppIcon name="checkmark" size={15} color={colors.success} strokeWidth={3} />
+          <Text color={colors.card} style={{ fontFamily: FontFamily.numBold, fontSize: 14 }}>{toast}</Text>
+        </Animated.View>
+      ) : null}
       <FloatingXP amount={BASE_MEAL_XP} visible={showXp} onDone={() => setShowXp(false)} />
+
+      <Sheet visible={transWarn !== null} onClose={() => setTransWarn(null)} title="Trans-fat check" showClose>
+        <View style={{ paddingHorizontal: 20, paddingTop: 4, gap: 14 }}>
+          <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start', backgroundColor: colors.goldTint, borderRadius: 14, padding: 14 }}>
+            <AppIcon name="warning" size={20} color={colors.goldText} />
+            <Text variant="body" color={colors.ink} style={{ flex: 1 }}>
+              You're at{' '}
+              <Text variant="body" color={colors.ink} style={{ fontFamily: FontFamily.semibold }}>
+                {transWarn ? transWarn.toFixed(1) : '0'}g
+              </Text>{' '}
+              of trans fat today. Health guidance is to keep trans fat as close to zero as possible (under about {TRANS_FAT_DAILY_LIMIT_G}g a day) — your meal still logged.
+            </Text>
+          </View>
+          <Text variant="body" color={colors.textSecondary}>
+            Consider what you can do next: swap fried or heavily processed items for whole-food fats at your next meal — grilled or baked proteins, nuts, olive oil, or avocado. MacroCoach can suggest specifics for your goals.
+          </Text>
+          <Button
+            label="Ask MacroCoach"
+            icon="coach"
+            onPress={() => {
+              setTransWarn(null);
+              navigation.navigate('Coach');
+            }}
+          />
+          <Button label="Got it" variant="ghost" onPress={() => setTransWarn(null)} />
+        </View>
+      </Sheet>
+    </Screen>
+  );
+}
+
+function MiniStat({ label, value, goal, unit = '' }: { label: string; value: string; goal?: number | null; unit?: string }) {
+  const { colors } = useTheme();
+  return (
+    <View style={{ flex: 1 }}>
+      <Text style={{ fontFamily: FontFamily.numBold, fontSize: 18, color: colors.ink }}>{value}</Text>
+      <Text variant="labelSm" color={colors.textSecondary} style={{ marginTop: 1 }}>{label}</Text>
+      {goal ? <Text variant="labelSm" color={colors.textTertiary}>/ {goal}{unit}</Text> : null}
     </View>
   );
 }
 
-function TotalPill({ label, value, goal }: { label: string; value: string; goal: string }) {
+function Field({ config, value, onChange }: { config: FieldConfig; value: string; onChange: (v: string) => void }) {
+  const { colors } = useTheme();
+  const [focused, setFocused] = useState(false);
   return (
-    <View style={styles.totalPill}>
-      <Text style={styles.totalValue}>{value}</Text>
-      <Text style={styles.totalLabel}>{label}</Text>
-      <Text style={styles.totalGoal}>{goal}</Text>
-    </View>
-  );
-}
-
-function ModeButton({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
-  return (
-    <TouchableOpacity
-      style={[styles.modeButton, active && styles.modeButtonActive]}
-      onPress={onPress}
+    <View
+      style={{
+        backgroundColor: colors.card,
+        borderWidth: 1.5,
+        borderColor: focused ? colors.ink : colors.borderInput,
+        borderRadius: Radius.input,
+        paddingVertical: 9,
+        paddingHorizontal: 16,
+      }}
     >
-      <Text style={[styles.modeButtonText, active && styles.modeButtonTextActive]}>{label}</Text>
-    </TouchableOpacity>
+      <Text variant="labelSm" color={focused ? colors.ink : colors.textSecondary}>{config.label}</Text>
+      <TextInput
+        value={value}
+        onChangeText={onChange}
+        placeholder={config.placeholder}
+        placeholderTextColor={colors.textTertiary}
+        keyboardType={config.keyboardType ?? 'default'}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        style={{ fontFamily: FontFamily.regular, fontSize: 15.5, color: colors.ink, padding: 0, marginTop: 2 }}
+      />
+    </View>
   );
 }
+
+const STAGES = ['Reading your description', 'Matching USDA foods', 'Crunching the macros'];
 
 function DescribePanel({
   estimate,
   onUse,
 }: {
   estimate: ReturnType<typeof useMealEstimate>;
-  onUse: (candidate: MealEstimateCandidate) => void;
+  onUse: (c: MealEstimateCandidate) => void;
 }) {
-  return (
-    <View>
-      <Text style={styles.describeHint}>
-        Describe your meal in plain words. We estimate the macros from USDA data — you confirm and
-        edit before saving.
-      </Text>
+  const { colors } = useTheme();
+  const [focused, setFocused] = useState(false);
+  const [stage, setStage] = useState(0);
 
-      <View style={styles.inputGroup}>
+  useEffect(() => {
+    if (!estimate.isEstimating) {
+      setStage(0);
+      return;
+    }
+    const timers = [
+      setTimeout(() => setStage(1), 900),
+      setTimeout(() => setStage(2), 1800),
+    ];
+    return () => timers.forEach(clearTimeout);
+  }, [estimate.isEstimating]);
+
+  return (
+    <View style={{ gap: 12 }}>
+      <Text variant="label" color={colors.textSecondary}>
+        Describe your meal in plain words — we estimate the macros from USDA data. You confirm and edit before saving.
+      </Text>
+      <View
+        style={{
+          backgroundColor: colors.card,
+          borderWidth: 1.5,
+          borderColor: focused ? colors.ink : colors.borderInput,
+          borderRadius: Radius.input,
+          padding: 14,
+          minHeight: 74,
+        }}
+      >
         <TextInput
-          style={[styles.input, styles.describeInput]}
-          placeholder="e.g. grilled chicken breast with broccoli"
-          placeholderTextColor={Colors.textSecondary}
           value={estimate.query}
           onChangeText={estimate.setQuery}
+          placeholder="e.g. grilled chicken breast with broccoli and rice"
+          placeholderTextColor={colors.textTertiary}
           multiline
-          onSubmitEditing={estimate.estimate}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          style={{ fontFamily: FontFamily.regular, fontSize: 15.5, color: colors.ink, textAlignVertical: 'top', minHeight: 46 }}
         />
       </View>
 
-      <TouchableOpacity
-        style={[styles.submitButton, estimate.isEstimating && styles.submitButtonDisabled]}
+      <Button
+        label="Estimate macros"
+        icon="sparkles"
+        loading={estimate.isEstimating}
+        loadingLabel="Estimating…"
         onPress={estimate.estimate}
-        disabled={estimate.isEstimating}
-      >
-        <Text style={styles.submitButtonText}>
-          {estimate.isEstimating ? 'ESTIMATING...' : 'ESTIMATE MACROS'}
-        </Text>
-      </TouchableOpacity>
+      />
 
-      {estimate.error && (
-        <View style={[styles.errorBanner, styles.describeSpacer]}>
-          <Text style={styles.errorText}>{estimate.error}</Text>
+      {estimate.isEstimating ? (
+        <Card style={{ gap: 10 }}>
+          {STAGES.map((label, i) => {
+            const done = i < stage;
+            const active = i === stage;
+            return (
+              <View key={label} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                {done ? (
+                  <AppIcon name="check" size={18} color={colors.success} />
+                ) : active ? (
+                  <ActivityIndicator size="small" color={colors.scarlet} />
+                ) : (
+                  <View style={{ width: 18, height: 18, borderRadius: 9, borderWidth: 1.5, borderColor: colors.borderInput }} />
+                )}
+                <Text variant="label" color={done || active ? colors.ink : colors.textTertiary}>{label}</Text>
+              </View>
+            );
+          })}
+        </Card>
+      ) : null}
+
+      {estimate.error ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <AppIcon name="circle-alert" size={14} color={colors.error} />
+          <Text variant="label" color={colors.error} style={{ flex: 1 }}>{estimate.error}</Text>
         </View>
-      )}
+      ) : null}
 
-      {estimate.candidates.length > 0 && (
-        <View style={styles.describeSpacer}>
-          <Text style={styles.candidatesHeading}>
-            {estimate.candidates.length} match{estimate.candidates.length === 1 ? '' : 'es'}
-            {estimate.cached ? ' · cached' : ''}
+      {estimate.candidates.length > 0 && !estimate.isEstimating ? (
+        <Animated.View entering={FadeIn.duration(250)} style={{ gap: 10 }}>
+          <Text variant="overline" color={colors.textSecondary}>
+            {estimate.candidates.length} match{estimate.candidates.length === 1 ? '' : 'es'}{estimate.cached ? ' · cached' : ''}
           </Text>
-          {estimate.candidates.map((candidate) => (
-            <CandidateCard key={candidate.externalId} candidate={candidate} onUse={onUse} />
+          {estimate.candidates.map((c) => (
+            <CandidateCard key={c.externalId} candidate={c} onUse={onUse} />
           ))}
-        </View>
-      )}
+        </Animated.View>
+      ) : null}
     </View>
   );
 }
 
-function CandidateCard({
-  candidate,
-  onUse,
-}: {
-  candidate: MealEstimateCandidate;
-  onUse: (candidate: MealEstimateCandidate) => void;
-}) {
+function CandidateCard({ candidate, onUse }: { candidate: MealEstimateCandidate; onUse: (c: MealEstimateCandidate) => void }) {
+  const { colors } = useTheme();
   const { serving } = candidate;
-  // A missing `kind` is treated as a plain direct match (back-compat).
   const isComposite = candidate.kind === 'composite';
-  const confidenceText = candidate.confidenceRange
+  const conf = candidate.confidence;
+  const confPct = candidate.confidenceRange
     ? `${Math.round(candidate.confidenceRange.low * 100)}–${Math.round(candidate.confidenceRange.high * 100)}%`
-    : `${Math.round(candidate.confidence * 100)}%`;
+    : `${Math.round(conf * 100)}%`;
 
   return (
-    <View style={[styles.candidateCard, isComposite && styles.compositeCard]}>
-      <View style={styles.candidateHeader}>
-        <View style={styles.candidateTitleWrap}>
-          <Text style={styles.candidateName} numberOfLines={2}>
-            {candidate.name}
-          </Text>
-          <Text style={styles.candidateMeta} numberOfLines={1}>
-            {[candidate.brandName, candidate.dataType, candidate.servingDescription]
-              .filter(Boolean)
-              .join(' · ')}
+    <View style={{ backgroundColor: colors.canvas, borderRadius: 14, padding: 12 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+        <View style={{ flex: 1 }}>
+          <Text variant="cardTitle" color={colors.ink} numberOfLines={2}>{candidate.name}</Text>
+          <Text variant="labelSm" color={colors.textSecondary} numberOfLines={1} style={{ marginTop: 2 }}>
+            {[candidate.brandName, candidate.dataType, candidate.servingDescription].filter(Boolean).join(' · ')}
           </Text>
         </View>
-        <View style={styles.confidenceBadge}>
-          <Text style={styles.confidenceText}>{confidenceText}</Text>
-        </View>
+        <Badge
+          label={isComposite ? `~ ${confPct}` : confPct}
+          tone={isComposite ? 'composite' : conf >= 0.7 ? 'confidence-high' : 'confidence-med'}
+          dot={!isComposite}
+        />
       </View>
 
-      {/* Composite estimates show their parsed ingredients + assumptions BEFORE
-          the user commits, so the approximation is transparent. */}
-      {isComposite && <Text style={styles.compositeTag}>~ COMPOSITE ESTIMATE</Text>}
-
-      <Text style={styles.candidateMacros}>
-        {formatMacro(serving.calories)} cal · {formatMacro(serving.proteinG)}P ·{' '}
-        {formatMacro(serving.carbsG)}C · {formatMacro(serving.fatG)}F
+      <Text variant="label" color={colors.textSecondary} style={{ marginTop: 8 }}>
+        <Text variant="label" color={colors.ink} style={{ fontFamily: FontFamily.semibold }}>{fmt(serving.calories)}</Text> kcal ·{' '}
+        {fmt(serving.proteinG)}P · {fmt(serving.carbsG)}C · {fmt(serving.fatG)}F
       </Text>
 
-      {isComposite && candidate.components && candidate.components.length > 0 && (
-        <View style={styles.componentList}>
-          {candidate.components.map((component, index) => (
-            <Text key={`${component.displayName}-${index}`} style={styles.componentLine}>
-              {component.macros
-                ? `• ${component.displayName} — ${component.servingDescription} · ${formatMacro(component.macros.calories)} cal`
-                : `• ${component.displayName} — no USDA match (not counted)`}
-            </Text>
+      {isComposite && candidate.assumptions && candidate.assumptions.length > 0 ? (
+        <View style={{ marginTop: 8, gap: 2 }}>
+          {candidate.assumptions.map((a, i) => (
+            <Text key={i} variant="labelSm" color={colors.textTertiary}>{a}</Text>
           ))}
         </View>
-      )}
+      ) : null}
 
-      {isComposite && candidate.assumptions && candidate.assumptions.length > 0 && (
-        <View style={styles.assumptionBox}>
-          {candidate.assumptions.map((assumption, index) => (
-            <Text key={`assumption-${index}`} style={styles.assumptionText}>
-              {assumption}
-            </Text>
-          ))}
-        </View>
-      )}
-
-      {candidate.warnings && candidate.warnings.length > 0 && (
-        <View style={styles.warningBox}>
-          {candidate.warnings.map((warning, index) => (
-            <View key={`warning-${index}`} style={styles.warningRow}>
-              <AppIcon name="warning" size={14} color={Colors.warning} />
-              <Text style={styles.warningText}>{warning}</Text>
+      {candidate.warnings && candidate.warnings.length > 0 ? (
+        <View style={{ marginTop: 8, gap: 3 }}>
+          {candidate.warnings.map((w, i) => (
+            <View key={i} style={{ flexDirection: 'row', gap: 5, alignItems: 'flex-start' }}>
+              <AppIcon name="warning" size={13} color={colors.streak} />
+              <Text variant="labelSm" color={colors.streak} style={{ flex: 1 }}>{w}</Text>
             </View>
           ))}
         </View>
-      )}
+      ) : null}
 
-      <TouchableOpacity style={styles.useButton} onPress={() => onUse(candidate)}>
-        <Text style={styles.useButtonText}>USE &amp; EDIT</Text>
-      </TouchableOpacity>
+      <Button label="Use & edit" variant="secondary" size="md" onPress={() => onUse(candidate)} fullWidth={false} style={{ marginTop: 12, alignSelf: 'flex-start', paddingHorizontal: 20 }} />
     </View>
   );
 }
 
-// Human label for a meal's provenance. NULL source = a legacy row, shown as
-// "manual" so old logs stay readable and grouped with manual entries.
 function sourceLabel(source: MealLog['source']): string {
   if (source === 'user_estimate') return 'estimate';
   if (source === 'usda_fdc') return 'USDA';
@@ -509,324 +483,44 @@ function sourceLabel(source: MealLog['source']): string {
 function MealRow({
   meal,
   isEditing,
+  showDivider,
   onEdit,
   onDelete,
 }: {
   meal: MealLog;
   isEditing: boolean;
+  showDivider: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const { colors } = useTheme();
   const calories = meal.calories * meal.quantity;
   const protein = meal.proteinG * meal.quantity;
-  const carbs = meal.carbsG * meal.quantity;
-  const fat = meal.fatG * meal.quantity;
-
+  const time = new Date(meal.eatenAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   return (
-    <View style={[styles.mealCard, isEditing && styles.mealCardEditing]}>
-      <View style={styles.mealRowTop}>
-        <View style={styles.mealInfo}>
-          <Text style={styles.mealName} numberOfLines={1}>{meal.freeText}</Text>
-          <Text style={styles.mealMeta}>
-            {formatMealTime(meal.eatenAt)} · {meal.mealType} · {sourceLabel(meal.source)} · qty {formatMacro(meal.quantity)}
+    <View style={{ padding: 14, borderTopWidth: showDivider ? 1 : 0, borderTopColor: colors.rowDivider, backgroundColor: isEditing ? colors.brandTint : 'transparent' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <View style={{ flex: 1 }}>
+          <Text variant="cardTitle" color={colors.ink} numberOfLines={1}>{meal.freeText}</Text>
+          <Text variant="labelSm" color={colors.textSecondary} style={{ marginTop: 1 }}>
+            {time} · {cap(meal.mealType)} · {sourceLabel(meal.source)}
           </Text>
         </View>
-        <View style={styles.mealMacros}>
-          <Text style={styles.mealCalories}>{formatMacro(calories)} cal</Text>
-          <Text style={styles.mealMacroDetail}>
-            {formatMacro(protein)}P · {formatMacro(carbs)}C · {formatMacro(fat)}F
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text style={{ fontFamily: FontFamily.numBold, fontSize: 15, color: colors.ink }}>
+            {fmt(calories)} <Text style={{ fontFamily: FontFamily.semibold, fontSize: 10.5, color: colors.textTertiary }}>kcal</Text>
           </Text>
+          <Text variant="labelSm" color={colors.textSecondary}>{fmt(protein)}g protein</Text>
         </View>
       </View>
-      {/* Edit loads this row back into the form; Delete removes it (with confirm). */}
-      <View style={styles.mealActions}>
-        <TouchableOpacity style={styles.mealActionBtn} onPress={onEdit}>
-          <Text style={styles.mealActionText}>{isEditing ? 'Editing…' : 'Edit'}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.mealActionBtn} onPress={onDelete}>
-          <Text style={[styles.mealActionText, styles.mealActionDelete]}>Delete</Text>
-        </TouchableOpacity>
+      <View style={{ flexDirection: 'row', gap: 16, marginTop: 8 }}>
+        <Pressable onPress={onEdit} hitSlop={6}>
+          <Text variant="label" color={colors.scarlet} style={{ fontFamily: FontFamily.semibold }}>{isEditing ? 'Editing…' : 'Edit'}</Text>
+        </Pressable>
+        <Pressable onPress={onDelete} hitSlop={6}>
+          <Text variant="label" color={colors.error} style={{ fontFamily: FontFamily.semibold }}>Delete</Text>
+        </Pressable>
       </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  feedbackToast: {
-    position: 'absolute',
-    top: 70,
-    alignSelf: 'center',
-    backgroundColor: Colors.primary,
-    borderRadius: 50,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    zIndex: 1000,
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  feedbackToastText: { fontFamily: FontFamily.displayBold, fontSize: 14, color: Colors.background },
-  topBar: { paddingTop: 60, paddingHorizontal: 20, paddingBottom: 12 },
-  title: {
-    fontFamily: FontFamily.displayBold,
-    fontSize: 24,
-    color: Colors.textPrimary,
-    letterSpacing: 1,
-  },
-  content: { flex: 1 },
-  contentInner: { padding: 16, paddingBottom: 32 },
-  section: {
-    marginBottom: 18,
-    backgroundColor: Colors.surface,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 14,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontFamily: FontFamily.displayBold,
-    fontSize: 18,
-    color: Colors.textPrimary,
-    letterSpacing: 1,
-    marginBottom: 12,
-  },
-  refreshButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.primary + '44',
-    backgroundColor: Colors.primary + '12',
-  },
-  refreshText: { fontFamily: FontFamily.bodyMedium, fontSize: 12, color: Colors.primary },
-  totalsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  totalPill: {
-    flexBasis: '48%',
-    flexGrow: 1,
-    backgroundColor: Colors.surface2,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 12,
-  },
-  totalValue: { fontFamily: FontFamily.displayBold, fontSize: 22, color: Colors.primary },
-  totalLabel: {
-    fontFamily: FontFamily.bodyMedium,
-    fontSize: 12,
-    color: Colors.textPrimary,
-    marginTop: 2,
-  },
-  totalGoal: { fontFamily: FontFamily.body, fontSize: 11, color: Colors.textSecondary, marginTop: 2 },
-  modeRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
-  modeButton: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: Colors.surface2,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  modeButtonActive: { backgroundColor: Colors.primary + '14', borderColor: Colors.primary + '44' },
-  modeButtonText: { fontFamily: FontFamily.bodyMedium, fontSize: 13, color: Colors.textSecondary },
-  modeButtonTextActive: { color: Colors.primary },
-  describeHint: {
-    fontFamily: FontFamily.body,
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginBottom: 12,
-    lineHeight: 17,
-  },
-  describeInput: { minHeight: 60, textAlignVertical: 'top' },
-  describeSpacer: { marginTop: 12 },
-  candidatesHeading: {
-    fontFamily: FontFamily.bodyMedium,
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginBottom: 8,
-  },
-  candidateCard: {
-    backgroundColor: Colors.surface2,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 12,
-    marginBottom: 8,
-  },
-  candidateHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 },
-  candidateTitleWrap: { flex: 1, marginRight: 8 },
-  candidateName: { fontFamily: FontFamily.bodyMedium, fontSize: 14, color: Colors.textPrimary },
-  candidateMeta: { fontFamily: FontFamily.body, fontSize: 11, color: Colors.textSecondary, marginTop: 3 },
-  confidenceBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    backgroundColor: Colors.primary + '14',
-    borderWidth: 1,
-    borderColor: Colors.primary + '44',
-  },
-  confidenceText: { fontFamily: FontFamily.bodyMedium, fontSize: 11, color: Colors.primary },
-  candidateMacros: {
-    fontFamily: FontFamily.body,
-    fontSize: 12,
-    color: Colors.textPrimary,
-    marginBottom: 10,
-  },
-  compositeCard: { borderColor: Colors.gold + '55' },
-  compositeTag: {
-    fontFamily: FontFamily.bodyMedium,
-    fontSize: 10,
-    letterSpacing: 1,
-    color: Colors.gold,
-    marginBottom: 8,
-  },
-  componentList: { marginBottom: 10, gap: 3 },
-  componentLine: { fontFamily: FontFamily.body, fontSize: 11, color: Colors.textSecondary },
-  assumptionBox: {
-    backgroundColor: Colors.surface,
-    borderRadius: 8,
-    padding: 8,
-    marginBottom: 10,
-    gap: 3,
-  },
-  assumptionText: { fontFamily: FontFamily.body, fontSize: 10, color: Colors.textSecondary },
-  warningBox: { marginBottom: 10, gap: 3 },
-  warningRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 5 },
-  warningText: { flex: 1, fontFamily: FontFamily.body, fontSize: 10, color: Colors.accent },
-  useButton: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 50,
-    backgroundColor: Colors.primary,
-  },
-  useButtonText: { fontFamily: FontFamily.displayBold, fontSize: 12, color: Colors.background },
-  estimateBanner: {
-    backgroundColor: Colors.primary + '12',
-    borderColor: Colors.primary + '44',
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 10,
-    marginBottom: 12,
-  },
-  estimateBannerText: { fontFamily: FontFamily.body, fontSize: 12, color: Colors.textPrimary },
-  optionalHeading: {
-    fontFamily: FontFamily.bodyMedium,
-    fontSize: 11,
-    color: Colors.textSecondary,
-    letterSpacing: 1,
-    marginBottom: 8,
-  },
-  inputGroup: { marginBottom: 12 },
-  inputLabel: {
-    fontFamily: FontFamily.bodyMedium,
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginBottom: 6,
-  },
-  input: {
-    backgroundColor: Colors.surface2,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 14,
-    fontFamily: FontFamily.body,
-    fontSize: 15,
-    color: Colors.textPrimary,
-  },
-  mealTypeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
-  mealTypeButton: {
-    flexGrow: 1,
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: Colors.surface2,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  mealTypeButtonActive: { backgroundColor: Colors.primary + '14', borderColor: Colors.primary + '44' },
-  mealTypeText: { fontFamily: FontFamily.bodyMedium, fontSize: 12, color: Colors.textSecondary },
-  mealTypeTextActive: { color: Colors.primary },
-  submitButton: {
-    backgroundColor: Colors.primary,
-    borderRadius: 50,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  submitButtonDisabled: { opacity: 0.6 },
-  submitButtonText: { fontFamily: FontFamily.displayBold, fontSize: 15, color: Colors.background },
-  cancelButton: {
-    marginTop: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-    borderRadius: 50,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surface2,
-  },
-  cancelButtonText: { fontFamily: FontFamily.bodyMedium, fontSize: 13, color: Colors.textSecondary },
-  loadingBox: { paddingVertical: 22, alignItems: 'center' },
-  errorBanner: {
-    backgroundColor: Colors.error + '16',
-    borderColor: Colors.error + '55',
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 10,
-    marginBottom: 12,
-  },
-  errorText: { fontFamily: FontFamily.bodyMedium, fontSize: 12, color: Colors.error },
-  emptyText: {
-    fontFamily: FontFamily.body,
-    fontSize: 14,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    paddingVertical: 20,
-  },
-  mealCard: {
-    backgroundColor: Colors.surface2,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 12,
-    marginBottom: 8,
-  },
-  mealCardEditing: { borderColor: Colors.primary + '88' },
-  mealRowTop: { flexDirection: 'row', alignItems: 'center' },
-  mealActions: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 10,
-    justifyContent: 'flex-end',
-  },
-  mealActionBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surface,
-  },
-  mealActionText: { fontFamily: FontFamily.bodyMedium, fontSize: 12, color: Colors.textPrimary },
-  mealActionDelete: { color: Colors.error },
-  mealInfo: { flex: 1, marginRight: 8 },
-  mealName: { fontFamily: FontFamily.bodyMedium, fontSize: 14, color: Colors.textPrimary },
-  mealMeta: { fontFamily: FontFamily.body, fontSize: 11, color: Colors.textSecondary, marginTop: 3 },
-  mealMacros: { alignItems: 'flex-end' },
-  mealCalories: { fontFamily: FontFamily.displayBold, fontSize: 15, color: Colors.textPrimary },
-  mealMacroDetail: {
-    fontFamily: FontFamily.body,
-    fontSize: 10,
-    color: Colors.textSecondary,
-    marginTop: 2,
-  },
-});

@@ -1,21 +1,23 @@
 import React from 'react';
 import { View, Text, StyleSheet, ViewStyle, StyleProp } from 'react-native';
-import { Colors, FontFamily, FontSize, Radius, Spacing, alpha } from '../../theme';
+import { FontFamily, FontSize, Radius, Spacing, alpha, useTheme } from '../../theme';
 
 interface PillProps {
   label: string;
   /** Semantic color; used as text + tinted background (or solid fill). */
   color?: string;
-  /** Solid filled pill (used for the strongest emphasis like "Promotion zone"). */
+  /** Solid filled pill for the strongest emphasis. */
   filled?: boolean;
   icon?: string;
   style?: StyleProp<ViewStyle>;
 }
 
 /** Small rounded status chip. Tinted by default, solid when `filled`. */
-export default function Pill({ label, color = Colors.textSecondary, filled, icon, style }: PillProps) {
-  const bg = filled ? color : alpha(color, 0.14);
-  const fg = filled ? Colors.textOnBrand : color;
+export default function Pill({ label, color, filled, icon, style }: PillProps) {
+  const { colors } = useTheme();
+  const c = color ?? colors.textSecondary;
+  const bg = filled ? c : alpha(c, 0.14);
+  const fg = filled ? colors.onPrimary : c;
   return (
     <View style={[styles.pill, { backgroundColor: bg }, style]}>
       {icon ? <Text style={[styles.icon, { color: fg }]}>{icon} </Text> : null}
@@ -35,7 +37,7 @@ const styles = StyleSheet.create({
   },
   icon: { fontSize: FontSize.meta },
   label: {
-    fontFamily: FontFamily.bodySemiBold,
+    fontFamily: FontFamily.semibold,
     fontSize: FontSize.meta,
     letterSpacing: 0.3,
   },

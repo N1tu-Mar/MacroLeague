@@ -1,186 +1,87 @@
 import React, { useState } from 'react';
+import { View, Pressable, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
+import { FontFamily, Spacing, Type, useTheme } from '../../theme';
 import {
-  View,
+  Screen,
   Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-} from 'react-native';
-import Animated, { FadeInDown, SlideInRight } from 'react-native-reanimated';
-import { LinearGradient } from 'expo-linear-gradient';
-import { StatusBar } from 'expo-status-bar';
-import { Colors, FontFamily } from '../../theme';
+  Button,
+  TextField,
+  ScreenHeader,
+  Card,
+  AppIcon,
+  Avatar,
+  TargetRow,
+} from '../../components/ui';
+import { AppIconName } from '../../components/ui/AppIcon';
 import { calculateMacros, GoalType, validateMacroTargets } from '../../lib/macros';
 import { updateOnboardingProfile, slugifyUsername } from '../../services/profileService';
 import { useUserStore } from '../../store/userStore';
-import AppIcon, { AppIconName } from '../../components/ui/AppIcon';
-import PixelFlame from '../../components/PixelFlame';
 import { supabase } from '../../lib/supabase';
-
-const { width } = Dimensions.get('window');
 
 interface GoalOption {
   id: GoalType;
-  icon: AppIconName | 'flame';
+  icon: AppIconName;
   label: string;
-  description: string;
-  why: string;
-  accentColor: string;
+  sub: string;
 }
 
 const GOALS: GoalOption[] = [
-  {
-    id: 'muscle',
-    icon: 'protein',
-    label: 'Build Muscle',
-    description: 'High protein, caloric surplus',
-    why: 'Gain strength and size.',
-    accentColor: Colors.primary,
-  },
-  {
-    id: 'lose_weight',
-    icon: 'flame',
-    label: 'Lose Weight',
-    description: 'Caloric deficit, lean focus',
-    why: 'Burn fat and get leaner.',
-    accentColor: Colors.accent,
-  },
-  {
-    id: 'eat_cleaner',
-    icon: 'salad',
-    label: 'Eat Cleaner',
-    description: 'Whole foods, balanced macros',
-    why: 'Better energy, cleaner habits.',
-    accentColor: '#00D4FF',
-  },
-  {
-    id: 'just_track',
-    icon: 'chart',
-    label: 'Just Track',
-    description: 'No specific goal, just log',
-    why: 'Data without a physique target.',
-    accentColor: Colors.gold,
-  },
+  { id: 'muscle', icon: 'protein', label: 'Build muscle', sub: 'Higher protein and calorie targets to support training.' },
+  { id: 'lose_weight', icon: 'trend-down', label: 'Lose weight', sub: 'A steady calorie deficit while keeping protein high.' },
+  { id: 'eat_cleaner', icon: 'salad', label: 'Eat cleaner', sub: 'Balanced targets that reward whole-food choices.' },
+  { id: 'just_track', icon: 'edit', label: 'Just track', sub: 'Neutral targets — see your patterns without pressure.' },
 ];
 
-// ─── Step dots ────────────────────────────────────────────────────────────────
-
-function StepDots({ step, total }: { step: number; total: number }) {
-  return (
-    <View style={dots.row}>
-      {Array.from({ length: total }, (_, i) => (
-        <View
-          key={i}
-          style={[
-            dots.dot,
-            i === step ? dots.active : i < step ? dots.done : dots.inactive,
-          ]}
-        />
-      ))}
-    </View>
-  );
-}
-const dots = StyleSheet.create({
-  row: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  dot: { height: 6, borderRadius: 3 },
-  active: { width: 24, backgroundColor: Colors.primary },
-  done: { width: 8, backgroundColor: Colors.primary, opacity: 0.5 },
-  inactive: { width: 8, backgroundColor: Colors.border },
-});
-
-// ─── Macro slider row ─────────────────────────────────────────────────────────
-
-function MacroRow({
-  label, value, unit, min, max, color, onChange,
-}: {
-  label: string; value: number; unit: string; min: number; max: number; color: string; onChange: (v: number) => void;
-}) {
-  const pct = Math.max(0, Math.min(1, (value - min) / (max - min)));
-  const step = label === 'Calories' ? 50 : 5;
-  return (
-    <View style={macro.wrapper}>
-      <View style={macro.labelRow}>
-        <Text style={macro.label}>{label}</Text>
-        <Text style={[macro.value, { color }]}>
-          {value}
-          <Text style={macro.unit}> {unit}</Text>
-        </Text>
-      </View>
-      <View style={macro.trackWrapper}>
-        <View style={macro.track}>
-          <View style={[macro.fill, { width: `${Math.round(pct * 100)}%`, backgroundColor: color }]} />
-        </View>
-        <View style={macro.buttons}>
-          <TouchableOpacity style={macro.btn} onPress={() => onChange(Math.max(min, value - step))}>
-            <Text style={macro.btnText}>−</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={macro.btn} onPress={() => onChange(Math.min(max, value + step))}>
-            <Text style={macro.btnText}>+</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </View>
-  );
-}
-const macro = StyleSheet.create({
-  wrapper: { gap: 8 },
-  labelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
-  label: { fontFamily: FontFamily.bodyMedium, fontSize: 13, color: Colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.8 },
-  value: { fontFamily: FontFamily.displayBold, fontSize: 22, color: Colors.textPrimary },
-  unit: { fontFamily: FontFamily.body, fontSize: 13, color: Colors.textSecondary },
-  trackWrapper: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  track: { flex: 1, height: 6, backgroundColor: Colors.surface2, borderRadius: 3, overflow: 'hidden' },
-  fill: { height: '100%', borderRadius: 3 },
-  buttons: { flexDirection: 'row', gap: 6 },
-  btn: { width: 32, height: 32, borderRadius: 8, backgroundColor: Colors.surface2, borderWidth: 1, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center' },
-  btnText: { color: Colors.textPrimary, fontSize: 18, lineHeight: 22 },
-});
-
-// ─── Main screen ──────────────────────────────────────────────────────────────
+const GOAL_BLURB: Record<GoalType, string> = {
+  muscle: 'Recommended for building muscle.',
+  lose_weight: 'Recommended for losing weight.',
+  eat_cleaner: 'Recommended for eating cleaner.',
+  just_track: 'A neutral starting point.',
+};
 
 export default function OnboardingGoalsScreen() {
+  const { colors } = useTheme();
   const refreshStats = useUserStore((s) => s.refreshStats);
   const user = useUserStore((s) => s.user);
 
-  const [step, setStep] = useState<0 | 1 | 2>(0);
-  // Pre-fill name from Google auth if it looks like a real name (not user_<id>)
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [name, setName] = useState(
     user?.name && !/^user_[0-9a-f]{8}/i.test(user.name) ? user.name : '',
   );
   const [university, setUniversity] = useState('Rutgers University');
+  const [nameError, setNameError] = useState<string | null>(null);
   const [goalType, setGoalType] = useState<GoalType>('muscle');
   const [macros, setMacros] = useState(calculateMacros('muscle'));
-  const [focusedField, setFocusedField] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   function selectGoal(id: GoalType) {
     setGoalType(id);
     setMacros(calculateMacros(id));
   }
-
-  function updateMacro(key: keyof typeof macros, value: number) {
-    setMacros((prev) => ({ ...prev, [key]: value }));
+  function bump(key: keyof typeof macros, delta: number, min: number) {
+    setMacros((m) => ({ ...m, [key]: Math.max(min, m[key] + delta) }));
   }
+
+  // Calorie-source split for the stacked bar
+  const proKcal = macros.protein * 4;
+  const carbKcal = macros.carbs * 4;
+  const fatKcal = macros.fats * 9;
+  const totalKcal = Math.max(1, proKcal + carbKcal + fatKcal);
+  const pct = (n: number) => `${Math.round((n / totalKcal) * 100)}%`;
 
   async function finish() {
     if (saving) return;
-    // A real name is mandatory — never silently substitute a placeholder, or the
-    // account would slip past the name gate and show a fallback on the leaderboard.
     const displayName = name.trim();
     if (!displayName) {
-      Alert.alert('Enter your name to continue');
-      setStep(0);
+      setNameError('Enter a display name.');
+      setStep(1);
       return;
     }
     const macroError = validateMacroTargets(macros);
     if (macroError) {
       Alert.alert('Check your targets', macroError);
+      setStep(3);
       return;
     }
     setSaving(true);
@@ -197,319 +98,285 @@ export default function OnboardingGoalsScreen() {
         goalCarbsG: macros.carbs,
         goalUnsaturatedFatG: macros.fats,
       });
-      // refreshStats sets needsOnboarding = false → App.tsx routes to TutorialScreen
-      await refreshStats();
+      await refreshStats(); // sets needsOnboarding = false → App routes onward
     } catch (err: any) {
-      Alert.alert('Could not save your goals', err.message ?? 'Please try again.');
+      Alert.alert('Could not save your goals', err?.message ?? 'Please try again.');
     } finally {
       setSaving(false);
     }
   }
 
-  function advance() {
-    if (step === 0) {
-      if (!name.trim()) { Alert.alert('Enter your name to continue'); return; }
-      setStep(1);
-    } else if (step === 1) {
+  function onContinue() {
+    if (step === 1) {
+      if (!name.trim()) {
+        setNameError('Enter a display name.');
+        return;
+      }
+      setNameError(null);
       setStep(2);
-    } else {
-      void finish();
-    }
+    } else if (step === 2) setStep(3);
+    else if (step === 3) setStep(4);
+    else void finish();
   }
 
+  function onBack() {
+    if (step > 1) setStep((s) => (s - 1) as 1 | 2 | 3 | 4);
+  }
+
+  const displayName = name.trim() || 'Your name';
+
   return (
-    <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <StatusBar style="light" />
-      <LinearGradient colors={['#0A0A0F', '#0D0D18', '#0A0A0F']} style={StyleSheet.absoluteFill} />
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <Screen scroll padded contentStyle={{ flexGrow: 1 }}>
+        <ScreenHeader onBack={step > 1 ? onBack : undefined} progress={{ step, total: 4 }} />
 
-      <ScrollView
-        contentContainerStyle={s.scroll}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Header row */}
-        <View style={s.topRow}>
-          {step > 0 && (
-            <TouchableOpacity style={s.backButton} onPress={() => setStep((p) => (p - 1) as 0 | 1 | 2)}>
-              <Text style={s.backArrow}>←</Text>
-            </TouchableOpacity>
-          )}
-          <View style={[s.dotsWrapper, step === 0 && s.dotsCenter]}>
-            <StepDots step={step} total={3} />
-          </View>
-        </View>
-
-        {/* ── Step 0: Name + University ──────────────────────────────── */}
-        {step === 0 && (
-          <Animated.View entering={FadeInDown.duration(400)} style={s.stepContainer}>
-            <View style={s.titleSection}>
-              <Text style={s.stepLabel}>STEP 1 OF 3</Text>
-              <Text style={s.title}>Who are you?</Text>
-              <Text style={s.subtitle}>
-                Your name appears on the leaderboard. Make it count.
-              </Text>
-            </View>
-
-            <View style={s.fieldWrapper}>
-              <Text style={s.fieldLabel}>Your Name</Text>
-              <View style={[s.inputContainer, focusedField === 'name' && s.inputFocused]}>
-                <TextInput
-                  style={s.input}
-                  placeholder="First name or display name"
-                  placeholderTextColor={Colors.textSecondary}
-                  value={name}
-                  onChangeText={setName}
-                  autoCorrect={false}
-                  onFocus={() => setFocusedField('name')}
-                  onBlur={() => setFocusedField(null)}
-                />
-              </View>
-            </View>
-
-            <View style={s.fieldWrapper}>
-              <Text style={s.fieldLabel}>University</Text>
-              <View style={[s.inputContainer, focusedField === 'uni' && s.inputFocused]}>
-                <TextInput
-                  style={s.input}
-                  placeholder="Your university"
-                  placeholderTextColor={Colors.textSecondary}
-                  value={university}
-                  onChangeText={setUniversity}
-                  autoCorrect={false}
-                  onFocus={() => setFocusedField('uni')}
-                  onBlur={() => setFocusedField(null)}
-                />
-              </View>
-            </View>
-
-            <TouchableOpacity style={s.primaryButton} onPress={advance} activeOpacity={0.85}>
-              <LinearGradient
-                colors={[Colors.primary, Colors.primaryDeep]}
-                style={s.primaryGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-              >
-                <View style={s.primaryButtonContent}>
-                  <Text style={s.primaryButtonText}>Continue</Text>
-                  <AppIcon name="chevron-right" size={18} color="#FFFFFF" />
-                </View>
-              </LinearGradient>
-            </TouchableOpacity>
-          </Animated.View>
-        )}
-
-        {/* ── Step 1: Goal Type ──────────────────────────────────────── */}
+        {/* ── Step 1 · Identity ─────────────────────────────────────── */}
         {step === 1 && (
-          <Animated.View entering={SlideInRight.duration(350)} style={s.stepContainer}>
-            <View style={s.titleSection}>
-              <Text style={s.stepLabel}>STEP 2 OF 3</Text>
-              <Text style={s.title}>What's your goal?</Text>
-              <Text style={s.subtitle}>
-                Be honest — we'll set your macro targets based on this.
-              </Text>
+          <Animated.View entering={FadeIn.duration(250)} style={{ marginTop: 26, gap: 24 }}>
+            <Text style={[Type.title, { fontSize: 28, color: colors.ink }]}>
+              What should your league call you?
+            </Text>
+            <View style={{ gap: 12 }}>
+              <TextField
+                label="Display name"
+                value={name}
+                onChangeText={(t) => {
+                  setName(t);
+                  if (nameError) setNameError(null);
+                }}
+                error={nameError}
+                autoCapitalize="words"
+                autoFocus
+              />
+              <TextField label="University" value={university} onChangeText={setUniversity} autoCapitalize="words" />
             </View>
 
-            <View style={s.goalsGrid}>
-              {GOALS.map((g) => {
-                const active = goalType === g.id;
-                return (
-                  <TouchableOpacity
-                    key={g.id}
-                    style={[
-                      s.goalCard,
-                      active && { borderColor: g.accentColor, backgroundColor: `${g.accentColor}15` },
-                    ]}
-                    onPress={() => selectGoal(g.id)}
-                    activeOpacity={0.8}
-                  >
-                    {active && (
-                      <View style={[s.goalCheckBadge, { backgroundColor: g.accentColor }]}>
-                        <AppIcon name="checkmark" size={12} color="#0A0A0F" strokeWidth={3} />
-                      </View>
-                    )}
-                    {g.icon === 'flame' ? (
-                      <View style={s.goalArt}><PixelFlame size={28} animated={active} /></View>
-                    ) : (
-                      <View style={s.goalArt}>
-                        <AppIcon name={g.icon} size={28} color={active ? g.accentColor : Colors.textSecondary} />
-                      </View>
-                    )}
-                    <Text style={[s.goalLabel, active && { color: g.accentColor }]}>{g.label}</Text>
-                    <Text style={s.goalDesc}>{g.description}</Text>
-                    {active && (
-                      <Text style={[s.goalWhy, { color: g.accentColor }]}>{g.why}</Text>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <TouchableOpacity style={s.primaryButton} onPress={advance} activeOpacity={0.85}>
-              <LinearGradient
-                colors={[Colors.primary, Colors.primaryDeep]}
-                style={s.primaryGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
+            {/* What the league sees */}
+            <Card padded>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <AppIcon name="eye" size={14} color={colors.textSecondary} />
+                <Text variant="overline" color={colors.textSecondary}>What the league sees</Text>
+              </View>
+              <View
+                style={{
+                  marginTop: 10,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 10,
+                  backgroundColor: colors.canvas,
+                  borderRadius: 12,
+                  padding: 10,
+                }}
               >
-                <View style={s.primaryButtonContent}>
-                  <Text style={s.primaryButtonText}>Continue</Text>
-                  <AppIcon name="chevron-right" size={18} color="#FFFFFF" />
+                <Text style={{ fontFamily: FontFamily.numBold, fontSize: 15, color: colors.textSecondary, width: 18 }}>4</Text>
+                <Avatar name={displayName} size={32} />
+                <View style={{ flex: 1 }}>
+                  <Text variant="cardTitle" color={colors.ink} numberOfLines={1}>{displayName}</Text>
+                  <Text variant="labelSm" color={colors.textSecondary}>{university.trim() || 'University'}</Text>
                 </View>
-              </LinearGradient>
-            </TouchableOpacity>
+                <Text style={{ fontFamily: FontFamily.numBold, fontSize: 15, color: colors.ink }}>
+                  196 <Text style={{ fontFamily: FontFamily.semibold, fontSize: 10, color: colors.textSecondary }}>LP</Text>
+                </Text>
+              </View>
+              <Text variant="label" color={colors.textSecondary} style={{ marginTop: 10 }}>
+                The public leaderboard shows your display name, avatar, university, streak, and League Points — never your private meal details.
+              </Text>
+            </Card>
           </Animated.View>
         )}
 
-        {/* ── Step 2: Macro Targets ──────────────────────────────────── */}
+        {/* ── Step 2 · Goal ─────────────────────────────────────────── */}
         {step === 2 && (
-          <Animated.View entering={SlideInRight.duration(350)} style={s.stepContainer}>
-            <View style={s.titleSection}>
-              <Text style={s.stepLabel}>STEP 3 OF 3</Text>
-              <Text style={s.title}>Daily targets.</Text>
-              <Text style={s.subtitle}>
-                Auto-set for your goal. Fine-tune to match your body and lifestyle.
-              </Text>
-            </View>
-
-            <View style={s.macroCard}>
-              <MacroRow label="Calories" value={macros.calories} unit="kcal" min={1500} max={4000} color={Colors.accent} onChange={(v) => updateMacro('calories', v)} />
-              <View style={s.macroDivider} />
-              <MacroRow label="Protein" value={macros.protein} unit="g" min={50} max={300} color={Colors.primary} onChange={(v) => updateMacro('protein', v)} />
-              <View style={s.macroDivider} />
-              <MacroRow label="Carbs" value={macros.carbs} unit="g" min={50} max={500} color={Colors.gold} onChange={(v) => updateMacro('carbs', v)} />
-              <View style={s.macroDivider} />
-              <MacroRow label="Fat" value={macros.fats} unit="g" min={20} max={200} color={Colors.success} onChange={(v) => updateMacro('fats', v)} />
-            </View>
-
-            <View style={s.microNote}>
-              <AppIcon name="idea" size={14} color={Colors.textSecondary} />
-              <Text style={s.microNoteText}>
-                Micronutrients (vitamins, minerals) are tracked automatically every time you log a meal — no extra setup needed.
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              style={[s.primaryButton, saving && s.buttonDisabled]}
-              onPress={advance}
-              activeOpacity={0.85}
-              disabled={saving}
-            >
-              <LinearGradient
-                colors={[Colors.primary, Colors.primaryDeep]}
-                style={s.primaryGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-              >
-                <View style={s.primaryButtonContent}>
-                  {saving ? (
-                    <ActivityIndicator color="#FFFFFF" />
+          <Animated.View entering={FadeIn.duration(250)} style={{ marginTop: 26, gap: 10 }}>
+            <Text style={[Type.title, { fontSize: 28, color: colors.ink, marginBottom: 14 }]}>
+              What are you working toward?
+            </Text>
+            {GOALS.map((g) => {
+              const active = goalType === g.id;
+              return (
+                <Pressable
+                  key={g.id}
+                  onPress={() => selectGoal(g.id)}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 14,
+                    backgroundColor: colors.card,
+                    borderRadius: 16,
+                    borderWidth: active ? 2 : 1.5,
+                    borderColor: active ? colors.scarlet : colors.borderCard,
+                    padding: 15,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 12,
+                      backgroundColor: active ? colors.brandTint : colors.track,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <AppIcon name={g.icon} size={20} color={active ? colors.scarlet : colors.textSecondary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text variant="subhead" color={colors.ink}>{g.label}</Text>
+                    <Text variant="label" color={colors.textSecondary} style={{ marginTop: 1 }}>{g.sub}</Text>
+                  </View>
+                  {active ? (
+                    <View
+                      style={{
+                        width: 22,
+                        height: 22,
+                        borderRadius: 11,
+                        backgroundColor: colors.scarlet,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <AppIcon name="checkmark" size={13} color={colors.onPrimary} strokeWidth={3} />
+                    </View>
                   ) : (
-                    <>
-                      <Text style={s.primaryButtonText}>Let's Compete</Text>
-                      <AppIcon name="trophy" size={18} color="#FFFFFF" />
-                    </>
+                    <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: colors.borderInput }} />
                   )}
-                </View>
-              </LinearGradient>
-            </TouchableOpacity>
+                </Pressable>
+              );
+            })}
           </Animated.View>
         )}
-      </ScrollView>
+
+        {/* ── Step 3 · Targets ──────────────────────────────────────── */}
+        {step === 3 && (
+          <Animated.View entering={FadeIn.duration(250)} style={{ marginTop: 26 }}>
+            <Text style={[Type.title, { fontSize: 28, color: colors.ink }]}>Your daily targets</Text>
+            <Text variant="label" color={colors.textSecondary} style={{ marginTop: 8 }}>
+              {GOAL_BLURB[goalType]} You can edit these anytime in Settings.
+            </Text>
+
+            <Card padded={false} style={{ marginTop: 20, overflow: 'hidden' }}>
+              <TargetRow label="Calories" value={macros.calories.toLocaleString()} unit="kcal"
+                onDecrement={() => bump('calories', -50, 1500)} onIncrement={() => bump('calories', 50, 1500)} />
+              <TargetRow label="Protein" value={macros.protein} unit="g"
+                onDecrement={() => bump('protein', -5, 0)} onIncrement={() => bump('protein', 5, 0)} />
+              <TargetRow label="Carbohydrates" value={macros.carbs} unit="g"
+                onDecrement={() => bump('carbs', -5, 0)} onIncrement={() => bump('carbs', 5, 0)} />
+              <TargetRow label="Unsaturated fat" value={macros.fats} unit="g" showDivider={false}
+                onDecrement={() => bump('fats', -2, 0)} onIncrement={() => bump('fats', 2, 0)} />
+            </Card>
+
+            {/* Calorie source */}
+            <Card padded style={{ marginTop: 14 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text variant="labelSm" color={colors.textSecondary}>Where your calories come from</Text>
+                <Text variant="labelSm" color={colors.textSecondary}>{totalKcal.toLocaleString()} kcal</Text>
+              </View>
+              <View style={{ flexDirection: 'row', height: 10, borderRadius: 5, overflow: 'hidden', marginTop: 9 }}>
+                <View style={{ flex: proKcal, backgroundColor: colors.ink }} />
+                <View style={{ flex: carbKcal, backgroundColor: colors.macroCarb }} />
+                <View style={{ flex: fatKcal, backgroundColor: colors.macroFat }} />
+              </View>
+              <View style={{ flexDirection: 'row', gap: 14, marginTop: 9 }}>
+                <Legend color={colors.ink} label={`Protein ${pct(proKcal)}`} />
+                <Legend color={colors.macroCarb} label={`Carbs ${pct(carbKcal)}`} />
+                <Legend color={colors.macroFat} label={`Fat ${pct(fatKcal)}`} />
+              </View>
+            </Card>
+          </Animated.View>
+        )}
+
+        {/* ── Step 4 · Competition intro ────────────────────────────── */}
+        {step === 4 && (
+          <Animated.View entering={FadeIn.duration(250)} style={{ marginTop: 26 }}>
+            <Text style={[Type.title, { fontSize: 28, color: colors.ink }]}>Every meal moves you up</Text>
+            <Text variant="label" color={colors.textSecondary} style={{ marginTop: 8 }}>
+              Confirmed meals earn XP for your level and League Points for your rank.
+            </Text>
+
+            <Card variant="hero" padded style={{ marginTop: 22 }}>
+              {/* meal row */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.canvas, borderRadius: 14, padding: 12 }}>
+                <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#F3E4D2', alignItems: 'center', justifyContent: 'center' }}>
+                  <AppIcon name="meal" size={19} color="#A0642A" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text variant="subhead" color={colors.ink}>Chicken rice bowl</Text>
+                  <Text variant="label" color={colors.textSecondary}>Logged 12:47 PM · 620 kcal</Text>
+                </View>
+              </View>
+              <View style={{ alignItems: 'center', paddingVertical: 6 }}>
+                <AppIcon name="arrow-down" size={16} color={colors.textTertiary} />
+              </View>
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <RewardTile value="+50 XP" color={colors.success} note="Levels up your profile" />
+                <RewardTile value="+10 LP" color={colors.scarlet} note="Scores in your league" />
+              </View>
+              <View style={{ alignItems: 'center', paddingVertical: 6 }}>
+                <AppIcon name="arrow-down" size={16} color={colors.textTertiary} />
+              </View>
+              {/* mini leaderboard */}
+              <View style={{ backgroundColor: colors.canvas, borderRadius: 14, paddingVertical: 6 }}>
+                <MiniRow rank="3" name="Maya" lp="214 LP" you={false} />
+                <MiniRow rank="4" name="You" lp="196 LP" you />
+              </View>
+            </Card>
+          </Animated.View>
+        )}
+
+        <View style={{ flex: 1, minHeight: 20 }} />
+        <Button
+          label={step === 4 ? 'Enter MacroLeague' : 'Continue'}
+          loading={saving}
+          loadingLabel="Setting up…"
+          onPress={onContinue}
+        />
+      </Screen>
     </KeyboardAvoidingView>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+function Legend({ color, label }: { color: string; label: string }) {
+  const { colors } = useTheme();
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+      <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: color }} />
+      <Text variant="labelSm" color={colors.textSecondary}>{label}</Text>
+    </View>
+  );
+}
 
-const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  scroll: { flexGrow: 1, paddingHorizontal: 24, paddingTop: Platform.OS === 'ios' ? 60 : 40, paddingBottom: 48 },
+function RewardTile({ value, color, note }: { value: string; color: string; note: string }) {
+  const { colors } = useTheme();
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.canvas, borderRadius: 14, padding: 12 }}>
+      <Text style={{ fontFamily: FontFamily.numBold, fontSize: 24, color }}>{value}</Text>
+      <Text variant="labelSm" color={colors.textSecondary} style={{ marginTop: 3 }}>{note}</Text>
+    </View>
+  );
+}
 
-  topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  backButton: {
-    width: 40, height: 40, borderRadius: 12,
-    backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border,
-    alignItems: 'center', justifyContent: 'center',
-    marginRight: 16,
-  },
-  backArrow: { color: Colors.textPrimary, fontSize: 18 },
-  dotsWrapper: { flex: 1 },
-  dotsCenter: { alignItems: 'center' },
-
-  stepContainer: { gap: 20 },
-  titleSection: { gap: 8, marginBottom: 4 },
-  stepLabel: {
-    fontFamily: FontFamily.bodyMedium, fontSize: 11,
-    color: Colors.primary, letterSpacing: 2, textTransform: 'uppercase',
-  },
-  title: { fontFamily: FontFamily.displayBold, fontSize: 36, color: Colors.textPrimary, letterSpacing: 0.5 },
-  subtitle: { fontFamily: FontFamily.body, fontSize: 14, color: Colors.textSecondary, lineHeight: 20 },
-
-  fieldWrapper: { gap: 8 },
-  fieldLabel: {
-    fontFamily: FontFamily.bodyMedium, fontSize: 12,
-    color: Colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1,
-  },
-  inputContainer: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: Colors.surface, borderRadius: 14,
-    borderWidth: 1, borderColor: Colors.border,
-    paddingHorizontal: 16, height: 52,
-  },
-  inputFocused: {
-    borderColor: Colors.primary,
-    shadowColor: Colors.primary, shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.2, shadowRadius: 8,
-  },
-  input: { flex: 1, fontFamily: FontFamily.body, fontSize: 15, color: Colors.textPrimary },
-
-  primaryButton: {
-    borderRadius: 50, overflow: 'hidden',
-    shadowColor: Colors.primary, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35, shadowRadius: 12, elevation: 8, marginTop: 4,
-  },
-  primaryGradient: { height: 54, alignItems: 'center', justifyContent: 'center' },
-  primaryButtonText: { fontFamily: FontFamily.bodySemiBold, fontSize: 16, color: '#FFFFFF', letterSpacing: 0.3 },
-  primaryButtonContent: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  buttonDisabled: { opacity: 0.6 },
-
-  goalsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  goalCard: {
-    width: (width - 48 - 12) / 2,
-    backgroundColor: Colors.surface, borderRadius: 16,
-    borderWidth: 1, borderColor: Colors.border,
-    padding: 18, gap: 6, position: 'relative',
-  },
-  goalCheckBadge: {
-    position: 'absolute', top: 10, right: 10,
-    width: 20, height: 20, borderRadius: 10,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  goalArt: { height: 34, justifyContent: 'center' },
-  goalLabel: { fontFamily: FontFamily.bodySemiBold, fontSize: 15, color: Colors.textPrimary },
-  goalDesc: { fontFamily: FontFamily.body, fontSize: 12, color: Colors.textSecondary, lineHeight: 16 },
-  goalWhy: { fontFamily: FontFamily.bodyMedium, fontSize: 11, marginTop: 2, lineHeight: 15 },
-
-  macroCard: {
-    backgroundColor: Colors.surface, borderRadius: 16,
-    borderWidth: 1, borderColor: Colors.border,
-    padding: 20, gap: 16,
-  },
-  macroDivider: { height: 1, backgroundColor: Colors.border },
-
-  microNote: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
-    backgroundColor: Colors.surface, borderRadius: 12,
-    borderWidth: 1, borderColor: Colors.border,
-    padding: 14,
-  },
-  microNoteText: {
-    flex: 1,
-    fontFamily: FontFamily.body, fontSize: 12,
-    color: Colors.textSecondary, lineHeight: 18,
-  },
-});
+function MiniRow({ rank, name, lp, you }: { rank: string; name: string; lp: string; you: boolean }) {
+  const { colors } = useTheme();
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        paddingVertical: 8,
+        paddingHorizontal: 14,
+        backgroundColor: you ? colors.brandTint : 'transparent',
+        borderLeftWidth: you ? 3 : 0,
+        borderLeftColor: colors.scarlet,
+      }}
+    >
+      <Text style={{ fontFamily: FontFamily.numBold, fontSize: 14, color: you ? colors.scarlet : colors.textSecondary, width: 16 }}>{rank}</Text>
+      <Avatar name={name} size={26} />
+      <Text variant="cardTitle" color={colors.ink} style={{ flex: 1 }}>{name}</Text>
+      <Text style={{ fontFamily: FontFamily.numBold, fontSize: 14, color: colors.ink }}>{lp}</Text>
+    </View>
+  );
+}

@@ -1,16 +1,7 @@
 import React, { useCallback, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Modal,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
+import { View, StyleSheet, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { Colors, FontFamily } from '../../theme';
+import { Type, Spacing, Radius, useTheme } from '../../theme';
 import { useUserStore } from '../../store/userStore';
 import {
   listRewards,
@@ -19,7 +10,19 @@ import {
   RewardCatalogItem,
 } from '../../services/rewardService';
 import { getEarnRules, EarnRule } from '../../services/ruleSetService';
-import AppIcon, { AppIconName } from '../../components/ui/AppIcon';
+import {
+  Screen,
+  ScreenHeader,
+  Text,
+  Card,
+  Button,
+  ProgressBar,
+  Badge,
+  Sheet,
+  AppIcon,
+  AppIconName,
+  Divider,
+} from '../../components/ui';
 
 function rewardIcon(reward: RewardCatalogItem): AppIconName {
   if (reward.category === 'Fitness') return 'protein';
@@ -31,7 +34,17 @@ function rewardIcon(reward: RewardCatalogItem): AppIconName {
   return 'gift';
 }
 
+/** A stable pseudo-code for the redemption pass placeholder (no real code before backend issue). */
+function passCode(reward: RewardCatalogItem): string {
+  const base = reward.id.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  const a = (base.slice(0, 4) || 'RWD0').padEnd(4, '0');
+  const b = (base.slice(4, 6) || '00').padEnd(2, '0');
+  return `${reward.partnerName.slice(0, 4).toUpperCase().padEnd(4, 'X')}-${a}-${b}`;
+}
+
 export default function RewardsScreen({ navigation }: any) {
+  const { colors } = useTheme();
+
   const user = useUserStore((s) => s.user);
   const adjustPointsLocally = useUserStore((s) => s.adjustPointsLocally);
   const refreshStats = useUserStore((s) => s.refreshStats);
@@ -40,10 +53,13 @@ export default function RewardsScreen({ navigation }: any) {
   const [earnRules, setEarnRules] = useState<EarnRule[]>([]);
   const [redeemed, setRedeemed] = useState<Set<string>>(new Set());
   const [selectedReward, setSelectedReward] = useState<RewardCatalogItem | null>(null);
+  const [passReward, setPassReward] = useState<RewardCatalogItem | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
   const [earnExpanded, setEarnExpanded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isRedeeming, setIsRedeeming] = useState(false);
+
+  const balance = user?.points ?? 0;
 
   // On focus: pull the real points balance + the catalog + which rewards this
   // user has already redeemed, so the screen reflects backend truth.
@@ -86,6 +102,7 @@ export default function RewardsScreen({ navigation }: any) {
       adjustPointsLocally(newBalance - user.points);
       void refreshStats();
       setRedeemed((prev) => new Set(prev).add(reward.id));
+      setPassReward(reward);
       setShowConfetti(true);
       setTimeout(() => setShowConfetti(false), 2500);
     } catch (caughtError) {
@@ -98,287 +115,337 @@ export default function RewardsScreen({ navigation }: any) {
     }
   }
 
+  const balanceAfter = selectedReward ? balance - selectedReward.pointsCost : 0;
+  const canAffordSelected = selectedReward ? balance >= selectedReward.pointsCost : false;
+
   return (
-    <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <AppIcon name="back" size={17} color={Colors.primary} />
-          <Text style={styles.backText}>Back</Text>
-        </TouchableOpacity>
+    <Screen scroll>
+      <ScreenHeader title="Rewards" onBack={() => navigation.goBack()} />
 
-        <Text style={styles.title}>REWARDS</Text>
-
-        {/* Points Balance — real backend-owned points. */}
-        <View style={styles.balanceCard}>
-          <Text style={styles.balanceLabel}>Your Points</Text>
-          <Text style={styles.balanceValue}>{user?.points.toLocaleString() ?? 0}</Text>
-          <Text style={styles.balanceSub}>Earn points from logging, streaks & challenges</Text>
+      {/* Balance card — real backend-owned points. Gold accents allowed here. */}
+      <Card variant="hero" style={[styles.balanceCard, { backgroundColor: colors.card }]}>
+        <View style={{ flex: 1 }}>
+          <Text variant="overline" color={colors.textSecondary}>
+            Balance
+          </Text>
+          <View style={styles.balanceValueRow}>
+            <Text style={[Type.scoreMed, { fontSize: 44, lineHeight: 46, color: colors.ink }]}>
+              {balance.toLocaleString()}
+            </Text>
+            <Text variant="subhead" color={colors.gold} style={{ marginBottom: 4 }}>
+              LP
+            </Text>
+          </View>
+          <Text variant="labelSm" color={colors.textTertiary} style={{ marginTop: 2 }}>
+            Earn LP from logging, streaks & challenges
+          </Text>
         </View>
+        <View style={[styles.giftBadge, { backgroundColor: colors.goldTint }]}>
+          <AppIcon name="gift" size={26} color={colors.gold} />
+        </View>
+      </Card>
 
-        {showConfetti && (
-          <View style={styles.confettiOverlay}>
-            <AppIcon name="party" size={22} color={Colors.gold} />
-            <Text style={styles.confettiText}>Reward Unlocked</Text>
-          </View>
-        )}
+      {showConfetti && (
+        <View style={[styles.confetti, { backgroundColor: colors.goldTint }]}>
+          <AppIcon name="party" size={20} color={colors.gold} />
+          <Text variant="subhead" color={colors.goldText}>
+            Reward redeemed
+          </Text>
+        </View>
+      )}
 
-        <Text style={styles.sectionTitle}>AVAILABLE REWARDS</Text>
-        {isLoading ? (
-          <View style={styles.loadingBox}>
-            <ActivityIndicator color={Colors.primary} />
-          </View>
-        ) : rewards.length === 0 ? (
-          <Text style={styles.notice}>No rewards available right now. Check back soon.</Text>
-        ) : (
-          <View style={styles.rewardsGrid}>
-            {rewards.map((reward) => {
-              const isRedeemed = redeemed.has(reward.id);
-              const canAfford = (user?.points ?? 0) >= reward.pointsCost;
-              return (
-                <TouchableOpacity
-                  key={reward.id}
-                  style={[styles.rewardCard, isRedeemed && styles.rewardCardRedeemed]}
-                  onPress={() => !isRedeemed && setSelectedReward(reward)}
-                  activeOpacity={0.8}
-                >
-                  <View style={styles.rewardIcon}>
-                    <AppIcon name={rewardIcon(reward)} size={36} color={Colors.gold} />
-                  </View>
-                  <Text style={styles.rewardPartner}>{reward.partnerName}</Text>
-                  <Text style={styles.rewardDesc}>{reward.description}</Text>
-                  <View style={styles.rewardFooter}>
-                    {isRedeemed ? (
-                      <View style={styles.redeemedRow}>
-                        <AppIcon name="check" size={14} color={Colors.primary} />
-                        <Text style={styles.redeemedBadge}>Redeemed</Text>
-                      </View>
-                    ) : (
-                      <View style={[styles.costBadge, !canAfford && { opacity: 0.4 }]}>
-                        <Text style={styles.costText}>{reward.pointsCost} pts</Text>
-                      </View>
-                    )}
-                  </View>
-                  {reward.expiryDate && (
-                    <Text style={styles.rewardExpiry}>
-                      {/* expiry_date is a date-only DB value. Adding local
-                          midnight prevents YYYY-MM-DD from parsing as UTC and
-                          displaying the previous day in western time zones. */}
-                      Expires {new Date(`${reward.expiryDate}T00:00:00`).toLocaleDateString()}
-                    </Text>
+      {/* Available rewards */}
+      <Text variant="overline" color={colors.textSecondary} style={styles.sectionLabel}>
+        Available rewards
+      </Text>
+      {isLoading ? (
+        <View style={styles.loadingBox}>
+          <ActivityIndicator color={colors.scarlet} />
+        </View>
+      ) : rewards.length === 0 ? (
+        <Text variant="label" color={colors.textSecondary}>
+          No rewards available right now. Check back soon.
+        </Text>
+      ) : (
+        <View style={styles.grid}>
+          {rewards.map((reward) => {
+            const isRedeemed = redeemed.has(reward.id);
+            const canAfford = balance >= reward.pointsCost;
+            return (
+              <Card
+                key={reward.id}
+                onPress={isRedeemed ? undefined : () => setSelectedReward(reward)}
+                style={[styles.rewardCard, isRedeemed && { opacity: 0.6 }]}
+              >
+                <View style={[styles.rewardIcon, { backgroundColor: colors.goldTint }]}>
+                  <AppIcon name={rewardIcon(reward)} size={26} color={colors.gold} />
+                </View>
+                <Text variant="cardTitle" color={colors.ink} center>
+                  {reward.partnerName}
+                </Text>
+                <Text variant="labelSm" color={colors.textSecondary} center numberOfLines={2} style={{ marginTop: 2 }}>
+                  {reward.description}
+                </Text>
+                <View style={styles.rewardFooter}>
+                  {isRedeemed ? (
+                    <View style={styles.redeemedRow}>
+                      <AppIcon name="check" size={14} color={colors.success} />
+                      <Text variant="labelSm" color={colors.successDeep}>
+                        Redeemed
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={[styles.costPill, { backgroundColor: colors.track, opacity: canAfford ? 1 : 0.5 }]}>
+                      <Text style={[Type.numInline, { color: colors.ink }]}>{reward.pointsCost}</Text>
+                      <Text variant="labelSm" color={colors.textSecondary}>
+                        LP
+                      </Text>
+                    </View>
                   )}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
-
-        {/* How to Earn */}
-        <TouchableOpacity
-          style={styles.earnHeader}
-          onPress={() => setEarnExpanded(!earnExpanded)}
-        >
-          <Text style={styles.sectionTitle}>HOW TO EARN</Text>
-          <AppIcon name={earnExpanded ? 'chevron-up' : 'chevron-down'} size={17} />
-        </TouchableOpacity>
-        {earnExpanded && (
-          <View style={styles.earnCard}>
-            {earnRules.length === 0 ? (
-              <Text style={styles.notice}>Scoring rules unavailable right now.</Text>
-            ) : (
-              earnRules.map((rule, i) => (
-                <View key={i} style={styles.earnRow}>
-                  <Text style={styles.earnAction}>{rule.action}</Text>
-                  <Text style={styles.earnPts}>+{rule.points} pts</Text>
                 </View>
-              ))
-            )}
-          </View>
-        )}
-
-        <View style={{ height: 40 }} />
-      </ScrollView>
-
-      {/* Reward Detail Modal */}
-      <Modal visible={!!selectedReward} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            {selectedReward && (
-              <>
-                <View style={styles.modalIcon}>
-                  <AppIcon name={rewardIcon(selectedReward)} size={48} color={Colors.gold} />
-                </View>
-                <Text style={styles.modalPartner}>{selectedReward.partnerName}</Text>
-                <Text style={styles.modalDesc}>{selectedReward.description}</Text>
-
-                <View style={styles.qrPlaceholder}>
-                  <Text style={styles.qrText}>[ QR CODE ]</Text>
-                  <Text style={styles.qrSub}>Show at register</Text>
-                </View>
-
-                <Text style={styles.modalCost}>{selectedReward.pointsCost} points</Text>
-
-                <TouchableOpacity
-                  style={[
-                    styles.unlockBtn,
-                    ((user?.points ?? 0) < selectedReward.pointsCost || isRedeeming) &&
-                      styles.unlockBtnDisabled,
-                  ]}
-                  onPress={() => {
-                    const reward = selectedReward;
-                    setSelectedReward(null);
-                    void handleRedeem(reward);
-                  }}
-                  disabled={(user?.points ?? 0) < selectedReward.pointsCost || isRedeeming}
-                >
-                  <Text style={styles.unlockBtnText}>
-                    {isRedeeming
-                      ? 'REDEEMING...'
-                      : (user?.points ?? 0) >= selectedReward.pointsCost
-                        ? 'UNLOCK REWARD'
-                        : 'NOT ENOUGH POINTS'}
+                {reward.expiryDate && (
+                  <Text variant="labelSm" color={colors.textTertiary} center style={{ marginTop: 6 }}>
+                    {/* expiry_date is a date-only DB value. Adding local midnight
+                        prevents YYYY-MM-DD from parsing as UTC and displaying the
+                        previous day in western time zones. */}
+                    Expires {new Date(`${reward.expiryDate}T00:00:00`).toLocaleDateString()}
                   </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity onPress={() => setSelectedReward(null)}>
-                  <Text style={styles.closeText}>Close</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
+                )}
+              </Card>
+            );
+          })}
         </View>
-      </Modal>
-    </View>
+      )}
+
+      {/* How to earn */}
+      <Pressable
+        onPress={() => setEarnExpanded((v) => !v)}
+        style={({ pressed }) => [styles.earnHeader, pressed && { opacity: 0.6 }]}
+      >
+        <Text variant="overline" color={colors.textSecondary}>
+          How to earn
+        </Text>
+        <AppIcon name={earnExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textSecondary} />
+      </Pressable>
+      {earnExpanded && (
+        <Card padded={false} style={{ marginTop: Spacing.sm }}>
+          {earnRules.length === 0 ? (
+            <Text variant="label" color={colors.textSecondary} style={{ padding: Spacing.base }}>
+              Scoring rules unavailable right now.
+            </Text>
+          ) : (
+            earnRules.map((rule, i) => (
+              <View key={i}>
+                {i > 0 && <Divider inset={Spacing.base} />}
+                <View style={styles.earnRow}>
+                  <Text variant="subhead" color={colors.ink} style={{ flex: 1 }}>
+                    {rule.action}
+                  </Text>
+                  <Text style={[Type.numInline, { color: colors.success }]}>+{rule.points} LP</Text>
+                </View>
+              </View>
+            ))
+          )}
+        </Card>
+      )}
+
+      {/* Reward detail — confirm sheet (spec 22b) */}
+      <Sheet
+        visible={!!selectedReward}
+        onClose={() => setSelectedReward(null)}
+        title={selectedReward?.partnerName}
+      >
+        {selectedReward && (
+          <View style={styles.sheetBody}>
+            <View style={styles.sheetHeaderRow}>
+              <View style={[styles.sheetIcon, { backgroundColor: colors.goldTint }]}>
+                <AppIcon name={rewardIcon(selectedReward)} size={28} color={colors.gold} />
+              </View>
+              <Text variant="body" color={colors.textSecondary} style={{ flex: 1 }}>
+                {selectedReward.description}
+              </Text>
+            </View>
+
+            <Card style={{ marginTop: Spacing.base }}>
+              <View style={styles.detailRow}>
+                <Text variant="label" color={colors.textSecondary}>
+                  Cost
+                </Text>
+                <Text style={[Type.numInline, { color: colors.ink }]}>{selectedReward.pointsCost} LP</Text>
+              </View>
+              <Divider style={{ marginVertical: 10 }} />
+              <View style={styles.detailRow}>
+                <Text variant="label" color={colors.textSecondary}>
+                  Balance after
+                </Text>
+                <Text style={[Type.numInline, { color: canAffordSelected ? colors.ink : colors.error }]}>
+                  {balanceAfter} LP
+                </Text>
+              </View>
+              {selectedReward.expiryDate && (
+                <>
+                  <Divider style={{ marginVertical: 10 }} />
+                  <View style={styles.detailRow}>
+                    <Text variant="label" color={colors.textSecondary}>
+                      Expires
+                    </Text>
+                    <Text variant="label" color={colors.ink}>
+                      {new Date(`${selectedReward.expiryDate}T00:00:00`).toLocaleDateString()}
+                    </Text>
+                  </View>
+                </>
+              )}
+            </Card>
+
+            <Text variant="labelSm" color={colors.textTertiary} style={{ marginTop: Spacing.md }}>
+              One redemption per member. Show the pass at the register; the code is generated after you
+              confirm.
+            </Text>
+
+            <View style={{ marginTop: Spacing.base, gap: Spacing.sm }}>
+              <Button
+                label={canAffordSelected ? `Redeem for ${selectedReward.pointsCost} LP` : 'Not enough LP'}
+                loading={isRedeeming}
+                loadingLabel="Redeeming…"
+                disabled={!canAffordSelected}
+                onPress={() => {
+                  const reward = selectedReward;
+                  setSelectedReward(null);
+                  void handleRedeem(reward);
+                }}
+              />
+              <Button label="Not now" variant="ghost" onPress={() => setSelectedReward(null)} />
+            </View>
+          </View>
+        )}
+      </Sheet>
+
+      {/* Redemption pass (spec 22c) */}
+      <Sheet visible={!!passReward} onClose={() => setPassReward(null)}>
+        {passReward && (
+          <View style={styles.sheetBody}>
+            <View style={styles.passHeader}>
+              <View style={[styles.sheetIcon, { backgroundColor: colors.goldTint }]}>
+                <AppIcon name={rewardIcon(passReward)} size={28} color={colors.gold} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text variant="subhead" color={colors.ink}>
+                  {passReward.partnerName}
+                </Text>
+                <Text variant="labelSm" color={colors.textSecondary}>
+                  {passReward.description}
+                </Text>
+              </View>
+              <View style={[styles.activeBadge, { backgroundColor: colors.goldActive }]}>
+                <Text variant="labelSm" color={colors.ink} style={{ fontWeight: '700' }}>
+                  ACTIVE
+                </Text>
+              </View>
+            </View>
+
+            <View style={[styles.qrBox, { borderColor: colors.borderCard, backgroundColor: colors.card }]}>
+              <AppIcon name="qr" size={96} color={colors.ink} />
+              <Text style={[Type.numInline, { color: colors.ink, letterSpacing: 3, marginTop: 10 }]}>
+                {passCode(passReward)}
+              </Text>
+            </View>
+
+            {passReward.expiryDate && (
+              <Text variant="labelSm" color={colors.textTertiary} center style={{ marginTop: Spacing.md }}>
+                Expires {new Date(`${passReward.expiryDate}T00:00:00`).toLocaleDateString()}
+              </Text>
+            )}
+            <Text variant="labelSm" color={colors.textTertiary} center style={{ marginTop: 4 }}>
+              Show this pass at the register. Staff will scan or enter the code.
+            </Text>
+
+            <View style={{ marginTop: Spacing.base }}>
+              <Button label="Done" variant="secondary" icon="check" onPress={() => setPassReward(null)} />
+            </View>
+          </View>
+        )}
+      </Sheet>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  content: { padding: 20, paddingTop: 60 },
-  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 16 },
-  backText: { fontFamily: FontFamily.bodyMedium, fontSize: 15, color: Colors.primary },
-  title: {
-    fontFamily: FontFamily.displayBold,
-    fontSize: 24,
-    color: Colors.textPrimary,
-    letterSpacing: 1,
-    marginBottom: 16,
-  },
   balanceCard: {
-    backgroundColor: Colors.primary + '10',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Colors.primary + '33',
-    padding: 24,
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  balanceLabel: { fontFamily: FontFamily.bodyMedium, fontSize: 14, color: Colors.textSecondary },
-  balanceValue: { fontFamily: FontFamily.displayBold, fontSize: 42, color: Colors.primary, marginVertical: 4 },
-  balanceSub: { fontFamily: FontFamily.body, fontSize: 12, color: Colors.textSecondary },
-  confettiOverlay: {
     flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.lg,
+    marginTop: Spacing.base,
+    marginBottom: Spacing.base,
+  },
+  balanceValueRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 6, marginTop: 2 },
+  giftBadge: {
+    width: 52,
+    height: 52,
+    borderRadius: Radius.chip,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confetti: {
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: Colors.gold + '18',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginBottom: 16,
+    borderRadius: Radius.md,
+    paddingVertical: 12,
+    marginBottom: Spacing.base,
   },
-  confettiText: { fontFamily: FontFamily.displayBold, fontSize: 18, color: Colors.gold },
-  sectionTitle: {
-    fontFamily: FontFamily.displayBold,
-    fontSize: 13,
-    color: Colors.textSecondary,
-    letterSpacing: 1.5,
-    marginBottom: 12,
-  },
+  sectionLabel: { marginBottom: Spacing.md, marginTop: Spacing.xs },
   loadingBox: { paddingVertical: 30, alignItems: 'center' },
-  notice: { fontFamily: FontFamily.body, fontSize: 13, color: Colors.textSecondary, paddingVertical: 8 },
-  rewardsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 24 },
-  rewardCard: {
-    width: '48%',
-    backgroundColor: Colors.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 16,
-    marginBottom: 12,
+  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+  rewardCard: { width: '48.5%', alignItems: 'center', paddingVertical: Spacing.base, marginBottom: Spacing.md },
+  rewardIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: Radius.chip,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
   },
-  rewardCardRedeemed: { borderColor: Colors.primary + '44', backgroundColor: Colors.primary + '08' },
-  rewardIcon: { marginBottom: 8 },
-  rewardPartner: { fontFamily: FontFamily.displayBold, fontSize: 14, color: Colors.textPrimary, textAlign: 'center' },
-  rewardDesc: { fontFamily: FontFamily.body, fontSize: 12, color: Colors.textSecondary, textAlign: 'center', marginTop: 4 },
   rewardFooter: { marginTop: 10 },
-  costBadge: {
-    backgroundColor: Colors.primary + '18',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  costText: { fontFamily: FontFamily.displayBold, fontSize: 12, color: Colors.primary },
-  redeemedBadge: { fontFamily: FontFamily.bodySemiBold, fontSize: 12, color: Colors.primary },
   redeemedRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  rewardExpiry: { fontFamily: FontFamily.body, fontSize: 10, color: Colors.textSecondary, marginTop: 6 },
-  earnHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  earnCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 14,
+  costPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    borderRadius: Radius.pill,
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+  },
+  earnHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: Spacing.sm,
   },
   earnRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  earnAction: { fontFamily: FontFamily.bodyMedium, fontSize: 14, color: Colors.textPrimary },
-  earnPts: { fontFamily: FontFamily.displayBold, fontSize: 14, color: Colors.primary },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    paddingVertical: 14,
+    paddingHorizontal: Spacing.base,
   },
-  modalCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 28,
-    width: '100%',
-    alignItems: 'center',
-  },
-  modalIcon: { marginBottom: 12 },
-  modalPartner: { fontFamily: FontFamily.displayBold, fontSize: 22, color: Colors.textPrimary },
-  modalDesc: { fontFamily: FontFamily.bodyMedium, fontSize: 15, color: Colors.textSecondary, marginTop: 4, textAlign: 'center' },
-  qrPlaceholder: {
-    width: 140,
-    height: 140,
-    borderRadius: 12,
-    backgroundColor: Colors.surface2,
-    borderWidth: 1,
-    borderColor: Colors.border,
+  sheetBody: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.base },
+  sheetHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  sheetIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: Radius.chip,
     alignItems: 'center',
     justifyContent: 'center',
-    marginVertical: 20,
   },
-  qrText: { fontFamily: FontFamily.bodyMedium, fontSize: 14, color: Colors.textSecondary },
-  qrSub: { fontFamily: FontFamily.body, fontSize: 11, color: Colors.textSecondary, marginTop: 4 },
-  modalCost: { fontFamily: FontFamily.displayBold, fontSize: 18, color: Colors.primary, marginBottom: 16 },
-  unlockBtn: {
-    backgroundColor: Colors.primary,
-    borderRadius: 50,
-    paddingVertical: 16,
-    paddingHorizontal: 40,
-    marginBottom: 12,
+  detailRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  passHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  activeBadge: { borderRadius: 6, paddingVertical: 4, paddingHorizontal: 8 },
+  qrBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    paddingVertical: Spacing.xl,
+    marginTop: Spacing.lg,
   },
-  unlockBtnDisabled: { backgroundColor: Colors.surface2 },
-  unlockBtnText: { fontFamily: FontFamily.displayBold, fontSize: 15, color: Colors.background },
-  closeText: { fontFamily: FontFamily.bodyMedium, fontSize: 14, color: Colors.textSecondary },
 });

@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
-import { Colors, FontFamily } from '../../theme';
+import { View, Alert } from 'react-native';
+import { useTheme, Radius } from '../../theme';
+import { Screen, Text, Button, AppIcon } from '../../components/ui';
 import { useUserStore } from '../../store/userStore';
 import { reactivateAccount } from '../../services/accountService';
 import { signOut } from '../../lib/auth';
-import AppIcon from '../../components/ui/AppIcon';
 
 /**
  * Full-screen gate shown (instead of the main app) when the signed-in account is
@@ -13,6 +13,7 @@ import AppIcon from '../../components/ui/AppIcon';
  * user can no longer reach this screen (they can't sign in).
  */
 export default function ReactivateAccountScreen() {
+  const { colors } = useTheme();
   const deletionScheduledAt = useUserStore((s) => s.deletionScheduledAt);
   const setAccountLifecycle = useUserStore((s) => s.setAccountLifecycle);
   const logout = useUserStore((s) => s.logout);
@@ -53,76 +54,47 @@ export default function ReactivateAccountScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.statusIcon}>
-        <AppIcon name="hourglass" size={42} color={Colors.accent} />
+    <Screen>
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <View
+          style={{
+            width: 72,
+            height: 72,
+            borderRadius: Radius.hero,
+            backgroundColor: colors.streakTint,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 24,
+          }}
+        >
+          <AppIcon name="hourglass" size={36} color={colors.streak} />
+        </View>
+
+        <Text variant="title" color={colors.ink} center style={{ marginBottom: 14 }}>
+          Account scheduled for deletion
+        </Text>
+
+        <Text variant="body" color={colors.textSecondary} center style={{ marginBottom: 12 }}>
+          {whenText
+            ? `Your account is archived and will be permanently deleted on ${whenText}.`
+            : 'Your account is archived and scheduled for permanent deletion.'}
+        </Text>
+        <Text variant="body" color={colors.textSecondary} center style={{ marginBottom: 8 }}>
+          Until then, nothing is gone. Reactivate to keep your streak, logs, and points
+          exactly as you left them. If you didn't request this, reactivate and reset your
+          password.
+        </Text>
       </View>
-      <Text style={styles.title}>Account scheduled for deletion</Text>
-      <Text style={styles.body}>
-        {whenText
-          ? `Your account is archived and will be permanently deleted on ${whenText}.`
-          : 'Your account is archived and scheduled for permanent deletion.'}
-      </Text>
-      <Text style={styles.body}>
-        Until then, nothing is gone. Reactivate to keep your streak, logs, and points
-        exactly as you left them. If you didn't request this, reactivate and reset your
-        password.
-      </Text>
 
-      <TouchableOpacity
-        style={[styles.primaryBtn, busy && styles.disabled]}
-        onPress={onReactivate}
-        disabled={busy}
-      >
-        {busy ? (
-          <ActivityIndicator color={Colors.background} />
-        ) : (
-          <Text style={styles.primaryText}>REACTIVATE MY ACCOUNT</Text>
-        )}
-      </TouchableOpacity>
-
-      <TouchableOpacity style={styles.secondaryBtn} onPress={onSignOut} disabled={busy}>
-        <Text style={styles.secondaryText}>Sign out</Text>
-      </TouchableOpacity>
-    </View>
+      <View style={{ gap: 10 }}>
+        <Button
+          label="Reactivate account"
+          onPress={onReactivate}
+          loading={busy}
+          loadingLabel="Reactivating…"
+        />
+        <Button label="Sign out" variant="ghost" onPress={onSignOut} disabled={busy} />
+      </View>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 28,
-  },
-  statusIcon: { marginBottom: 16 },
-  title: {
-    fontFamily: FontFamily.displayBold,
-    fontSize: 22,
-    color: Colors.textPrimary,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  body: {
-    fontFamily: FontFamily.body,
-    fontSize: 14,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 14,
-  },
-  primaryBtn: {
-    backgroundColor: Colors.primary,
-    borderRadius: 50,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    alignItems: 'center',
-    alignSelf: 'stretch',
-    marginTop: 14,
-  },
-  primaryText: { fontFamily: FontFamily.displayBold, fontSize: 15, color: Colors.background },
-  disabled: { opacity: 0.6 },
-  secondaryBtn: { paddingVertical: 16, alignItems: 'center' },
-  secondaryText: { fontFamily: FontFamily.bodyMedium, fontSize: 14, color: Colors.textSecondary },
-});

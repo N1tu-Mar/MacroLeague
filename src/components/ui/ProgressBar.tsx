@@ -6,7 +6,7 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
-import { Colors, Radius, Motion } from '../../theme';
+import { Radius, Motion, useTheme } from '../../theme';
 
 interface ProgressBarProps {
   /** 0..1; values above 1 are clamped for the fill but caller can color-flag over-target. */
@@ -26,12 +26,15 @@ interface ProgressBarProps {
  */
 export default function ProgressBar({
   progress,
-  color = Colors.primary,
-  trackColor = Colors.track,
+  color,
+  trackColor,
   height = 10,
   style,
   animated = true,
 }: ProgressBarProps) {
+  const { colors } = useTheme();
+  const fillColor = color ?? colors.scarlet;
+  const track = trackColor ?? colors.track;
   const clamped = Math.max(0, Math.min(1, progress));
   const width = useSharedValue(animated ? 0 : clamped);
 
@@ -53,11 +56,11 @@ export default function ProgressBar({
   }), [width]);
 
   return (
-    <View style={[styles.track, { height, borderRadius: height / 2, backgroundColor: trackColor }, style]}>
+    <View style={[styles.track, { height, borderRadius: height / 2, backgroundColor: track }, style]}>
       <Animated.View
         style={[
           styles.fill,
-          { borderRadius: height / 2, backgroundColor: color },
+          { borderRadius: height / 2, backgroundColor: fillColor },
           fillStyle,
         ]}
       />

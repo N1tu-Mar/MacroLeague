@@ -1,15 +1,15 @@
 import React, { useEffect, useState } from 'react';
+import { View, ActivityIndicator, Alert } from 'react-native';
+import { useTheme } from '../../theme';
 import {
-  View,
+  Screen,
+  ScreenHeader,
   Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
-import { Colors, FontFamily } from '../../theme';
-import AppIcon from '../../components/ui/AppIcon';
+  Card,
+  Button,
+  Chip,
+  TargetRow,
+} from '../../components/ui';
 import { useUserStore } from '../../store/userStore';
 import { supabase } from '../../lib/supabase';
 import { getProfileGoals, updateProfileGoals } from '../../services/profileService';
@@ -21,23 +21,29 @@ import { getProfileGoals, updateProfileGoals } from '../../services/profileServi
  * and is not user-editable. Carb range follows migration 0002 (25-65%).
  */
 function validateGoals(calories: number, protein: number, carbs: number, fats: number): string | null {
+  // No diet-style hard limits (keto / low-fat / high-carb are all valid). Only
+  // guard against broken input; the relaxed DB rules live in migration 0015.
+  if (![calories, protein, carbs, fats].every(Number.isFinite)) {
+    return 'Enter a valid number for every goal.';
+  }
+  if (protein < 0 || carbs < 0 || fats < 0) {
+    return 'Goals can’t be negative.';
+  }
+  // Safety floor, also enforced by the DB (goal_calories > 1400).
   if (calories <= 1400) {
-    return 'Calorie goal must be greater than 1400.';
-  }
-  if (protein < 50) {
-    return 'Protein goal must be at least 50g.';
-  }
-  const carbEnergy = carbs * 4;
-  if (carbEnergy < calories * 0.25 || carbEnergy > calories * 0.65) {
-    return 'Carbs must supply between 25% and 65% of your calorie goal.';
-  }
-  if (fats * 9 < calories * 0.1) {
-    return 'Unsaturated fat goal is too low; it must supply at least 10% of your calorie goal.';
+    return 'Calorie goal must be at least 1,500 kcal.';
   }
   return null;
 }
 
+const PRESETS = [
+  { label: 'Build Muscle', cal: 2300, p: 170, c: 260, f: 38 },
+  { label: 'Lose Weight', cal: 1900, p: 150, c: 190, f: 32 },
+  { label: 'Maintain', cal: 2000, p: 130, c: 230, f: 35 },
+] as const;
+
 export default function EditGoalsScreen({ navigation }: any) {
+  const { colors } = useTheme();
   const dailyGoals = useUserStore((s) => s.dailyGoals);
   const setDailyGoals = useUserStore((s) => s.setDailyGoals);
 
@@ -48,7 +54,7 @@ export default function EditGoalsScreen({ navigation }: any) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Load saved goals from Supabase so the sliders start from the persisted
+  // Load saved goals from Supabase so the steppers start from the persisted
   // profile values, not the local mock defaults. A failure falls back to the
   // defaults already in state rather than blocking the screen.
   useEffect(() => {
@@ -117,184 +123,160 @@ export default function EditGoalsScreen({ navigation }: any) {
 
   if (isLoading) {
     return (
-      <View style={[styles.container, styles.loadingBox]}>
-        <ActivityIndicator color={Colors.primary} size="large" />
-      </View>
+      <Screen>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator color={colors.scarlet} size="large" />
+        </View>
+      </Screen>
     );
   }
 
+  const proteinKcal = protein * 4;
+  const carbKcal = carbs * 4;
+  const fatKcal = fats * 9;
+  const totalKcal = proteinKcal + carbKcal + fatKcal;
+
+  const segments = [
+    { label: 'Protein', kcal: proteinKcal, color: colors.ink },
+    { label: 'Carbs', kcal: carbKcal, color: colors.macroCarb },
+    { label: 'Fat', kcal: fatKcal, color: colors.macroFat },
+  ];
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-        <AppIcon name="back" size={17} color={Colors.primary} />
-        <Text style={styles.backText}>Back</Text>
-      </TouchableOpacity>
+    <Screen scroll>
+      <ScreenHeader title="Edit goals" onBack={() => navigation.goBack()} />
 
-      <Text style={styles.title}>EDIT MACRO GOALS</Text>
-      <Text style={styles.subtitle}>Adjust your daily nutrition targets</Text>
+      <Text variant="body" color={colors.textSecondary} style={{ marginTop: 4, marginBottom: 18 }}>
+        Adjust your daily nutrition targets.
+      </Text>
 
-      {/* Calorie floor is 1500 because the DB requires goal_calories > 1400. */}
-      <MacroSlider label="Calories" value={calories} onChange={setCalories} min={1500} max={5000} step={50} unit="cal" color={Colors.primary} />
-      <MacroSlider label="Protein" value={protein} onChange={setProtein} min={50} max={350} step={5} unit="g" color={Colors.primary} />
-      <MacroSlider label="Carbs" value={carbs} onChange={setCarbs} min={50} max={500} step={5} unit="g" color={Colors.accent} />
-      {/* This slider is the UNSATURATED fat goal — the only fat target the schema
-          stores. Trans-fat goal is fixed at 0 (profiles_goal_trans_fat_zero). */}
-      <MacroSlider label="Unsaturated Fat" value={fats} onChange={setFats} min={20} max={200} step={5} unit="g" color={Colors.gold} />
-      <Text style={styles.transFatNote}>Trans-fat goal is fixed at 0g and isn't editable.</Text>
+      <Card padded={false} style={{ marginBottom: 14 }}>
+        <TargetRow
+          label="Calories"
+          value={calories}
+          unit="kcal"
+          onDecrement={() => setCalories((v) => Math.max(1500, v - 50))}
+          onIncrement={() => setCalories((v) => Math.min(6000, v + 50))}
+          canDecrement={calories > 1500}
+          canIncrement={calories < 6000}
+        />
+        <TargetRow
+          label="Protein"
+          value={protein}
+          unit="g"
+          onDecrement={() => setProtein((v) => Math.max(0, v - 5))}
+          onIncrement={() => setProtein((v) => Math.min(400, v + 5))}
+          canDecrement={protein > 0}
+          canIncrement={protein < 400}
+        />
+        <TargetRow
+          label="Carbs"
+          value={carbs}
+          unit="g"
+          onDecrement={() => setCarbs((v) => Math.max(0, v - 5))}
+          onIncrement={() => setCarbs((v) => Math.min(600, v + 5))}
+          canDecrement={carbs > 0}
+          canIncrement={carbs < 600}
+        />
+        <TargetRow
+          label="Unsaturated fat"
+          value={fats}
+          unit="g"
+          showDivider={false}
+          onDecrement={() => setFats((v) => Math.max(0, v - 5))}
+          onIncrement={() => setFats((v) => Math.min(250, v + 5))}
+          canDecrement={fats > 0}
+          canIncrement={fats < 250}
+        />
+      </Card>
 
-      {/* Quick Presets */}
-      <View style={styles.presetSection}>
-        <Text style={styles.sectionTitle}>QUICK PRESETS</Text>
-        <View style={styles.presetRow}>
-          {[
-            { label: 'Build Muscle', cal: 2800, p: 200, c: 300, f: 85 },
-            { label: 'Lose Weight', cal: 1800, p: 160, c: 180, f: 60 },
-            { label: 'Maintain', cal: 2200, p: 150, c: 250, f: 70 },
-          ].map((preset) => (
-            <TouchableOpacity
-              key={preset.label}
-              style={styles.presetBtn}
-              onPress={() => {
-                setCalories(preset.cal);
-                setProtein(preset.p);
-                setCarbs(preset.c);
-                setFats(preset.f);
-              }}
-            >
-              <Text style={styles.presetLabel}>{preset.label}</Text>
-              <Text style={styles.presetCal}>{preset.cal} cal</Text>
-            </TouchableOpacity>
+      <Text variant="body" color={colors.textTertiary} style={{ marginBottom: 14, fontSize: 12 }}>
+        Trans-fat goal is fixed at 0g and isn't editable.
+      </Text>
+
+      {/* Where your calories come from — stacked energy bar */}
+      <Card style={{ marginBottom: 14 }}>
+        <Text variant="overline" color={colors.textSecondary}>
+          Where your calories come from
+        </Text>
+        <View
+          style={{
+            flexDirection: 'row',
+            height: 12,
+            borderRadius: 6,
+            overflow: 'hidden',
+            marginTop: 12,
+            backgroundColor: colors.track,
+          }}
+        >
+          {totalKcal > 0 &&
+            segments.map((seg) => (
+              <View
+                key={seg.label}
+                style={{ flex: seg.kcal, backgroundColor: seg.color }}
+              />
+            ))}
+        </View>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginTop: 14 }}>
+          {segments.map((seg) => (
+            <View key={seg.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: seg.color }} />
+              <Text variant="label" color={colors.textSecondary}>
+                {seg.label}
+              </Text>
+              <Text variant="numInline" color={colors.ink} style={{ fontSize: 13 }}>
+                {seg.kcal}
+              </Text>
+            </View>
           ))}
         </View>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'baseline',
+            justifyContent: 'space-between',
+            marginTop: 14,
+          }}
+        >
+          <Text variant="label" color={colors.textSecondary}>
+            Total from macros
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4 }}>
+            <Text variant="scoreStat" color={colors.ink}>
+              {totalKcal}
+            </Text>
+            <Text variant="subhead" color={colors.textSecondary}>
+              kcal
+            </Text>
+          </View>
+        </View>
+      </Card>
+
+      {/* Quick presets */}
+      <Text variant="overline" color={colors.textSecondary} style={{ marginBottom: 10 }}>
+        Quick presets
+      </Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 24 }}>
+        {PRESETS.map((preset) => (
+          <Chip
+            key={preset.label}
+            label={preset.label}
+            onPress={() => {
+              setCalories(preset.cal);
+              setProtein(preset.p);
+              setCarbs(preset.c);
+              setFats(preset.f);
+            }}
+          />
+        ))}
       </View>
 
-      <TouchableOpacity
-        style={[styles.saveBtn, isSaving && styles.saveBtnDisabled]}
+      <Button
+        label="Save goals"
         onPress={save}
-        disabled={isSaving}
-      >
-        <Text style={styles.saveBtnText}>{isSaving ? 'SAVING...' : 'SAVE GOALS'}</Text>
-      </TouchableOpacity>
-    </ScrollView>
+        loading={isSaving}
+        loadingLabel="Saving…"
+      />
+    </Screen>
   );
 }
-
-function MacroSlider({
-  label,
-  value,
-  onChange,
-  min,
-  max,
-  step,
-  unit,
-  color,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-  min: number;
-  max: number;
-  step: number;
-  unit: string;
-  color: string;
-}) {
-  const pct = ((value - min) / (max - min)) * 100;
-
-  return (
-    <View style={sliderStyles.container}>
-      <View style={sliderStyles.labelRow}>
-        <Text style={sliderStyles.label}>{label}</Text>
-        <Text style={[sliderStyles.value, { color }]}>
-          {value}{unit}
-        </Text>
-      </View>
-      <View style={sliderStyles.barBg}>
-        <View style={[sliderStyles.barFill, { width: `${pct}%`, backgroundColor: color }]} />
-      </View>
-      <View style={sliderStyles.btnRow}>
-        <TouchableOpacity
-          style={sliderStyles.btn}
-          onPress={() => onChange(Math.max(min, value - step))}
-        >
-          <Text style={sliderStyles.btnText}>−</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={sliderStyles.btn}
-          onPress={() => onChange(Math.min(max, value + step))}
-        >
-          <Text style={sliderStyles.btnText}>+</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
-
-const sliderStyles = StyleSheet.create({
-  container: {
-    backgroundColor: Colors.surface,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 16,
-    marginBottom: 12,
-  },
-  labelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  label: { fontFamily: FontFamily.bodyMedium, fontSize: 15, color: Colors.textPrimary },
-  value: { fontFamily: FontFamily.displayBold, fontSize: 20 },
-  barBg: { height: 6, borderRadius: 3, backgroundColor: Colors.surface2, marginBottom: 10 },
-  barFill: { height: 6, borderRadius: 3 },
-  btnRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
-  btn: {
-    flex: 1,
-    backgroundColor: Colors.surface2,
-    borderRadius: 10,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  btnText: { fontFamily: FontFamily.displayBold, fontSize: 20, color: Colors.textPrimary },
-});
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  loadingBox: { alignItems: 'center', justifyContent: 'center' },
-  content: { padding: 20, paddingTop: 60 },
-  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 16 },
-  backText: { fontFamily: FontFamily.bodyMedium, fontSize: 15, color: Colors.primary },
-  title: { fontFamily: FontFamily.displayBold, fontSize: 24, color: Colors.textPrimary, letterSpacing: 1, marginBottom: 4 },
-  subtitle: { fontFamily: FontFamily.body, fontSize: 14, color: Colors.textSecondary, marginBottom: 24 },
-  transFatNote: {
-    fontFamily: FontFamily.body,
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: -4,
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontFamily: FontFamily.displayBold,
-    fontSize: 13,
-    color: Colors.textSecondary,
-    letterSpacing: 1.5,
-    marginBottom: 12,
-  },
-  presetSection: { marginTop: 8, marginBottom: 20 },
-  presetRow: { flexDirection: 'row', gap: 8 },
-  presetBtn: {
-    flex: 1,
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 12,
-    alignItems: 'center',
-  },
-  presetLabel: { fontFamily: FontFamily.bodySemiBold, fontSize: 12, color: Colors.textPrimary },
-  presetCal: { fontFamily: FontFamily.body, fontSize: 11, color: Colors.textSecondary, marginTop: 2 },
-  saveBtn: {
-    backgroundColor: Colors.primary,
-    borderRadius: 50,
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  saveBtnDisabled: { opacity: 0.6 },
-  saveBtnText: { fontFamily: FontFamily.displayBold, fontSize: 16, color: Colors.background },
-});

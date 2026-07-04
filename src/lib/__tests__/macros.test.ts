@@ -25,17 +25,30 @@ describe('validateMacroTargets', () => {
     expect(validateMacroTargets(base)).toBeNull();
   });
 
-  it('rejects calories at or below 1400', () => {
-    expect(validateMacroTargets({ ...base, calories: 1400 })).toMatch(/calorie/i);
+  // Diet styles are no longer hard-blocked (the app nudges, it doesn't forbid):
+  it('accepts a low-carb / keto split', () => {
+    // 30 g carbs * 4 = 120 kcal of 2000 = 6% — allowed now.
+    expect(validateMacroTargets({ ...base, carbs: 30, fats: 150 })).toBeNull();
   });
 
-  it('rejects protein under 50g', () => {
-    expect(validateMacroTargets({ ...base, protein: 40 })).toMatch(/protein/i);
+  it('accepts a very high-carb split', () => {
+    expect(validateMacroTargets({ ...base, carbs: 400, fats: 20 })).toBeNull();
   });
 
-  it('rejects carbs outside the 25–65% energy window', () => {
-    // 50 g carbs * 4 = 200 kcal of 2000 = 10% → too low.
-    expect(validateMacroTargets({ ...base, carbs: 50 })).toMatch(/carb/i);
+  it('accepts a low-fat split', () => {
+    expect(validateMacroTargets({ ...base, fats: 15 })).toBeNull();
+  });
+
+  it('accepts protein under 50g', () => {
+    expect(validateMacroTargets({ ...base, protein: 40 })).toBeNull();
+  });
+
+  it('rejects an unsafely low calorie floor', () => {
+    expect(validateMacroTargets({ ...base, calories: 500 })).toMatch(/calorie/i);
+  });
+
+  it('rejects negative macros', () => {
+    expect(validateMacroTargets({ ...base, carbs: -10 })).toMatch(/negative/i);
   });
 
   it('rejects non-finite numbers', () => {

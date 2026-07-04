@@ -1,43 +1,49 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Pressable } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { Colors, FontFamily, FontSize, Spacing, Radius, Shadow, alpha } from '../../theme';
+import { FontFamily, Spacing, useTheme } from '../../theme';
 import { useUserStore } from '../../store/userStore';
 import { useDailyTotals } from '../../hooks/useDailyTotals';
-import Card from '../../components/ui/Card';
-import NutritionScoreCard from '../../components/NutritionScoreCard';
-import MacroProgressBar from '../../components/MacroProgressBar';
-import StreakCard from '../../components/StreakCard';
-import RivalCard from '../../components/RivalCard';
-import ActivityFeedItem from '../../components/ActivityFeedItem';
-import AppIcon from '../../components/ui/AppIcon';
-import RotatingTrophy from '../../components/animations/RotatingTrophy';
+import {
+  Screen,
+  Text,
+  Card,
+  Avatar,
+  AppIcon,
+  StreakPill,
+  LPPill,
+} from '../../components/ui';
+import NutritionHero from '../../components/NutritionHero';
 import FoodLogItem from '../../components/FoodLogItem';
+import ActivityFeedItem from '../../components/ActivityFeedItem';
 import { getLeaderboard, LeaderboardUser, publicLeaderboardName } from '../../services/leaderboardService';
 import { getProfileIdentity } from '../../services/profileService';
-import {
-  getRecentDailyActivity,
-  getRecentActivityFeed,
-  ActivityFeedEntry,
-} from '../../services/activityService';
+import { getRecentDailyActivity, getRecentActivityFeed, ActivityFeedEntry } from '../../services/activityService';
 import { computeNutritionScore } from '../../lib/nutritionScore';
-
-const ORDINAL = (n: number): string => {
-  const s = ['th', 'st', 'nd', 'rd'];
-  const v = n % 100;
-  return n + (s[(v - 20) % 10] || s[v] || s[0]);
-};
 
 function dateKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+function getGreeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
+function statusWordFor(score: number): string {
+  if (score >= 80) return 'Strong day';
+  if (score >= 60) return 'Solid day';
+  if (score >= 40) return 'Building';
+  return 'Getting started';
+}
+
 export default function HomeScreen({ navigation }: any) {
+  const { colors } = useTheme();
   const user = useUserStore((s) => s.user);
   const refreshStats = useUserStore((s) => s.refreshStats);
 
-  // Refresh this value whenever the screen regains focus so a tab left mounted
-  // overnight does not keep querying and labeling yesterday as "today".
   const [today, setToday] = useState(() => new Date());
   const daily = useDailyTotals(today);
   const totals = daily.totals;
@@ -46,11 +52,8 @@ export default function HomeScreen({ navigation }: any) {
   const [leaderboard, setLeaderboard] = useState<LeaderboardUser[]>([]);
   const [feed, setFeed] = useState<ActivityFeedEntry[]>([]);
   const [yesterdayScore, setYesterdayScore] = useState<number | null>(null);
-  // The user's preferred name from the profiles table (display_name → username).
   const [profileName, setProfileName] = useState<string | null>(null);
 
-  // Load the real saved name from the database so the greeting shows e.g.
-  // "Good evening, Nityanth" instead of an auth-derived "user_<id>" placeholder.
   useEffect(() => {
     if (!user?.id) return;
     let active = true;
@@ -58,17 +61,12 @@ export default function HomeScreen({ navigation }: any) {
       .then((identity) => {
         if (active) setProfileName(identity.displayName ?? identity.username);
       })
-      .catch(() => {
-        // Keep the fallback below if the profile can't be read.
-      });
+      .catch(() => {});
     return () => {
       active = false;
     };
   }, [user?.id]);
 
-  // On focus: refresh real meals/totals + backend stats, and pull the real
-  // leaderboard (for rank/rival), recent activity feed, and yesterday's macros
-  // (for the nutrition-score delta). All Supabase-backed — no mock data.
   useFocusEffect(
     useCallback(() => {
       let active = true;
@@ -86,8 +84,6 @@ export default function HomeScreen({ navigation }: any) {
           if (!active) return;
           setLeaderboard(board);
           setFeed(recent);
-          // Calendar arithmetic stays on the previous local date across 23/25
-          // hour daylight-saving transitions; subtracting 86,400,000ms does not.
           const yesterday = new Date(currentDate);
           yesterday.setDate(yesterday.getDate() - 1);
           const yKey = dateKey(yesterday);
@@ -96,14 +92,12 @@ export default function HomeScreen({ navigation }: any) {
             yRow
               ? computeNutritionScore(
                   { calories: yRow.calories, proteinG: yRow.proteinG, carbsG: yRow.carbsG },
-                  goals
-                    ? { calories: goals.calories ?? 0, proteinG: goals.proteinG ?? 0, carbsG: goals.carbsG ?? 0 }
-                    : null,
+                  goals ? { calories: goals.calories ?? 0, proteinG: goals.proteinG ?? 0, carbsG: goals.carbsG ?? 0 } : null,
                 ).score
               : null,
           );
         } catch {
-          // Leave the last good data; the real macro sections below still render.
+          // keep last good data
         }
       })();
       return () => {
@@ -113,7 +107,6 @@ export default function HomeScreen({ navigation }: any) {
   );
 
   const greeting = getGreeting();
-  // Prefer the real saved profile name; never show the "user_<id>" placeholder.
   const resolvedName =
     profileName && !profileName.startsWith('user_')
       ? profileName
@@ -122,13 +115,13 @@ export default function HomeScreen({ navigation }: any) {
       : 'Athlete';
   const firstName = resolvedName.split(' ')[0];
 
-  // Real rank + rival from the leaderboard.
   const myIndex = leaderboard.findIndex((r) => r.userId === user?.id);
   const me = myIndex >= 0 ? leaderboard[myIndex] : null;
   const rival = myIndex > 0 ? leaderboard[myIndex - 1] : null;
+  const below = myIndex >= 0 && myIndex < leaderboard.length - 1 ? leaderboard[myIndex + 1] : null;
   const rivalGap = me && rival ? rival.score - me.score : 0;
+  const aheadGap = me && below ? me.score - below.score : 0;
 
-  // Real nutrition score from today's adherence + delta vs yesterday.
   const nutrition = useMemo(
     () =>
       computeNutritionScore(
@@ -142,253 +135,182 @@ export default function HomeScreen({ navigation }: any) {
   const proteinGoal = goals?.proteinG ?? 0;
   const proteinLeft = Math.max(0, Math.round(proteinGoal - totals.proteinG));
   const proteinMet = proteinGoal > 0 && totals.proteinG >= proteinGoal;
-  const unsatPartial = totals.unsaturatedFat.missingCount > 0;
+  const isNewToday = daily.meals.length === 0;
 
-  const nextActionText = proteinMet
-    ? 'Protein goal locked — log dinner to pad your score'
-    : proteinGoal > 0
-    ? `Log dinner to close ${proteinLeft}g of protein`
-    : 'Log a meal to start your day';
+  const recommendText =
+    !isNewToday && proteinLeft > 0 && !proteinMet
+      ? `${proteinLeft}g protein left — log another meal to stay on pace.`
+      : null;
+
+  const streak = user?.streakCount ?? 0;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <Screen scroll bottomSpace={96}>
       {/* Header */}
-      <View style={styles.header}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.greeting}>{greeting},</Text>
-          <Text style={styles.name}>{firstName}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text variant="section" color={colors.ink} numberOfLines={1} style={{ fontSize: 21 }}>
+            {greeting}, {firstName}
+          </Text>
+          <Text variant="labelSm" color={colors.textSecondary} style={{ marginTop: 2 }}>
+            {today.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })}
+          </Text>
         </View>
-        <TouchableOpacity
-          style={styles.pointsBadge}
-          onPress={() => navigation.navigate('Rewards')}
-          activeOpacity={0.85}
-        >
-          <View style={styles.pointsValueRow}>
-            <AppIcon name="star" size={15} color={Colors.gold} />
-            <Text style={styles.pointsValue}>{user?.points?.toLocaleString() ?? 0}</Text>
-          </View>
-          <Text style={styles.pointsLabel}>Lv {user?.level ?? 1}</Text>
-        </TouchableOpacity>
+        {!isNewToday && streak > 0 ? <StreakPill count={streak} /> : null}
+        {!isNewToday ? <LPPill value={(user?.points ?? 0).toLocaleString()} /> : null}
+        <Pressable onPress={() => navigation.navigate('Profile')}>
+          <Avatar name={firstName} url={user?.avatarUrl} size={36} ring={colors.card} />
+        </Pressable>
       </View>
 
-      {/* HERO: real leaderboard standing */}
-      <Card variant="hero" onPress={() => navigation.navigate('Leaderboard')} accent={alpha(Colors.primary, 0.35)}>
-        <View style={styles.heroTop}>
-          <View style={styles.heroTitleRow}>
-            <RotatingTrophy size={19} />
-            <Text style={styles.heroTitle}>Global Leaderboard</Text>
+      {/* Nutrition hero */}
+      <View style={{ marginTop: 14 }}>
+        <NutritionHero
+          score={isNewToday ? null : nutrition.score}
+          isNew={isNewToday}
+          delta={scoreDelta}
+          statusWord={statusWordFor(nutrition.score)}
+          calories={{ now: totals.calories, goal: goals?.calories ?? 0 }}
+          protein={{ now: totals.proteinG, goal: goals?.proteinG ?? 0 }}
+          carbs={{ now: totals.carbsG, goal: goals?.carbsG ?? 0 }}
+          recommendText={recommendText}
+          onLog={() => navigation.navigate('Log')}
+        />
+      </View>
+
+      {/* League snapshot */}
+      <Card padded={false} onPress={() => navigation.navigate('Leaderboard')} style={{ marginTop: 14, overflow: 'hidden' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', padding: 13, paddingBottom: 10 }}>
+          <Text variant="overline" color={colors.textSecondary} style={{ flex: 1 }}>2-week league</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <AppIcon name="clock" size={13} color={colors.textSecondary} />
+            <Text style={{ fontFamily: FontFamily.numBold, fontSize: 13, color: colors.ink, letterSpacing: 0.5 }}>
+              LAST 14 DAYS
+            </Text>
           </View>
-          <Text style={styles.heroWindow}>last 2 weeks</Text>
         </View>
         {me ? (
           <>
-            <View style={styles.heroRankRow}>
-              <View>
-                <Text style={styles.heroLabel}>YOUR RANK</Text>
-                <Text style={styles.heroRank}>{ORDINAL(me.rank)}</Text>
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={styles.heroPoints}>{me.score.toLocaleString()}</Text>
-                <Text style={styles.heroPointsLabel}>pts</Text>
-              </View>
-            </View>
-            <View style={styles.heroChase}>
-              {rival && rivalGap > 0 ? (
-                <Text style={styles.heroChaseText}>
-                  <Text style={styles.heroChaseStrong}>{rivalGap} pts</Text> behind{' '}
-                  {publicLeaderboardName(rival)}
-                </Text>
-              ) : (
-                <>
-                  <Text style={styles.heroChaseText}>You lead the league</Text>
-                  <AppIcon name="crown" size={15} color={Colors.gold} />
-                </>
-              )}
+            {rival ? <LeagueRow row={rival} /> : null}
+            <LeagueRow row={me} you name={firstName} />
+            {below ? <LeagueRow row={below} /> : null}
+            <View style={{ flexDirection: 'row', alignItems: 'center', padding: 12, paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: colors.rowDivider }}>
+              <Text variant="labelSm" color={colors.textSecondary} style={{ flex: 1 }}>
+                {rival && rivalGap > 0 ? `${rivalGap} pts behind ${publicLeaderboardName(rival)}` : 'You lead the league'}
+                {below && aheadGap > 0 ? ` · ${aheadGap} ahead of ${publicLeaderboardName(below)}` : ''}
+              </Text>
+              <AppIcon name="chevron-right" size={16} color={colors.textTertiary} />
             </View>
           </>
         ) : (
-          <View style={styles.heroEmpty}>
-            <Text style={styles.heroEmptyText}>You're not ranked yet</Text>
-            <Text style={styles.heroEmptySub}>Log meals to earn points and climb the board.</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderTopWidth: 1, borderTopColor: colors.rowDivider }}>
+            <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: colors.track, alignItems: 'center', justifyContent: 'center' }}>
+              <AppIcon name="trophy" size={19} color={colors.textTertiary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text variant="cardTitle" color={colors.ink}>2-week league</Text>
+              <Text variant="labelSm" color={colors.textSecondary} style={{ marginTop: 1 }}>
+                You'll enter the standings after your first confirmed meal.
+              </Text>
+            </View>
           </View>
         )}
       </Card>
 
-      {/* Nutrition score — real adherence */}
-      <Card variant="elevated" style={styles.scoreCard}>
-        <NutritionScoreCard score={nutrition.score} delta={scoreDelta} status={nutrition.status} />
-      </Card>
-
-      {/* Daily progress — REAL data */}
-      <Text style={styles.sectionTitle}>TODAY'S PROGRESS</Text>
-      <Card style={styles.progressCard}>
-        {daily.isLoading ? (
-          <Text style={styles.notice}>Loading your progress…</Text>
-        ) : daily.error ? (
-          <Text style={styles.notice}>Couldn't load today's progress. Pull to refresh.</Text>
-        ) : (
-          <>
-            <MacroProgressBar label="Calories" current={totals.calories} target={goals?.calories ?? 0} unit="" color={Colors.accent} />
-            <MacroProgressBar label="Protein" current={totals.proteinG} target={goals?.proteinG ?? 0} />
-            <MacroProgressBar label="Carbs" current={totals.carbsG} target={goals?.carbsG ?? 0} />
-            <MacroProgressBar
-              label="Unsat. Fat"
-              current={totals.unsaturatedFat.grams}
-              target={goals?.unsaturatedFatG ?? 0}
-              note={unsatPartial ? 'Partial — some meals lack a breakdown' : undefined}
-            />
-          </>
-        )}
-      </Card>
-
-      {/* Next action CTA */}
-      <TouchableOpacity style={styles.cta} onPress={() => navigation.navigate('Log')} activeOpacity={0.9}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.ctaLabel}>{nextActionText}</Text>
-          <Text style={styles.ctaSub}>Earn points and climb the board</Text>
+      {/* Today's meals */}
+      {!isNewToday ? (
+        <View style={{ marginTop: 18 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 2, marginBottom: 8 }}>
+            <Text variant="section" color={colors.ink}>Today's meals</Text>
+            <Text variant="labelSm" color={colors.textSecondary}>
+              {Math.round(totals.calories).toLocaleString()} kcal logged
+            </Text>
+          </View>
+          <Card padded={false} style={{ overflow: 'hidden' }}>
+            {daily.meals.map((meal, i) => (
+              <FoodLogItem key={meal.id} meal={meal} showDivider={i > 0} />
+            ))}
+            <Pressable
+              onPress={() => navigation.navigate('Log')}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, paddingHorizontal: 14, borderTopWidth: 1, borderTopColor: colors.rowDivider }}
+            >
+              <View style={{ width: 44, height: 44, borderRadius: 12, borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.borderInput, alignItems: 'center', justifyContent: 'center' }}>
+                <AppIcon name="plus" size={18} color={colors.textTertiary} />
+              </View>
+              <Text variant="cardTitle" color={colors.textSecondary} style={{ flex: 1 }}>Add another meal</Text>
+              <AppIcon name="chevron-right" size={16} color={colors.textTertiary} />
+            </Pressable>
+          </Card>
         </View>
-        <AppIcon name="plus" size={28} color={Colors.textPrimary} strokeWidth={2.5} />
-      </TouchableOpacity>
+      ) : null}
 
       {/* Streak */}
-      <StreakCard streakCount={user?.streakCount ?? 0} nextMilestone={14} />
-
-      {/* Rival race — real */}
-      {me && rival && (
-        <View style={styles.section}>
-          <RivalCard
-            myName={firstName}
-            myPoints={me.score}
-            rivalName={publicLeaderboardName(rival)}
-            rivalPoints={rival.score}
-            gap={rivalGap}
-            suggestedAction={`Hit your protein goal today to pass ${publicLeaderboardName(rival)}`}
-            onPress={() => navigation.navigate('Leaderboard')}
-          />
-        </View>
-      )}
-
-      {/* Today's meals — REAL data */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>TODAY'S MEALS</Text>
-          {daily.meals.length > 0 && <Text style={styles.sectionCount}>{daily.meals.length} logged</Text>}
-        </View>
-        {daily.error ? (
-          <Text style={styles.notice}>Couldn't load today's meals.</Text>
-        ) : daily.isLoading ? (
-          <Text style={styles.notice}>Loading your meals…</Text>
-        ) : daily.meals.length === 0 ? (
-          <Card style={styles.emptyMeals}>
-            <AppIcon name="meal" size={32} color={Colors.textSecondary} />
-            <Text style={styles.emptyText}>No meals logged yet today</Text>
-            <Text style={styles.emptySub}>Log one to earn points and climb the league.</Text>
-          </Card>
-        ) : (
-          daily.meals.map((meal) => <FoodLogItem key={meal.id} meal={meal} />)
-        )}
-      </View>
-
-      {/* Recent activity — the user's REAL gamification events */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>RECENT ACTIVITY</Text>
-        <Card padded={false} style={styles.feedCard}>
-          {feed.length === 0 ? (
-            <Text style={[styles.notice, { padding: Spacing.base }]}>
-              No recent activity yet. Log a meal to get started.
+      {streak > 0 ? (
+        <Card style={{ marginTop: 18, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+          <StreakPill count={streak} size={22} />
+          <View style={{ flex: 1 }}>
+            <Text variant="subhead" color={colors.ink}>{streak}-day streak</Text>
+            <Text variant="labelSm" color={colors.textSecondary} style={{ marginTop: 1 }}>
+              {streak >= 14 ? 'You’re on fire — keep it rolling.' : `${14 - streak} days to your next milestone.`}
             </Text>
-          ) : (
-            feed.map((item, i) => (
-              <View key={item.id} style={i > 0 ? styles.feedDivider : undefined}>
-                <ActivityFeedItem name={firstName} icon={item.icon} text={item.text} minutesAgo={item.minutesAgo} />
-              </View>
-            ))
-          )}
+          </View>
         </Card>
-      </View>
+      ) : null}
 
-      <View style={{ height: Spacing.xxl }} />
-    </ScrollView>
+      {/* Friend activity */}
+      {feed.length > 0 ? (
+        <View style={{ marginTop: 18 }}>
+          <Text variant="section" color={colors.ink} style={{ paddingHorizontal: 2, marginBottom: 8 }}>Friend activity</Text>
+          <Card padded={false} style={{ overflow: 'hidden' }}>
+            {feed.map((item, i) => (
+              <ActivityFeedItem
+                key={item.id}
+                name={firstName}
+                icon={item.icon}
+                text={item.text}
+                minutesAgo={item.minutesAgo}
+                showDivider={i > 0}
+              />
+            ))}
+          </Card>
+        </View>
+      ) : null}
+    </Screen>
   );
 }
 
-function getGreeting(): string {
-  const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
-  return 'Good evening';
+/** One standings row in the Today league snapshot. */
+function LeagueRow({ row, you, name }: { row: LeaderboardUser; you?: boolean; name?: string }) {
+  const { colors } = useTheme();
+  const displayName = you ? name ?? 'You' : publicLeaderboardName(row);
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        paddingVertical: 8,
+        paddingHorizontal: you ? 13 : 16,
+        backgroundColor: you ? colors.brandTint : 'transparent',
+        borderLeftWidth: you ? 3 : 0,
+        borderLeftColor: colors.scarlet,
+        borderTopWidth: you ? 0 : 1,
+        borderTopColor: colors.rowDivider,
+      }}
+    >
+      <Text style={{ fontFamily: FontFamily.numBold, fontSize: 15, color: you ? colors.scarlet : colors.textSecondary, width: 18, textAlign: 'center' }}>
+        {row.rank}
+      </Text>
+      <Avatar name={displayName} url={row.avatarUrl} size={30} />
+      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <Text variant="cardTitle" color={colors.ink}>{displayName}</Text>
+        {you ? (
+          <Text color={colors.scarlet} style={{ fontFamily: FontFamily.semibold, fontSize: 10, backgroundColor: colors.card, borderRadius: 5, paddingVertical: 2, paddingHorizontal: 6 }}>YOU</Text>
+        ) : null}
+      </View>
+      <Text style={{ fontFamily: FontFamily.numBold, fontSize: 15, color: colors.ink }}>
+        {row.score.toLocaleString()} <Text style={{ fontFamily: FontFamily.semibold, fontSize: 10, color: colors.textTertiary }}>LP</Text>
+      </Text>
+    </View>
+  );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  content: { padding: Spacing.lg, paddingTop: 60, paddingBottom: Spacing.xxl },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.lg },
-  greeting: { fontFamily: FontFamily.body, fontSize: FontSize.body, color: Colors.textSecondary },
-  name: { fontFamily: FontFamily.displayBold, fontSize: FontSize.title, color: Colors.textPrimary },
-  pointsBadge: {
-    alignItems: 'center',
-    backgroundColor: alpha(Colors.gold, 0.1),
-    borderWidth: 1,
-    borderColor: alpha(Colors.gold, 0.3),
-    borderRadius: Radius.md,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-  },
-  pointsValue: { fontFamily: FontFamily.displayBold, fontSize: FontSize.body, color: Colors.gold },
-  pointsValueRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  pointsLabel: { fontFamily: FontFamily.bodyMedium, fontSize: FontSize.micro, color: Colors.textSecondary, marginTop: 1 },
-
-  heroTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.base },
-  heroTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  heroTitle: { fontFamily: FontFamily.displayBold, fontSize: FontSize.subhead, color: Colors.gold },
-  heroWindow: { fontFamily: FontFamily.body, fontSize: FontSize.meta, color: Colors.textSecondary },
-  heroRankRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: Spacing.md },
-  heroLabel: { fontFamily: FontFamily.displayBold, fontSize: FontSize.meta, color: Colors.textSecondary, letterSpacing: 1.5 },
-  heroRank: { fontFamily: FontFamily.displayBold, fontSize: FontSize.hero, color: Colors.textPrimary, lineHeight: FontSize.hero + 2 },
-  heroPoints: { fontFamily: FontFamily.displayBold, fontSize: FontSize.heading, color: Colors.primary },
-  heroPointsLabel: { fontFamily: FontFamily.body, fontSize: FontSize.meta, color: Colors.textSecondary },
-  heroChase: { flexDirection: 'row', alignItems: 'center', gap: 6, borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: Spacing.md },
-  heroChaseText: { fontFamily: FontFamily.body, fontSize: FontSize.label, color: Colors.textSecondary },
-  heroChaseStrong: { fontFamily: FontFamily.displayBold, color: Colors.textPrimary },
-  heroEmpty: { paddingVertical: Spacing.sm },
-  heroEmptyText: { fontFamily: FontFamily.displayBold, fontSize: FontSize.subhead, color: Colors.textPrimary },
-  heroEmptySub: { fontFamily: FontFamily.body, fontSize: FontSize.label, color: Colors.textSecondary, marginTop: 2 },
-
-  scoreCard: { marginTop: Spacing.base, paddingVertical: Spacing.lg },
-  progressCard: { marginBottom: Spacing.base },
-
-  sectionTitle: {
-    fontFamily: FontFamily.displayBold,
-    fontSize: FontSize.label,
-    color: Colors.textSecondary,
-    letterSpacing: 1.5,
-    marginBottom: Spacing.md,
-    marginTop: Spacing.lg,
-  },
-  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  sectionCount: { fontFamily: FontFamily.bodyMedium, fontSize: FontSize.meta, color: Colors.textTertiary, marginTop: Spacing.lg, marginBottom: Spacing.md },
-  section: { marginTop: Spacing.xs },
-
-  cta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.primary,
-    borderRadius: Radius.lg,
-    paddingVertical: Spacing.base,
-    paddingHorizontal: Spacing.lg,
-    marginTop: Spacing.base,
-    marginBottom: Spacing.base,
-    ...Shadow.floating,
-  },
-  ctaLabel: { fontFamily: FontFamily.displayBold, fontSize: FontSize.subhead, color: Colors.textPrimary },
-  ctaSub: { fontFamily: FontFamily.bodyMedium, fontSize: FontSize.meta, color: alpha(Colors.textPrimary, 0.75), marginTop: 2 },
-
-  feedCard: { paddingHorizontal: Spacing.base },
-  feedDivider: { borderTopWidth: 1, borderTopColor: Colors.border },
-
-  emptyMeals: { alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.xl },
-  emptyText: { fontFamily: FontFamily.bodySemiBold, fontSize: FontSize.body, color: Colors.textPrimary },
-  emptySub: { fontFamily: FontFamily.body, fontSize: FontSize.label, color: Colors.textSecondary, marginTop: 4, textAlign: 'center' },
-
-  notice: { fontFamily: FontFamily.body, fontSize: FontSize.label, color: Colors.textSecondary, paddingVertical: Spacing.sm },
-});

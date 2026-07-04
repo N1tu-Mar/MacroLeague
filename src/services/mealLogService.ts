@@ -352,32 +352,14 @@ function validateLogMealParams(params: LogMealParams): ValidatedLogMealParams {
   validateDate('eatenAt', validated.eatenAt);
   validateClientRequestId(validated.clientRequestId);
   validateOptionalMeta(validated);
-  validateFatSubtypes(validated.fatG, validated);
+  // NOTE: we deliberately do NOT block a meal whose fat subtypes sum to more
+  // than its total fat. USDA rounding and honest user edits routinely produce a
+  // small mismatch, and hard-rejecting the save trapped users who couldn't log a
+  // legitimate meal. Subtypes are still validated as non-negative in
+  // validateOptionalMeta; over-limit trans fat is surfaced as a soft, dismissible
+  // warning in the UI (see MealLoggerScreen), never a block.
 
   return validated;
-}
-
-// Allow this much slop (grams) when comparing subtype sums to total fat, since
-// USDA per-100g values are rounded and the user may round their own edits.
-const FAT_SUBTYPE_TOLERANCE_G = 0.5;
-
-/**
- * Guards against an inconsistent fat breakdown reaching the database: the known
- * subtypes (saturated + trans + unsaturated) must not sum to more than total fat
- * beyond a small rounding tolerance. Missing subtypes are skipped, not treated
- * as zero, so a partial breakdown is still allowed.
- */
-function validateFatSubtypes(totalFat: number, meta: MealEstimateMeta): void {
-  const knownSubtypeSum =
-    (meta.saturatedFatG ?? 0) + (meta.transFatG ?? 0) + (meta.unsaturatedFatG ?? 0);
-
-  if (knownSubtypeSum > totalFat + FAT_SUBTYPE_TOLERANCE_G) {
-    throw new ValidationError(
-      'fatSubtypes',
-      'Saturated, trans, and unsaturated fat together exceed total fat. ' +
-        'Adjust total fat or the fat breakdown before saving.',
-    );
-  }
 }
 
 function validateOptionalMeta(meta: MealEstimateMeta): void {

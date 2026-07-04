@@ -13,23 +13,25 @@ export interface MacroTargets {
 }
 
 /**
- * Mirrors the profile goal constraints so onboarding can explain an invalid
- * combination before Supabase rejects the save with a database error.
+ * Light sanity check on macro targets. Deliberately does NOT hard-reject diet
+ * styles: the old carb% / fat% cross-field rules made keto, low-fat and very
+ * high-carb goals impossible and mismatched the DB. We only guard against
+ * genuinely broken input (non-numeric, negative, or an unsafe-low calorie
+ * floor). The relaxed DB constraints live in migration 0015. Returns an error
+ * string to show the user, or null when the targets are acceptable.
  */
 export function validateMacroTargets(targets: MacroTargets): string | null {
   const { calories, protein, carbs, fats } = targets;
   if (![calories, protein, carbs, fats].every(Number.isFinite)) {
     return 'All macro targets must be valid numbers.';
   }
-  if (calories <= 1400) return 'Your calorie target must be at least 1,500 kcal.';
-  if (protein < 50) return 'Your protein target must be at least 50g.';
-
-  const carbShare = (carbs * 4) / calories;
-  if (carbShare < 0.25 || carbShare > 0.65) {
-    return 'Carbs must provide between 25% and 65% of your calorie target.';
+  if (protein < 0 || carbs < 0 || fats < 0) {
+    return 'Macro targets can’t be negative.';
   }
-  if (fats * 9 < calories * 0.1) {
-    return 'Your unsaturated fat target must provide at least 10% of your calorie target.';
+  // The only remaining calorie floor is a safety rail (also enforced by the DB
+  // constraint profiles_goal_calories_min: goal_calories > 1400).
+  if (calories <= 1400) {
+    return 'Your calorie target must be at least 1,500 kcal.';
   }
   return null;
 }

@@ -1,26 +1,33 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-} from 'react-native';
+import { View, StyleSheet, Pressable } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { Colors, FontFamily } from '../../theme';
+import { Type, Spacing, Radius, FontFamily, useTheme } from '../../theme';
 import { useUserStore } from '../../store/userStore';
 import { signOut } from '../../lib/auth';
 import { requestAccountDeletion } from '../../services/accountService';
 import StreakFlame from '../../components/StreakFlame';
+import AvatarPickerSheet from '../../components/AvatarPickerSheet';
 import { LEVEL_TITLES, getXpForLevel } from '../../lib/leveling';
 import { deriveAchievements } from '../../lib/achievements';
 import { getRecentDailyActivity } from '../../services/activityService';
 import PixelFlame from '../../components/PixelFlame';
-import AppIcon, { AppIconName } from '../../components/ui/AppIcon';
 import ElectricBolt from '../../components/animations/ElectricBolt';
 import RotatingTrophy from '../../components/animations/RotatingTrophy';
 import ClashingUtensils from '../../components/animations/ClashingUtensils';
+import {
+  Screen,
+  Text,
+  Card,
+  ProgressBar,
+  Badge,
+  Avatar,
+  SegmentedControl,
+  Sheet,
+  AppIcon,
+  AppIconName,
+  Divider,
+  IconButton,
+} from '../../components/ui';
 
 interface WeeklyPoint {
   label: string;
@@ -28,6 +35,7 @@ interface WeeklyPoint {
 }
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const APPEARANCE_MODES = ['light', 'dark', 'system'] as const;
 
 /** Builds the last 7 local days as {label, proteinG}, filling unlogged days with 0. */
 function buildWeeklyProtein(activity: { date: string; proteinG: number }[]): WeeklyPoint[] {
@@ -43,40 +51,34 @@ function buildWeeklyProtein(activity: { date: string; proteinG: number }[]): Wee
 }
 
 export default function ProfileScreen({ navigation }: any) {
+  const { colors, mode, setMode } = useTheme();
+
   const user = useUserStore((s) => s.user);
   const dailyGoals = useUserStore((s) => s.dailyGoals);
   const logout = useUserStore((s) => s.logout);
   const refreshStats = useUserStore((s) => s.refreshStats);
   const setAccountLifecycle = useUserStore((s) => s.setAccountLifecycle);
 
+  const [weekly, setWeekly] = useState<WeeklyPoint[]>([]);
+  const [showDelete, setShowDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+
   // Two-step confirmation before archiving the account. On success we flip the
   // local lifecycle flag so App.tsx routes to the reactivation gate immediately.
-  const onDeleteAccount = useCallback(() => {
-    Alert.alert(
-      'Delete account?',
-      'Your account will be archived and permanently deleted in 14 days. You can sign back in any time before then to recover everything.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete account',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const scheduledAt = await requestAccountDeletion();
-              setAccountLifecycle(true, scheduledAt);
-            } catch (err) {
-              Alert.alert(
-                'Could not delete account',
-                err instanceof Error ? err.message : 'Please try again.',
-              );
-            }
-          },
-        },
-      ],
-    );
+  const onConfirmDelete = useCallback(async () => {
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      const scheduledAt = await requestAccountDeletion();
+      setAccountLifecycle(true, scheduledAt);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Please try again.');
+    } finally {
+      setIsDeleting(false);
+    }
   }, [setAccountLifecycle]);
-
-  const [weekly, setWeekly] = useState<WeeklyPoint[]>([]);
 
   // Re-read backend-owned XP/level/points/streak each time Profile is focused so
   // the stats reflect meals logged elsewhere without an app restart, and pull the
@@ -124,305 +126,392 @@ export default function ProfileScreen({ navigation }: any) {
   const xpProgress = xpIntoLevel / xpNeededThisLevel;
   const levelTitle = LEVEL_TITLES[user.level] ?? 'Legend';
 
-  const settingsItems: { label: string; icon: AppIconName; screen: string }[] = [
-    { label: 'Edit Macro Goals', icon: 'target', screen: 'EditGoals' },
-    { label: 'Scoring Rules', icon: 'medal', screen: 'RuleSettings' },
-    { label: 'Notification Preferences', icon: 'bell', screen: 'NotificationSettings' },
-    { label: 'Linked University', icon: 'school', screen: 'UniversitySettings' },
+  const stats: { label: string; value: string; icon: React.ReactNode }[] = [
+    { label: 'Longest streak', value: `${user.longestStreak}`, icon: <PixelFlame size={22} animated /> },
+    { label: 'Meals logged', value: `${user.totalMealsLogged}`, icon: <ClashingUtensils size={22} /> },
+    { label: 'Challenges won', value: `${user.challengesWon}`, icon: <RotatingTrophy size={22} color={colors.ink} /> },
+    { label: 'Total XP', value: user.xp.toLocaleString(), icon: <ElectricBolt size={22} /> },
   ];
 
-  return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Profile Header */}
-      <View style={styles.profileHeader}>
-        <View style={styles.avatarLg}>
-          <Text style={styles.avatarLgText}>{user.name[0]}</Text>
-        </View>
-        <Text style={styles.name}>{user.name}</Text>
-        <Text style={styles.university}>{user.university}</Text>
-        <Text style={styles.memberSince}>
-          Member since {new Date(user.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-        </Text>
+  const settingsItems: { label: string; icon: AppIconName; screen: string }[] = [
+    { label: 'Edit macro goals', icon: 'target', screen: 'EditGoals' },
+    { label: 'Scoring rules', icon: 'medal', screen: 'RuleSettings' },
+    { label: 'Notification preferences', icon: 'bell', screen: 'NotificationSettings' },
+    { label: 'Linked university', icon: 'school', screen: 'UniversitySettings' },
+  ];
 
-        {/* Streak */}
-        <View style={styles.streakSection}>
+  const memberSince = new Date(user.createdAt).toLocaleDateString('en-US', {
+    month: 'long',
+    year: 'numeric',
+  });
+
+  return (
+    <Screen scroll bottomSpace={96}>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <IconButton
+          icon="chevron-left"
+          onPress={() => navigation.goBack()}
+          accessibilityLabel="Back"
+          style={{ marginLeft: -4 }}
+        />
+      </View>
+      {/* Identity header */}
+      <View style={styles.identity}>
+        <Pressable onPress={() => setPickerOpen(true)} accessibilityLabel="Change profile picture">
+          <Avatar name={user.name} url={(user as any).avatarUrl} size={80} ring={colors.borderCard} ringWidth={2} />
+          <View
+            style={{
+              position: 'absolute',
+              right: -2,
+              bottom: -2,
+              width: 28,
+              height: 28,
+              borderRadius: 14,
+              backgroundColor: colors.scarlet,
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderWidth: 2,
+              borderColor: colors.canvas,
+            }}
+          >
+            <AppIcon name={(user as any).avatarUrl ? 'edit' : 'plus'} size={14} color={colors.onPrimary} />
+          </View>
+        </Pressable>
+        <Text variant="title" color={colors.ink} center style={{ marginTop: Spacing.md }}>
+          {user.name}
+        </Text>
+        <Text variant="label" color={colors.textSecondary} center style={{ marginTop: 2 }}>
+          {user.university}
+        </Text>
+        <Text variant="labelSm" color={colors.textTertiary} center style={{ marginTop: 2 }}>
+          Member since {memberSince}
+        </Text>
+        <View style={{ marginTop: Spacing.base }}>
           <StreakFlame count={user.streakCount} size="large" />
         </View>
-
-        {/* XP Bar */}
-        <View style={styles.xpSection}>
-          <Text style={styles.levelLabel}>Level {user.level} — {levelTitle}</Text>
-          <View style={styles.xpBarBg}>
-            <View style={[styles.xpBarFill, { width: `${xpProgress * 100}%` }]} />
-          </View>
-          <Text style={styles.xpText}>{xpIntoLevel} / {xpNeededThisLevel} XP</Text>
-        </View>
-      </View>
-
-      {/* Stats Grid */}
-      <View style={styles.statsGrid}>
-        <StatCard
-          label="Longest Streak"
-          value={`${user.longestStreak} days`}
-          icon={<PixelFlame size={24} animated />}
-        />
-        <StatCard label="Meals Logged" value={`${user.totalMealsLogged}`} icon={<ClashingUtensils size={24} />} />
-        <StatCard label="Challenges Won" value={`${user.challengesWon}`} icon={<RotatingTrophy size={24} />} />
-        <StatCard label="Total XP" value={`${user.xp.toLocaleString()}`} icon={<ElectricBolt size={24} />} />
-      </View>
-
-      {/* Points / Rewards Link */}
-      <TouchableOpacity
-        style={styles.rewardsLink}
-        onPress={() => navigation.navigate('Rewards')}
-      >
-        <AppIcon name="gift" size={22} color={Colors.gold} />
-        <View style={{ flex: 1, marginLeft: 12 }}>
-          <Text style={styles.rewardsLinkTitle}>My Rewards</Text>
-          <Text style={styles.rewardsLinkSub}>{user.points.toLocaleString()} points available</Text>
-        </View>
-        <Text style={styles.rewardsArrow}>›</Text>
-      </TouchableOpacity>
-
-      {/* Achievement Badges */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>ACHIEVEMENTS</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.badgesRow}>
-          {achievements.map((ach) => (
-            <View
-              key={ach.id}
-              style={[styles.badgeCard, !ach.unlocked && styles.badgeLocked]}
-            >
-              <View style={[styles.badgeIconWrap, !ach.unlocked && { opacity: 0.3 }]}>
-                {ach.icon === 'streak' ? (
-                  <PixelFlame size={30} animated={ach.unlocked} />
-                ) : ach.icon === 'trophy' ? (
-                  <RotatingTrophy size={28} />
-                ) : (
-                  <AppIcon name={ach.icon} size={28} color={ach.unlocked ? Colors.gold : Colors.textSecondary} />
-                )}
-              </View>
-              <Text style={[styles.badgeName, !ach.unlocked && { color: Colors.textSecondary }]}>
-                {ach.name}
-              </Text>
-              <Text style={styles.badgeDesc} numberOfLines={2}>{ach.description}</Text>
-              {ach.unlocked && <Text style={styles.badgeDate}>Unlocked</Text>}
-            </View>
-          ))}
-        </ScrollView>
-      </View>
-
-      {/* Weekly Protein Chart */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>WEEKLY PROTEIN</Text>
-        <View style={styles.chartCard}>
-          <View style={styles.chartBars}>
-            {weekly.map(({ label, value }, i) => {
-              const goal = dailyGoals.protein;
-              const pct = goal > 0 ? Math.min(value / goal, 1.2) : 0;
-              const isHit = goal > 0 && value >= goal;
-              const barColor =
-                goal <= 0
-                  ? Colors.surface2
-                  : isHit
-                    ? Colors.primary
-                    : value >= goal * 0.8
-                      ? Colors.accent
-                      : Colors.error;
-              return (
-                <View key={i} style={styles.chartBarCol}>
-                  <View style={styles.chartBarContainer}>
-                    <View
-                      style={[
-                        styles.chartBar,
-                        { height: `${Math.max(2, Math.min(pct * 100, 100))}%`, backgroundColor: barColor },
-                      ]}
-                    />
-                  </View>
-                  <Text style={styles.chartLabel}>{label}</Text>
-                  <Text style={styles.chartValue}>{value}g</Text>
-                </View>
-              );
-            })}
-          </View>
-          <View style={styles.goalLine}>
-            <View style={styles.goalLineDash} />
-            <Text style={styles.goalLineText}>
-              {dailyGoals.protein > 0 ? `Goal: ${dailyGoals.protein}g` : 'Set a protein goal'}
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Settings */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>SETTINGS</Text>
-        {settingsItems.map((item) => (
-          <TouchableOpacity
-            key={item.label}
-            style={styles.settingsRow}
-            onPress={() => navigation.navigate(item.screen)}
+        {!(user as any).avatarUrl ? (
+          <Pressable
+            onPress={() => setPickerOpen(true)}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 6,
+              marginTop: Spacing.md,
+              backgroundColor: colors.brandTint,
+              borderRadius: 99,
+              paddingVertical: 8,
+              paddingHorizontal: 14,
+            }}
           >
-            <AppIcon name={item.icon} size={18} />
-            <Text style={styles.settingsText}>{item.label}</Text>
-            <Text style={styles.settingsArrow}>›</Text>
-          </TouchableOpacity>
+            <AppIcon name="plus" size={15} color={colors.scarlet} />
+            <Text variant="label" color={colors.scarlet} style={{ fontFamily: FontFamily.semibold }}>
+              Add a profile picture
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
+
+      {/* Level / XP progression */}
+      <Card style={styles.block}>
+        <View style={styles.levelHeader}>
+          <Badge label={`LEVEL ${user.level}`} tone="scarlet" numeral />
+          <Text variant="subhead" color={colors.ink} style={{ flex: 1 }}>
+            {levelTitle}
+          </Text>
+          <Text style={[Type.numInline, { color: colors.textSecondary }]}>
+            {xpIntoLevel} / {xpNeededThisLevel} XP
+          </Text>
+        </View>
+        <ProgressBar progress={xpProgress} color={colors.scarlet} height={10} style={{ marginTop: 12 }} />
+        <Text variant="labelSm" color={colors.textTertiary} style={{ marginTop: 8 }}>
+          {Math.max(0, xpNeededThisLevel - xpIntoLevel)} XP to Level {user.level + 1}
+        </Text>
+      </Card>
+
+      {/* 2×2 stat grid */}
+      <View style={styles.statsGrid}>
+        {stats.map((s) => (
+          <Card key={s.label} style={styles.statCard}>
+            <View style={styles.statIcon}>{s.icon}</View>
+            <Text style={[Type.scoreStat, { color: colors.ink }]}>{s.value}</Text>
+            <Text variant="labelSm" color={colors.textSecondary} center style={{ marginTop: 2 }}>
+              {s.label}
+            </Text>
+          </Card>
         ))}
       </View>
 
-      <TouchableOpacity style={styles.logoutBtn} onPress={async () => {
-        try {
-          await signOut();
-        } catch {
-          // Fallback to local logout
-        }
-        logout();
-      }}>
-        <Text style={styles.logoutText}>Sign Out</Text>
-      </TouchableOpacity>
+      {/* Rewards link */}
+      <Card onPress={() => navigation.navigate('Rewards')} style={styles.rewardsRow}>
+        <View style={[styles.rewardsIcon, { backgroundColor: colors.goldTint }]}>
+          <AppIcon name="gift" size={22} color={colors.gold} />
+        </View>
+        <View style={{ flex: 1, marginLeft: Spacing.md }}>
+          <Text variant="subhead" color={colors.ink}>
+            My rewards
+          </Text>
+          <Text variant="label" color={colors.textSecondary}>
+            {user.points.toLocaleString()} LP available
+          </Text>
+        </View>
+        <AppIcon name="chevron-right" size={20} color={colors.textTertiary} />
+      </Card>
 
-      <TouchableOpacity style={styles.deleteBtn} onPress={onDeleteAccount}>
-        <Text style={styles.deleteText}>Delete Account</Text>
-      </TouchableOpacity>
+      {/* Achievements */}
+      <Text variant="overline" color={colors.textSecondary} style={styles.sectionLabel}>
+        Achievements
+      </Text>
+      <View style={styles.achievementsRow}>
+        {achievements.map((ach) => (
+          <Card key={ach.id} style={[styles.achCard, !ach.unlocked && { opacity: 0.55 }]}>
+            <View style={styles.achIcon}>
+              {ach.icon === 'streak' ? (
+                <PixelFlame size={28} animated={ach.unlocked} />
+              ) : ach.icon === 'trophy' ? (
+                <RotatingTrophy size={26} color={ach.unlocked ? colors.ink : colors.textTertiary} />
+              ) : (
+                <AppIcon
+                  name={ach.icon}
+                  size={26}
+                  color={ach.unlocked ? colors.ink : colors.textTertiary}
+                />
+              )}
+            </View>
+            <Text variant="cardTitle" color={ach.unlocked ? colors.ink : colors.textSecondary} center>
+              {ach.name}
+            </Text>
+            <Text variant="labelSm" color={colors.textTertiary} center numberOfLines={2} style={{ marginTop: 2 }}>
+              {ach.description}
+            </Text>
+            <View style={{ marginTop: 8 }}>
+              <Badge label={ach.unlocked ? 'Unlocked' : 'Locked'} tone={ach.unlocked ? 'success' : 'neutral'} />
+            </View>
+          </Card>
+        ))}
+      </View>
 
-      <View style={{ height: 40 }} />
-    </ScrollView>
+      {/* Weekly protein chart */}
+      <Text variant="overline" color={colors.textSecondary} style={styles.sectionLabel}>
+        Weekly protein
+      </Text>
+      <Card style={styles.block}>
+        <View style={styles.chartBars}>
+          {weekly.map(({ label, value }, i) => {
+            const goal = dailyGoals.protein;
+            const isToday = i === weekly.length - 1;
+            const isHit = goal > 0 && value >= goal;
+            const noData = value <= 0;
+            const pct = goal > 0 ? Math.min(value / goal, 1) : 0;
+            const barColor = isHit
+              ? colors.ink
+              : isToday
+                ? colors.scarlet
+                : colors.macroCarb;
+            return (
+              <View key={i} style={styles.chartCol}>
+                {isHit && <AppIcon name="checkmark" size={12} color={colors.success} />}
+                <View style={styles.chartTrack}>
+                  <View
+                    style={[
+                      styles.chartFill,
+                      {
+                        height: `${Math.max(4, pct * 100)}%`,
+                        backgroundColor: noData ? colors.track : barColor,
+                        borderWidth: noData ? 1 : 0,
+                        borderColor: colors.borderInput,
+                        borderStyle: 'dashed',
+                      },
+                    ]}
+                  />
+                </View>
+                <Text variant="labelSm" color={isToday ? colors.scarlet : colors.textSecondary} center>
+                  {label}
+                </Text>
+                <Text style={[Type.numInline, { color: colors.textTertiary, fontSize: 12 }]}>{value}</Text>
+              </View>
+            );
+          })}
+        </View>
+        <Divider style={{ marginTop: Spacing.md }} />
+        <Text variant="labelSm" color={colors.textTertiary} style={{ marginTop: 8 }}>
+          {dailyGoals.protein > 0
+            ? `Checks mark goal days. Goal: ${dailyGoals.protein}g protein.`
+            : 'Set a protein goal to track goal days.'}
+        </Text>
+      </Card>
+
+      {/* Settings */}
+      <Text variant="overline" color={colors.textSecondary} style={styles.sectionLabel}>
+        Settings
+      </Text>
+      <Card padded={false} style={styles.block}>
+        {settingsItems.map((item, i) => (
+          <View key={item.label}>
+            {i > 0 && <Divider inset={Spacing.base} />}
+            <Pressable
+              onPress={() => navigation.navigate(item.screen)}
+              style={({ pressed }) => [styles.settingsRow, pressed && { opacity: 0.6 }]}
+            >
+              <AppIcon name={item.icon} size={19} color={colors.textSecondary} />
+              <Text variant="subhead" color={colors.ink} style={{ flex: 1, marginLeft: Spacing.md }}>
+                {item.label}
+              </Text>
+              <AppIcon name="chevron-right" size={20} color={colors.textTertiary} />
+            </Pressable>
+          </View>
+        ))}
+      </Card>
+
+      {/* Appearance */}
+      <Text variant="overline" color={colors.textSecondary} style={styles.sectionLabel}>
+        Appearance
+      </Text>
+      <Card style={styles.block}>
+        <SegmentedControl
+          segments={['Light', 'Dark', 'System']}
+          value={Math.max(0, APPEARANCE_MODES.indexOf(mode))}
+          onChange={(idx) => setMode(APPEARANCE_MODES[idx])}
+        />
+      </Card>
+
+      {/* Sign out / Delete */}
+      <Pressable
+        onPress={async () => {
+          try {
+            await signOut();
+          } catch {
+            // Fallback to local logout
+          }
+          logout();
+        }}
+        style={({ pressed }) => [
+          styles.signOut,
+          { borderColor: colors.borderInput },
+          pressed && { opacity: 0.6 },
+        ]}
+      >
+        <AppIcon name="sign-out" size={18} color={colors.ink} />
+        <Text variant="button" color={colors.ink}>
+          Sign out
+        </Text>
+      </Pressable>
+
+      <Pressable
+        onPress={() => {
+          setDeleteError(null);
+          setShowDelete(true);
+        }}
+        style={({ pressed }) => [styles.deleteRow, pressed && { opacity: 0.6 }]}
+      >
+        <Text variant="label" color={colors.error}>
+          Delete account
+        </Text>
+      </Pressable>
+
+      {/* Delete account confirmation sheet (spec 27) */}
+      <Sheet visible={showDelete} onClose={() => setShowDelete(false)} title="Delete account?">
+        <View style={styles.sheetBody}>
+          <Text variant="body" color={colors.textSecondary}>
+            Your account will be archived and permanently deleted in 14 days. You can sign back in any
+            time before then to recover everything.
+          </Text>
+          {deleteError && (
+            <View style={[styles.errorBanner, { backgroundColor: colors.brandTint, borderColor: colors.brandTintBorder }]}>
+              <AppIcon name="circle-alert" size={15} color={colors.error} />
+              <Text variant="labelSm" color={colors.errorMuted} style={{ flex: 1 }}>
+                {deleteError}
+              </Text>
+            </View>
+          )}
+          <Pressable
+            disabled={isDeleting}
+            onPress={onConfirmDelete}
+            style={({ pressed }) => [
+              styles.destructiveBtn,
+              { backgroundColor: colors.error, opacity: isDeleting ? 0.6 : pressed ? 0.85 : 1 },
+            ]}
+          >
+            <Text variant="button" color={colors.onPrimary}>
+              {isDeleting ? 'Deleting…' : 'Delete account'}
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setShowDelete(false)}
+            style={({ pressed }) => [styles.cancelBtn, pressed && { opacity: 0.6 }]}
+          >
+            <Text variant="button" color={colors.ink}>
+              Cancel
+            </Text>
+          </Pressable>
+        </View>
+      </Sheet>
+
+      <AvatarPickerSheet
+        visible={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        userId={user.id}
+        name={user.name}
+        currentUrl={(user as any).avatarUrl}
+      />
+    </Screen>
   );
 }
-
-function StatCard({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
-  return (
-    <View style={statStyles.card}>
-      <View style={statStyles.icon}>{typeof icon === 'string' ? <Text style={statStyles.iconText}>{icon}</Text> : icon}</View>
-      <Text style={statStyles.value}>{value}</Text>
-      <Text style={statStyles.label}>{label}</Text>
-    </View>
-  );
-}
-
-const statStyles = StyleSheet.create({
-  card: {
-    width: '48%',
-    backgroundColor: Colors.surface,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 16,
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  icon: { height: 38, marginBottom: 6, alignItems: 'center', justifyContent: 'center' },
-  iconText: { fontSize: 24 },
-  value: { fontFamily: FontFamily.displayBold, fontSize: 20, color: Colors.textPrimary },
-  label: { fontFamily: FontFamily.body, fontSize: 11, color: Colors.textSecondary, marginTop: 4 },
-});
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  content: { padding: 20, paddingTop: 60 },
-  profileHeader: { alignItems: 'center', marginBottom: 24 },
-  avatarLg: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: Colors.surface2,
+  identity: { alignItems: 'center', marginTop: Spacing.sm, marginBottom: Spacing.lg },
+  block: { marginBottom: Spacing.base },
+  levelHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.xs,
+  },
+  statCard: { width: '48.5%', alignItems: 'center', paddingVertical: Spacing.base, marginBottom: Spacing.md },
+  statIcon: { height: 34, marginBottom: 6, alignItems: 'center', justifyContent: 'center' },
+  rewardsRow: { flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.lg },
+  rewardsIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: Radius.chip,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: Colors.primary,
-    marginBottom: 12,
   },
-  avatarLgText: { fontFamily: FontFamily.displayBold, fontSize: 32, color: Colors.textPrimary },
-  name: { fontFamily: FontFamily.displayBold, fontSize: 24, color: Colors.textPrimary },
-  university: { fontFamily: FontFamily.bodyMedium, fontSize: 14, color: Colors.textSecondary, marginTop: 2 },
-  memberSince: { fontFamily: FontFamily.body, fontSize: 12, color: Colors.textSecondary, marginTop: 4 },
-  streakSection: { marginTop: 16, marginBottom: 12 },
-  xpSection: { width: '100%', marginTop: 8 },
-  levelLabel: { fontFamily: FontFamily.bodySemiBold, fontSize: 13, color: Colors.primary, textAlign: 'center', marginBottom: 6 },
-  xpBarBg: { height: 8, borderRadius: 4, backgroundColor: Colors.surface2, overflow: 'hidden' },
-  xpBarFill: { height: 8, borderRadius: 4, backgroundColor: Colors.primary },
-  xpText: { fontFamily: FontFamily.body, fontSize: 11, color: Colors.textSecondary, textAlign: 'center', marginTop: 4 },
-  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 12 },
-  rewardsLink: {
+  sectionLabel: { marginBottom: Spacing.md, marginTop: Spacing.xs },
+  achievementsRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: Spacing.xs },
+  achCard: { width: '48.5%', alignItems: 'center', paddingVertical: Spacing.base, marginBottom: Spacing.md },
+  achIcon: { height: 34, marginBottom: 8, alignItems: 'center', justifyContent: 'center' },
+  chartBars: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', height: 132 },
+  chartCol: { flex: 1, alignItems: 'center', gap: 4 },
+  chartTrack: { flex: 1, width: 18, justifyContent: 'flex-end' },
+  chartFill: { width: 18, borderRadius: 5, minHeight: 4 },
+  settingsRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: Spacing.base },
+  signOut: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.gold + '0D',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Colors.gold + '22',
-    padding: 16,
-    marginBottom: 20,
+    justifyContent: 'center',
+    gap: 8,
+    height: 50,
+    borderRadius: Radius.button,
+    borderWidth: 1.5,
+    marginTop: Spacing.sm,
   },
-  rewardsLinkTitle: { fontFamily: FontFamily.displayBold, fontSize: 15, color: Colors.gold },
-  rewardsLinkSub: { fontFamily: FontFamily.body, fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
-  rewardsArrow: { fontFamily: FontFamily.displayBold, fontSize: 24, color: Colors.gold },
-  section: { marginBottom: 20 },
-  sectionTitle: {
-    fontFamily: FontFamily.displayBold,
-    fontSize: 13,
-    color: Colors.textSecondary,
-    letterSpacing: 1.5,
-    marginBottom: 12,
-  },
-  badgesRow: { gap: 10, paddingRight: 20 },
-  badgeCard: {
-    width: 110,
-    backgroundColor: Colors.surface,
-    borderRadius: 14,
+  deleteRow: { alignItems: 'center', paddingVertical: Spacing.base, marginTop: Spacing.xs },
+  sheetBody: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.base, gap: Spacing.md },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.border,
     padding: 12,
+  },
+  destructiveBtn: {
+    height: 54,
+    borderRadius: Radius.button,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: Spacing.xs,
   },
-  badgeLocked: { opacity: 0.5 },
-  badgeIconWrap: { height: 36, marginBottom: 6, alignItems: 'center', justifyContent: 'center' },
-  badgeName: { fontFamily: FontFamily.bodySemiBold, fontSize: 11, color: Colors.textPrimary, textAlign: 'center' },
-  badgeDesc: { fontFamily: FontFamily.body, fontSize: 9, color: Colors.textSecondary, textAlign: 'center', marginTop: 3 },
-  badgeDate: { fontFamily: FontFamily.body, fontSize: 8, color: Colors.primary, marginTop: 4 },
-  // Chart
-  chartCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 16,
-  },
-  chartBars: { flexDirection: 'row', justifyContent: 'space-between', height: 120 },
-  chartBarCol: { alignItems: 'center', flex: 1 },
-  chartBarContainer: { flex: 1, justifyContent: 'flex-end', width: 20 },
-  chartBar: { width: 20, borderRadius: 4 },
-  chartLabel: { fontFamily: FontFamily.body, fontSize: 10, color: Colors.textSecondary, marginTop: 4 },
-  chartValue: { fontFamily: FontFamily.body, fontSize: 9, color: Colors.textSecondary },
-  goalLine: { flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 6 },
-  goalLineDash: { flex: 1, height: 1, borderStyle: 'dashed', borderWidth: 1, borderColor: Colors.primary + '44' },
-  goalLineText: { fontFamily: FontFamily.body, fontSize: 10, color: Colors.primary },
-  // Settings
-  settingsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 6,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    gap: 12,
-  },
-  settingsText: { fontFamily: FontFamily.bodyMedium, fontSize: 14, color: Colors.textPrimary, flex: 1 },
-  settingsArrow: { fontFamily: FontFamily.body, fontSize: 20, color: Colors.textSecondary },
-  logoutBtn: {
-    borderWidth: 1,
-    borderColor: Colors.error + '44',
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  logoutText: { fontFamily: FontFamily.bodyMedium, fontSize: 14, color: Colors.error },
-  deleteBtn: {
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  deleteText: { fontFamily: FontFamily.body, fontSize: 13, color: Colors.textSecondary, textDecorationLine: 'underline' },
+  cancelBtn: { height: 50, alignItems: 'center', justifyContent: 'center' },
 });

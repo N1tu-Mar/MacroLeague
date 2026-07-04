@@ -1,93 +1,93 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { Colors, FontFamily } from '../theme';
+import { View } from 'react-native';
+import { FontFamily, useTheme } from '../theme';
 // Renders the REAL Supabase meal row (mealLogService.MealLog), not the demo
 // `../types` MealLog. Macros are per-serving, so each is multiplied by quantity
 // for display — matching how daily totals are summed.
 import { MealLog } from '../services/mealLogService';
-import AppIcon, { AppIconName } from './ui/AppIcon';
+import { Text, AppIcon, Badge } from './ui';
+import { AppIconName } from './ui/AppIcon';
 
 interface FoodLogItemProps {
   meal: MealLog;
+  showDivider?: boolean;
 }
-
-// Provenance badge. A null source is a legacy row → treated/labeled as manual.
-const SOURCE_ICONS: Record<string, AppIconName> = {
-  user_estimate: 'sparkles',
-  usda_fdc: 'search',
-  manual: 'edit',
-};
 
 const MEAL_ICONS: Record<string, AppIconName> = {
   breakfast: 'sunrise',
-  lunch: 'sun',
+  lunch: 'salad',
   dinner: 'moon',
   snack: 'apple',
 };
 
-function formatMacro(value: number): string {
-  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+// Per-meal-type tile tints (design meal-icon tints).
+const MEAL_TINT: Record<string, { bg: string; fg: string }> = {
+  breakfast: { bg: '#F3E4D2', fg: '#A0642A' },
+  lunch: { bg: '#E2EDD9', fg: '#5A7A3A' },
+  dinner: { bg: '#E3E8F2', fg: '#4A6288' },
+  snack: { bg: '#F3E4D2', fg: '#A0642A' },
+};
+
+function fmt(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(0);
 }
 
-function sourceKey(source: MealLog['source']): string {
-  // NULL/legacy collapses to 'manual' so old logs render consistently.
-  return source ?? 'manual';
-}
+const MEAL_LABEL: Record<string, string> = {
+  breakfast: 'Breakfast',
+  lunch: 'Lunch',
+  dinner: 'Dinner',
+  snack: 'Snack',
+};
 
-function sourceLabel(source: MealLog['source']): string {
-  if (source === 'user_estimate') return 'estimate';
-  if (source === 'usda_fdc') return 'USDA';
-  return 'manual';
-}
-
-export default function FoodLogItem({ meal }: FoodLogItemProps) {
+export default function FoodLogItem({ meal, showDivider = true }: FoodLogItemProps) {
+  const { colors } = useTheme();
   const time = new Date(meal.eatenAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  // Apply quantity so the card matches the contribution to daily totals.
   const calories = meal.calories * meal.quantity;
   const protein = meal.proteinG * meal.quantity;
-  const carbs = meal.carbsG * meal.quantity;
-  const fat = meal.fatG * meal.quantity;
+  const tint = MEAL_TINT[meal.mealType] ?? MEAL_TINT.snack;
+  const isUsda = meal.source === 'usda_fdc';
 
   return (
-    <View style={styles.container}>
-      <View style={styles.iconCol}>
-        <AppIcon name={MEAL_ICONS[meal.mealType] ?? 'meal'} size={22} color={Colors.accent} />
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        paddingVertical: 12,
+        paddingHorizontal: 14,
+        borderTopWidth: showDivider ? 1 : 0,
+        borderTopColor: colors.rowDivider,
+      }}
+    >
+      <View
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: 12,
+          backgroundColor: tint.bg,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <AppIcon name={MEAL_ICONS[meal.mealType] ?? 'meal'} size={21} color={tint.fg} />
       </View>
-      <View style={styles.info}>
-        <Text style={styles.name} numberOfLines={1}>{meal.freeText}</Text>
-        <View style={styles.metaRow}>
-          <Text style={styles.meta}>{time} ·</Text>
-          <AppIcon name={SOURCE_ICONS[sourceKey(meal.source)] ?? 'edit'} size={11} />
-          <Text style={styles.meta}>{sourceLabel(meal.source)}</Text>
+      <View style={{ flex: 1 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text variant="cardTitle" color={colors.ink} numberOfLines={1} style={{ flexShrink: 1 }}>
+            {meal.freeText}
+          </Text>
+          {isUsda ? <Badge label="USDA" tone="usda" /> : null}
         </View>
-      </View>
-      <View style={styles.macros}>
-        <Text style={styles.cal}>{formatMacro(calories)} cal</Text>
-        <Text style={styles.macroDetail}>
-          {formatMacro(protein)}P · {formatMacro(carbs)}C · {formatMacro(fat)}F
+        <Text variant="labelSm" color={colors.textSecondary} style={{ marginTop: 1 }}>
+          {MEAL_LABEL[meal.mealType] ?? 'Meal'} · {time}
         </Text>
+      </View>
+      <View style={{ alignItems: 'flex-end' }}>
+        <Text style={{ fontFamily: FontFamily.numBold, fontSize: 15, color: colors.ink }}>
+          {fmt(calories)} <Text style={{ fontFamily: FontFamily.semibold, fontSize: 10.5, color: colors.textTertiary }}>kcal</Text>
+        </Text>
+        <Text variant="labelSm" color={colors.textSecondary}>{fmt(protein)}g protein</Text>
       </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  iconCol: { width: 36, alignItems: 'center' },
-  info: { flex: 1, marginLeft: 8 },
-  name: { fontFamily: FontFamily.bodyMedium, fontSize: 14, color: Colors.textPrimary },
-  meta: { fontFamily: FontFamily.body, fontSize: 11, color: Colors.textSecondary },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 },
-  macros: { alignItems: 'flex-end' },
-  cal: { fontFamily: FontFamily.displayBold, fontSize: 15, color: Colors.textPrimary },
-  macroDetail: { fontFamily: FontFamily.body, fontSize: 10, color: Colors.textSecondary, marginTop: 2 },
-});

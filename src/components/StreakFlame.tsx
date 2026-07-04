@@ -7,7 +7,7 @@ import Animated, {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import { Colors, FontFamily } from '../theme';
+import { FontFamily, useTheme } from '../theme';
 import PixelFlame from './PixelFlame';
 
 interface StreakFlameProps {
@@ -16,6 +16,7 @@ interface StreakFlameProps {
 }
 
 export default function StreakFlame({ count, size = 'small' }: StreakFlameProps) {
+  const { colors } = useTheme();
   const scale = useSharedValue(1);
 
   useEffect(() => {
@@ -48,7 +49,7 @@ export default function StreakFlame({ count, size = 'small' }: StreakFlameProps)
           styles.count,
           {
             fontSize,
-            color: count >= 7 ? Colors.accent : Colors.textPrimary,
+            color: count >= 7 ? colors.streak : colors.ink,
           },
         ]}
       >
@@ -61,6 +62,6 @@ export default function StreakFlame({ count, size = 'small' }: StreakFlameProps)
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   count: {
-    fontFamily: FontFamily.displayBold,
+    fontFamily: FontFamily.numBold,
   },
 });
