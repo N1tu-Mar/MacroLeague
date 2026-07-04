@@ -213,7 +213,164 @@ scheduled jobs in the target Supabase project.
 Do this deliberately against the correct Supabase project; building an app binary
 does not require or authorize a production database push.
 
-## 8. Release checklist
+## 8. What is still missing before store launch
+
+MacroLeague is technically in the correct Expo/React Native shape for iOS,
+Android, and web, but there are still product and policy gaps between "builds"
+and "ready for the App Store / Google Play."
+
+### Highest-priority launch gaps
+
+- **Sign in with Apple for iOS:** the app currently supports email/password and
+  Google OAuth. Because Google is a third-party login used for the primary
+  account, Apple review will likely expect an equivalent Apple login option.
+- **Hosted privacy policy and support URL:** both Apple and Google require
+  accurate privacy disclosures. The policy should explicitly cover account data,
+  nutrition/meal data, analytics/crash reporting, retention, and deletion.
+- **Google Play Data safety form:** the store listing must accurately disclose
+  what data is collected, whether it is shared, whether it is encrypted in
+  transit, and how deletion requests work.
+- **Store metadata and review assets:** screenshots, app description, keywords,
+  category, age rating, support email, review notes, and a test account or
+  review path if the reviewer needs credentials.
+- **Production-ready auth setup:** native Google OAuth redirects, password reset,
+  and account lifecycle flows must be verified on actual preview/production
+  builds, not just web or local dev.
+- **Production backend readiness:** Supabase production project, migrations,
+  Edge Functions, secrets, cron jobs, and environment variables must all be
+  aligned with the build that is going to testers.
+- **Product analytics beyond crash reporting:** Sentry is useful for failures,
+  but early product-market-fit work also needs funnel analytics so we can see
+  onboarding completion, first meal logging, challenge joins, and retention.
+
+### Current policy constraints to plan around
+
+- **Apple login policy:** apps that use a third-party login service for the
+  primary account must also offer another login option with Apple-like privacy
+  characteristics. In practice, that usually means Sign in with Apple for iOS.
+- **Apple privacy policy policy:** the App Store metadata and the app itself
+  must link to an accessible privacy policy that explains collection, retention,
+  and deletion behavior.
+- **Apple account deletion policy:** if users can create an account, they must
+  be able to request deletion within the app. MacroLeague already has an
+  account deletion/reactivation path, which is a strong start.
+- **Google Play closed testing requirement:** if the Play Console account is a
+  newly created personal developer account, Google currently requires a closed
+  test with at least 12 opted-in testers for 14 continuous days before
+  production access can be requested.
+
+### MacroLeague-specific launch readiness checklist
+
+Before external testing:
+
+1. Add Sign in with Apple on iOS.
+2. Publish the real privacy policy and terms pages on a stable URL.
+3. Verify Google OAuth, password reset, account deletion, and reactivation on
+   physical preview builds.
+4. Add product analytics events for onboarding, first meal logged, return
+   session, challenge participation, and reward views.
+5. Create a review/demo account with safe seed data if the store reviewer needs
+   to get past sign-in quickly.
+
+Before App Store / Play submission:
+
+1. Complete App Store Connect and Play Console listings.
+2. Fill out Apple privacy nutrition labels and Google Data safety accurately.
+3. Confirm the app does not depend on any missing production secrets or local
+   redirects.
+4. Run a closed cohort test and fix the top onboarding/logging blockers before
+   public release.
+
+## 9. First-user-session plan
+
+The first user sessions should not be treated as open-ended "what do you think?"
+calls. The goal is to learn where people get stuck, what value clicks quickly,
+and whether the product creates enough motivation to come back tomorrow.
+
+### What to optimize for
+
+- Can a new user understand what MacroLeague is within 2 minutes?
+- Can they complete onboarding without live help?
+- Can they log a first meal quickly?
+- Do they understand why the nutrition score, leaderboard, and rewards matter?
+- Would they come back tomorrow, and why?
+
+### Recommended first cohort
+
+Start with 8-12 people, not a broad public launch. Split them across:
+
+- fitness-minded students
+- casual "I want to eat better" students
+- socially motivated users who already operate in friend groups
+
+Use one dense network first, such as one dorm cluster, friend group, sports
+club, or wellness community, because MacroLeague's value improves when users
+already know each other.
+
+### The first-session script
+
+Run moderated sessions with the same task flow every time:
+
+1. Install/open the build.
+2. Create an account or sign in.
+3. Complete onboarding.
+4. Log a meal.
+5. Interpret today's score/progress.
+6. Explain the league/challenge/reward system back in their own words.
+7. Ask what would make them open it again tomorrow.
+
+Capture:
+
+- where they hesitate
+- where they ask for clarification
+- where they tap the wrong thing
+- whether logging feels fast enough
+- whether the social/reward framing feels believable
+
+### What to measure immediately
+
+For every tester, track:
+
+- onboarding started
+- onboarding completed
+- first meal logged
+- time to first meal logged
+- second session within 24-48 hours
+- number of meals logged in the first 3 days
+- whether they joined or viewed a challenge/leaderboard/reward screen
+
+These are the earliest signals of whether the loop is compelling.
+
+### How to avoid wasting the first sessions
+
+- Use a fixed interviewer script so results are comparable.
+- Use a short screener form before inviting people.
+- Use a short post-session form after every session.
+- Take notes in the same template every time.
+- Instrument the app so behavior data backs up the interview notes.
+- Fix only the biggest repeated blockers after the first few sessions; do not
+  thrash the product after every single opinion.
+
+### Suggested session outputs
+
+At the end of the first wave, you should be able to answer:
+
+- What is the top onboarding confusion?
+- What is the top logging friction?
+- What part of the product users actually care about first?
+- What makes them say "I'd use this tomorrow" versus "this is interesting"?
+- Which user segment appears most naturally pulled into the product?
+
+### Recommended feedback workflow
+
+- **Screener form:** who they are, school, nutrition goals, current apps used,
+  whether they track already, whether they like competition.
+- **Session notes:** timestamps, friction points, quotes, observed behavior.
+- **Post-session form:** ease of signup, ease of logging, clarity of value,
+  likelihood of next-day use, feature they cared about most.
+- **Follow-up after 3-7 days:** did they return on their own, why or why not?
+
+## 10. Release checklist
 
 1. Review and commit the intended source/migration changes.
 2. Run `npm run typecheck`, `npm test -- --runInBand`, and `npm run export:web`.

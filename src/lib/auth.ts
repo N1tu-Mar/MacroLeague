@@ -1,6 +1,8 @@
 import { supabase } from './supabase';
 import { makeRedirectUri } from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Crypto from 'expo-crypto';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { Platform } from 'react-native';
 
@@ -55,38 +57,42 @@ export async function signUpWithEmail(email: string, password: string) {
 }
 
 /**
- * Sign in with Google OAuth via Supabase
+ * Shared Supabase web-OAuth redirect flow. Opens the provider's hosted login in an
+ * in-app browser (native) or a full-page redirect (web), then completes the PKCE
+ * code exchange to establish a session. Google always uses this; Apple uses it only
+ * as the web/Android fallback (native iOS uses the Apple sheet — see signInWithApple).
  */
-export async function signInWithGoogle() {
+async function runWebOAuth(
+  provider: 'google' | 'apple',
+  providerLabel: string,
+  queryParams?: Record<string, string>,
+) {
   const redirectTo = getRedirectUri();
 
-  // Log in dev so you can copy the exact URI into Supabase dashboard
+  // Log in dev so you can copy the exact URI into the Supabase dashboard allowlist.
   if (__DEV__) {
     console.log('[auth] OAuth redirectTo:', redirectTo);
   }
 
   const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
+    provider,
     options: {
       redirectTo,
       // Web: full-page redirect. Mobile: open an in-app browser session.
       skipBrowserRedirect: Platform.OS !== 'web',
-      queryParams: {
-        access_type: 'offline',
-        prompt: 'consent',
-      },
+      queryParams,
     },
   });
 
   if (error) {
-    const msg = error.message ?? '';
+    const msg = (error.message ?? '').toLowerCase();
     if (
-      msg.toLowerCase().includes('provider') ||
-      msg.toLowerCase().includes('unsupported') ||
-      msg.toLowerCase().includes('not enabled')
+      msg.includes('provider') ||
+      msg.includes('unsupported') ||
+      msg.includes('not enabled')
     ) {
       throw new Error(
-        'Google sign-in is not configured yet.\n\nEnable the Google provider in your Supabase dashboard under Authentication → Providers.'
+        `${providerLabel} sign-in is not configured yet.\n\nEnable the ${providerLabel} provider in your Supabase dashboard under Authentication → Providers.`,
       );
     }
     throw error;
@@ -108,8 +114,7 @@ export async function signInWithGoogle() {
     // Catch error params returned in the redirect URL
     const urlError = url.searchParams.get('error');
     if (urlError) {
-      const desc =
-        url.searchParams.get('error_description') ?? urlError;
+      const desc = url.searchParams.get('error_description') ?? urlError;
       throw new Error(desc.replace(/\+/g, ' '));
     }
 
@@ -138,13 +143,13 @@ export async function signInWithGoogle() {
       return sessionData;
     }
 
-    throw new Error('No authentication tokens received from Google.');
+    throw new Error(`No authentication tokens received from ${providerLabel}.`);
   }
 
   if (result.type === 'cancel' || result.type === 'dismiss') {
     if (__DEV__) {
       console.warn(
-        '[auth] OAuth cancelled. If Google auth completed but the app got no session, ' +
+        '[auth] OAuth cancelled. If auth completed but the app got no session, ' +
         'the redirectTo URI above is not in your Supabase Redirect URLs allowlist. ' +
         'Add it at: Supabase Dashboard → Authentication → URL Configuration → Redirect URLs'
       );
@@ -152,7 +157,111 @@ export async function signInWithGoogle() {
     throw new Error('cancelled');
   }
 
-  throw new Error('Google sign-in was cancelled');
+  throw new Error(`${providerLabel} sign-in was cancelled`);
+}
+
+/**
+ * Sign in with Google OAuth via Supabase (web redirect flow).
+ */
+export async function signInWithGoogle() {
+  return runWebOAuth('google', 'Google', {
+    access_type: 'offline',
+    prompt: 'consent',
+  });
+}
+
+/**
+ * Whether the NATIVE "Sign in with Apple" sheet is available — iOS 13+ on a real
+ * dev/standalone build. False on Android, web, and Expo Go, where the button falls
+ * back to the Supabase web-OAuth flow instead. Screens use this to decide whether
+ * to show the Apple button at all.
+ */
+export async function isAppleSignInAvailable(): Promise<boolean> {
+  if (Platform.OS !== 'ios') return false;
+  try {
+    return await AppleAuthentication.isAvailableAsync();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Sign in with Apple. Required by App Store Review Guideline 4.8 whenever the app
+ * offers another third-party login (we offer Google). On iOS this uses the NATIVE
+ * Apple sheet (expo-apple-authentication) and exchanges the returned identity token
+ * for a Supabase session via signInWithIdToken. Everywhere else it falls back to
+ * the Supabase web-OAuth redirect.
+ *
+ * Security: Apple is handed a SHA-256 hash of a one-time nonce while Supabase gets
+ * the raw nonce, so Supabase can verify the identity token wasn't replayed.
+ */
+export async function signInWithApple() {
+  if (!(await isAppleSignInAvailable())) {
+    return runWebOAuth('apple', 'Apple');
+  }
+
+  const rawNonce = Crypto.randomUUID();
+  const hashedNonce = await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    rawNonce,
+  );
+
+  let credential: AppleAuthentication.AppleAuthenticationCredential;
+  try {
+    credential = await AppleAuthentication.signInAsync({
+      requestedScopes: [
+        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+        AppleAuthentication.AppleAuthenticationScope.EMAIL,
+      ],
+      nonce: hashedNonce,
+    });
+  } catch (e: any) {
+    // Tapping "Cancel" on the Apple sheet isn't worth surfacing.
+    if (e?.code === 'ERR_REQUEST_CANCELED') throw new Error('cancelled');
+    throw e;
+  }
+
+  if (!credential.identityToken) {
+    throw new Error('No identity token returned from Apple.');
+  }
+
+  const { data, error } = await supabase.auth.signInWithIdToken({
+    provider: 'apple',
+    token: credential.identityToken,
+    nonce: rawNonce,
+  });
+
+  if (error) {
+    const msg = (error.message ?? '').toLowerCase();
+    if (
+      msg.includes('provider') ||
+      msg.includes('unsupported') ||
+      msg.includes('not enabled')
+    ) {
+      throw new Error(
+        'Apple sign-in is not configured yet.\n\nEnable the Apple provider in your Supabase dashboard under Authentication → Providers, and add the app bundle id (com.macroleague.app) as an authorized Client ID.',
+      );
+    }
+    throw error;
+  }
+
+  // Apple returns the user's real name ONLY on the very first authorization. If we
+  // got it and Supabase has no name yet, persist it so the new profile isn't
+  // nameless (best-effort — the user can still set it during onboarding).
+  const fullName = credential.fullName;
+  const name = [fullName?.givenName, fullName?.familyName]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+  if (name && !data.user?.user_metadata?.full_name) {
+    try {
+      await supabase.auth.updateUser({ data: { full_name: name } });
+    } catch {
+      // ignore — non-fatal
+    }
+  }
+
+  return data;
 }
 
 /**

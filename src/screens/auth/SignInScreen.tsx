@@ -10,7 +10,11 @@ import {
   ScreenHeader,
   AppIcon,
 } from '../../components/ui';
-import { signInWithEmail, signInWithGoogle } from '../../lib/auth';
+import { signInWithEmail, signInWithGoogle, signInWithApple } from '../../lib/auth';
+
+// Sign in with Apple is required on iOS (Guideline 4.8) and works on web via
+// Supabase OAuth; Android stays Google-only (no native Apple, avoids extra config).
+const SHOW_APPLE = Platform.OS !== 'android';
 import type { SignInScreenProps } from '../../navigation/types';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -53,9 +57,11 @@ export default function SignInScreen({ navigation }: SignInScreenProps) {
   const [authError, setAuthError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
+  const busy = loading || googleLoading || appleLoading;
 
   async function handleSignIn() {
-    if (loading || googleLoading) return;
+    if (busy) return;
     setAuthError(null);
     if (!EMAIL_RE.test(email.trim())) {
       setEmailError('Enter a valid email address.');
@@ -75,7 +81,7 @@ export default function SignInScreen({ navigation }: SignInScreenProps) {
   }
 
   async function handleGoogle() {
-    if (loading || googleLoading) return;
+    if (busy) return;
     setGoogleLoading(true);
     try {
       await signInWithGoogle();
@@ -83,6 +89,19 @@ export default function SignInScreen({ navigation }: SignInScreenProps) {
       // cancellation isn't worth surfacing
     } finally {
       setGoogleLoading(false);
+    }
+  }
+
+  async function handleApple() {
+    if (busy) return;
+    setAppleLoading(true);
+    try {
+      await signInWithApple();
+      // Auth state listener in App.tsx handles navigation
+    } catch {
+      // cancellation isn't worth surfacing
+    } finally {
+      setAppleLoading(false);
     }
   }
 
@@ -142,6 +161,16 @@ export default function SignInScreen({ navigation }: SignInScreenProps) {
             loadingLabel="Signing in…"
             onPress={handleSignIn}
           />
+          {SHOW_APPLE && (
+            <Button
+              label="Continue with Apple"
+              variant="apple"
+              size="md"
+              loading={appleLoading}
+              loadingLabel="Connecting…"
+              onPress={handleApple}
+            />
+          )}
           <Button
             label="Continue with Google"
             variant="google"

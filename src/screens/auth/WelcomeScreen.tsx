@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Pressable } from 'react-native';
+import { View, Pressable, Platform } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { FontFamily, Spacing, Type, useTheme } from '../../theme';
 import {
@@ -11,8 +11,12 @@ import {
   ProgressBar,
 } from '../../components/ui';
 import BrandMark from '../../components/BrandMark';
-import { signInWithGoogle } from '../../lib/auth';
+import { signInWithGoogle, signInWithApple } from '../../lib/auth';
 import type { WelcomeScreenProps } from '../../navigation/types';
+
+// Sign in with Apple is required on iOS (App Store Guideline 4.8) and works on web
+// via Supabase OAuth; Android stays Google-only (no native Apple sheet there).
+const SHOW_APPLE = Platform.OS !== 'android';
 
 /** The preview card that "sells" the app: score → league gap → logged-meal loop. */
 function PreviewCard() {
@@ -128,9 +132,11 @@ function PreviewCard() {
 export default function WelcomeScreen({ navigation }: WelcomeScreenProps) {
   const { colors } = useTheme();
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
+  const busy = googleLoading || appleLoading;
 
   async function handleGoogle() {
-    if (googleLoading) return;
+    if (busy) return;
     setGoogleLoading(true);
     try {
       await signInWithGoogle();
@@ -138,6 +144,18 @@ export default function WelcomeScreen({ navigation }: WelcomeScreenProps) {
       // cancellation isn't worth surfacing
     } finally {
       setGoogleLoading(false);
+    }
+  }
+
+  async function handleApple() {
+    if (busy) return;
+    setAppleLoading(true);
+    try {
+      await signInWithApple();
+    } catch {
+      // cancellation isn't worth surfacing
+    } finally {
+      setAppleLoading(false);
     }
   }
 
@@ -173,6 +191,16 @@ export default function WelcomeScreen({ navigation }: WelcomeScreenProps) {
 
       <View style={{ gap: 10 }}>
         <Button label="Get started" onPress={() => navigation.navigate('SignUp')} />
+        {SHOW_APPLE && (
+          <Button
+            label="Continue with Apple"
+            variant="apple"
+            size="md"
+            loading={appleLoading}
+            loadingLabel="Connecting…"
+            onPress={handleApple}
+          />
+        )}
         <Button
           label="Continue with Google"
           variant="google"

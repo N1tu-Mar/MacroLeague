@@ -428,11 +428,6 @@ function validateEditableFields(params: Partial<EditableMealFields>): Partial<Ed
     validateDate('eatenAt', params.eatenAt);
   }
   validateOptionalMeta(params);
-  // Only enforce the subtype-vs-total relationship when total fat is part of the
-  // edit; a partial edit that omits fatG can't be checked here.
-  if (params.fatG !== undefined) {
-    validateFatSubtypes(params.fatG, params);
-  }
 
   return validated;
 }
