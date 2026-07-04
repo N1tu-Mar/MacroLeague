@@ -25,6 +25,8 @@ import {
   getChallengeDetail,
   createChallenge,
   joinChallenge,
+  leaveChallenge,
+  CHALLENGE_DROP_PENALTY,
   inviteToChallenge,
   respondChallengeInvite,
   getChallengeInvites,
@@ -586,6 +588,9 @@ function ChallengeDetail({ challengeId, onBack }: { challengeId: string; onBack:
   const [error, setError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
+  const [showDrop, setShowDrop] = useState(false);
+  const [dropping, setDropping] = useState(false);
+  const [dropError, setDropError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -612,6 +617,21 @@ function ChallengeDetail({ challengeId, onBack }: { challengeId: string; onBack:
       await load();
     } finally {
       setJoining(false);
+    }
+  }
+
+  async function handleLeave() {
+    setDropping(true);
+    setDropError(null);
+    try {
+      await leaveChallenge(challengeId);
+      // Dropping is a forfeit; return to the list, which reloads standings.
+      setShowDrop(false);
+      onBack();
+    } catch (e) {
+      setDropError(e instanceof Error ? e.message : 'Could not drop this challenge.');
+    } finally {
+      setDropping(false);
     }
   }
 
@@ -847,13 +867,37 @@ function ChallengeDetail({ challengeId, onBack }: { challengeId: string; onBack:
               </Text>
             </View>
             {detail.status !== 'completed' && (
-              <Button
-                label="Invite friends"
-                variant="secondary"
-                icon="users"
-                onPress={() => setShowInvite(true)}
-                style={{ marginTop: 12 }}
-              />
+              <>
+                <Button
+                  label="Invite friends"
+                  variant="secondary"
+                  icon="users"
+                  onPress={() => setShowInvite(true)}
+                  style={{ marginTop: 12 }}
+                />
+                <Pressable
+                  onPress={() => {
+                    setDropError(null);
+                    setShowDrop(true);
+                  }}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    gap: 8,
+                    paddingVertical: 14,
+                    marginTop: 8,
+                    opacity: pressed ? 0.6 : 1,
+                  })}
+                  accessibilityRole="button"
+                  accessibilityLabel="Drop challenge"
+                >
+                  <AppIcon name="close" size={16} color={colors.error} />
+                  <Text variant="cardTitle" color={colors.error}>
+                    Drop challenge
+                  </Text>
+                </Pressable>
+              </>
             )}
           </>
         ) : detail.status !== 'completed' ? (
@@ -873,7 +917,111 @@ function ChallengeDetail({ challengeId, onBack }: { challengeId: string; onBack:
         existingParticipantIds={detail.standings.map((s) => s.userId)}
         onClose={() => setShowInvite(false)}
       />
+
+      <DropChallengeSheet
+        visible={showDrop}
+        penalty={CHALLENGE_DROP_PENALTY}
+        dropping={dropping}
+        error={dropError}
+        onConfirm={handleLeave}
+        onClose={() => {
+          if (dropping) return;
+          setShowDrop(false);
+        }}
+      />
     </>
+  );
+}
+
+// ── Drop Challenge Sheet ──────────────────────────────────
+
+/**
+ * Forfeit warning. Dropping an active challenge means you lose it and get docked
+ * league points, so we make the cost explicit and require an "I understand" tap
+ * before calling leave_challenge. No system alert — an in-app sheet, like the
+ * rest of the screen.
+ */
+function DropChallengeSheet({
+  visible,
+  penalty,
+  dropping,
+  error,
+  onConfirm,
+  onClose,
+}: {
+  visible: boolean;
+  penalty: number;
+  dropping: boolean;
+  error: string | null;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  const { colors } = useTheme();
+  return (
+    <Sheet visible={visible} onClose={onClose} title="Drop this challenge?" showClose>
+      <View style={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 8, gap: 16 }}>
+        <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start' }}>
+          <View
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 12,
+              backgroundColor: colors.brandTint,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <AppIcon name="warning" size={20} color={colors.error} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text variant="cardTitle" color={colors.ink} style={{ marginBottom: 4 }}>
+              You'll lose this challenge.
+            </Text>
+            <Text variant="body" color={colors.textSecondary}>
+              Dropping counts as a forfeit — you lose, and{' '}
+              <Text variant="body" color={colors.error}>
+                {penalty} league points
+              </Text>{' '}
+              will be deducted from your leaderboard standing. This can't be undone.
+            </Text>
+          </View>
+        </View>
+
+        {error && (
+          <Text variant="label" color={colors.error}>
+            {error}
+          </Text>
+        )}
+
+        <Pressable
+          onPress={onConfirm}
+          disabled={dropping}
+          style={({ pressed }) => ({
+            height: 54,
+            borderRadius: 14,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 10,
+            backgroundColor: dropping ? colors.track : colors.error,
+            opacity: pressed ? 0.9 : 1,
+          })}
+          accessibilityRole="button"
+          accessibilityLabel={`I understand, drop challenge and lose ${penalty} league points`}
+        >
+          {dropping ? (
+            <ActivityIndicator size="small" color={colors.onPrimary} />
+          ) : (
+            <AppIcon name="warning" size={18} color={colors.onPrimary} />
+          )}
+          <Text variant="button" color={colors.onPrimary}>
+            {dropping ? 'Dropping…' : `I understand — lose ${penalty} points`}
+          </Text>
+        </Pressable>
+
+        <Button label="Cancel" variant="secondary" onPress={onClose} disabled={dropping} />
+      </View>
+    </Sheet>
   );
 }
 

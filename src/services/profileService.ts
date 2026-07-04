@@ -266,6 +266,8 @@ export interface ProfileIdentity {
   goalType: string | null;
   /** Saved preferred dining hall (migration 0012), or null if never set. */
   preferredDiningHall: string | null;
+  /** Profile picture URL (migration 0006), or null if never set. */
+  avatarUrl: string | null;
   /**
    * True only when the account has a real, user-chosen display name saved in the
    * DB (onboarding completed the name step). This is the RAW signal — it is NOT
@@ -293,7 +295,7 @@ function nonEmptyString(value: unknown): string | null {
 export async function getProfileIdentity(userId: string): Promise<ProfileIdentity> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('username, display_name, university, goal_type, preferred_dining_hall')
+    .select('username, display_name, university, goal_type, preferred_dining_hall, avatar_url')
     .eq('id', userId)
     .maybeSingle<{
       username: string | null;
@@ -301,6 +303,7 @@ export async function getProfileIdentity(userId: string): Promise<ProfileIdentit
       university: string | null;
       goal_type: string | null;
       preferred_dining_hall: string | null;
+      avatar_url: string | null;
     }>();
 
   if (error) throw error;
@@ -330,6 +333,7 @@ export async function getProfileIdentity(userId: string): Promise<ProfileIdentit
     university: data.university,
     goalType: data.goal_type,
     preferredDiningHall: data.preferred_dining_hall,
+    avatarUrl: data.avatar_url,
     hasName,
   };
 }

@@ -8,8 +8,15 @@ import { useUserStore } from '../store/userStore';
 // The design's profile pictures are DiceBear "micah" avatars on per-person
 // tints. We render the PNG endpoint (not SVG) so the same image works on iOS,
 // Android and web via <Image>. Each option is a stable seed + background tint.
-const SEEDS = ['Champion', 'Striker', 'Ace', 'Blaze', 'Nova', 'Pilot', 'Scout', 'Ranger', 'Comet'];
-const TINTS = ['f3dbc9', 'd8e4f2', 'e4d8f0', 'f0d8dc', 'd8e8ea', 'd5e8dc', 'eae4d0', 'f2e3d0', 'e3e8f2'];
+const SEEDS = [
+  'Champion', 'Striker', 'Ace', 'Blaze', 'Nova', 'Pilot', 'Scout', 'Ranger', 'Comet',
+  'Maverick', 'Titan', 'Phoenix', 'Rebel', 'Voyager', 'Falcon', 'Viper', 'Storm',
+  'Blitz', 'Nomad', 'Cyclone', 'Rocket', 'Summit', 'Apex', 'Ember',
+];
+const TINTS = [
+  'f3dbc9', 'd8e4f2', 'e4d8f0', 'f0d8dc', 'd8e8ea', 'd5e8dc',
+  'eae4d0', 'f2e3d0', 'e3e8f2', 'dce8d8', 'f0e8d8', 'd8f0ec',
+];
 
 function micahUrl(seed: string, tint: string): string {
   return `https://api.dicebear.com/9.x/micah/png?seed=${encodeURIComponent(seed)}&backgroundColor=${tint}&size=160`;
@@ -60,7 +67,7 @@ export default function AvatarPickerSheet({
   }
 
   return (
-    <Sheet visible={visible} onClose={onClose} title="Profile picture" showClose>
+    <Sheet visible={visible} onClose={onClose} title="Profile picture" showClose scrollable>
       <View style={{ paddingHorizontal: 20, paddingTop: 4, gap: 16 }}>
         <Text variant="label" color={colors.textSecondary}>
           Pick a look for your league profile. You can change it anytime.

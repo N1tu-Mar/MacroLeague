@@ -230,6 +230,29 @@ export async function joinChallenge(challengeId: string, teamName = 'My Team'): 
   }
 }
 
+/**
+ * League points forfeited when you drop a challenge that has not ended. Kept in
+ * sync with the hardcoded penalty inside the leave_challenge RPC (migration 0016)
+ * so the UI warning and the DB always agree.
+ */
+export const CHALLENGE_DROP_PENALTY = 20;
+
+/**
+ * Drops the signed-in user out of a challenge. Dropping a challenge that is still
+ * active (or upcoming) is a FORFEIT: the backend removes your membership AND docks
+ * CHALLENGE_DROP_PENALTY league points from your leaderboard standing, atomically,
+ * via the SECURITY DEFINER leave_challenge RPC (the client can never write points
+ * itself). Returns the league points actually deducted — 0 if the challenge had
+ * already ended, in which case leaving is free.
+ */
+export async function leaveChallenge(challengeId: string): Promise<number> {
+  const { data, error } = await supabase.rpc('leave_challenge', {
+    p_challenge_id: challengeId,
+  });
+  if (error) throw error;
+  return Number(data ?? 0);
+}
+
 // ── Challenge invites (migration 0011) ────────────────────────────
 
 export interface ChallengeInvite {

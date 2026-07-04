@@ -158,7 +158,7 @@ export default function ProfileScreen({ navigation }: any) {
       {/* Identity header */}
       <View style={styles.identity}>
         <Pressable onPress={() => setPickerOpen(true)} accessibilityLabel="Change profile picture">
-          <Avatar name={user.name} url={(user as any).avatarUrl} size={80} ring={colors.borderCard} ringWidth={2} />
+          <Avatar name={user.name} url={user.avatarUrl} size={80} ring={colors.borderCard} ringWidth={2} />
           <View
             style={{
               position: 'absolute',
@@ -174,7 +174,7 @@ export default function ProfileScreen({ navigation }: any) {
               borderColor: colors.canvas,
             }}
           >
-            <AppIcon name={(user as any).avatarUrl ? 'edit' : 'plus'} size={14} color={colors.onPrimary} />
+            <AppIcon name={user.avatarUrl ? 'edit' : 'plus'} size={14} color={colors.onPrimary} />
           </View>
         </Pressable>
         <Text variant="title" color={colors.ink} center style={{ marginTop: Spacing.md }}>
@@ -189,7 +189,7 @@ export default function ProfileScreen({ navigation }: any) {
         <View style={{ marginTop: Spacing.base }}>
           <StreakFlame count={user.streakCount} size="large" />
         </View>
-        {!(user as any).avatarUrl ? (
+        {!user.avatarUrl ? (
           <Pressable
             onPress={() => setPickerOpen(true)}
             style={{
@@ -451,7 +451,7 @@ export default function ProfileScreen({ navigation }: any) {
         onClose={() => setPickerOpen(false)}
         userId={user.id}
         name={user.name}
-        currentUrl={(user as any).avatarUrl}
+        currentUrl={user.avatarUrl}
       />
     </Screen>
   );
