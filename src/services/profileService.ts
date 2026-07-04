@@ -177,6 +177,27 @@ export async function updateProfileUniversity(
 }
 
 /**
+ * Persists the user's profile picture URL. `avatar_url` is in the client
+ * column-level UPDATE grant (migrations 0006/0012). Pass `null` to clear it
+ * (fall back to the initials avatar). Mirrors the other profile updates:
+ * `.select('id').maybeSingle()` surfaces a missing-profile row as a clear error.
+ */
+export async function updateProfileAvatar(
+  userId: string,
+  avatarUrl: string | null,
+): Promise<void> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({ avatar_url: avatarUrl ? avatarUrl.trim().slice(0, 500) : null })
+    .eq('id', userId)
+    .select('id')
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error(MISSING_PROFILE_MESSAGE);
+}
+
+/**
  * Backend-owned gamification snapshot for a user. Every field here is written
  * ONLY by the database (migration 0005's meal-award trigger / future RPCs); the
  * client can read these columns but column-level privileges forbid it from

@@ -1,17 +1,16 @@
 import React, { useEffect, useState } from 'react';
+import { View, ActivityIndicator, Alert } from 'react-native';
+import { useTheme } from '../../theme';
 import {
-  View,
+  Screen,
+  ScreenHeader,
   Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
+  Card,
+  Button,
   Switch,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
-import { Colors, FontFamily } from '../../theme';
+  Divider,
+} from '../../components/ui';
 import { useUserStore } from '../../store/userStore';
-import AppIcon from '../../components/ui/AppIcon';
 import {
   getActiveRuleSet,
   saveRuleModules,
@@ -25,6 +24,7 @@ import {
  * each module can be tested independently before leagues exist.
  */
 export default function RuleSettingsScreen({ navigation }: any) {
+  const { colors } = useTheme();
   const userId = useUserStore((s) => s.user?.id);
   const [modules, setModules] = useState<RuleModules | null>(null);
   const [isOwn, setIsOwn] = useState(false);
@@ -81,63 +81,65 @@ export default function RuleSettingsScreen({ navigation }: any) {
 
   if (isLoading || !modules) {
     return (
-      <View style={[styles.container, styles.loadingBox]}>
-        <ActivityIndicator color={Colors.primary} size="large" />
-      </View>
+      <Screen>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator color={colors.scarlet} size="large" />
+        </View>
+      </Screen>
     );
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-        <AppIcon name="back" size={17} color={Colors.primary} />
-        <Text style={styles.backText}>Back</Text>
-      </TouchableOpacity>
+    <Screen scroll>
+      <ScreenHeader title="Scoring rules" onBack={() => navigation.goBack()} />
 
-      <Text style={styles.title}>SCORING RULES</Text>
-      <Text style={styles.subtitle}>
+      <Text variant="body" color={colors.textSecondary} style={{ marginTop: 4, marginBottom: 18 }}>
         Choose which goals earn points and leaderboard score.
         {isOwn ? ' Using your custom rules.' : ' Using the default rules.'}
       </Text>
 
-      <RuleRow
-        label="Meal count goal"
-        sub={`Reward logging ${modules.mealCountRequired} meals in a day`}
-        value={modules.mealCountEnabled}
-        onChange={(v) => patch({ mealCountEnabled: v })}
-      />
-      <RuleRow
-        label="Daily protein goal"
-        sub={`Reward reaching ${modules.proteinMinPct}% of your protein goal`}
-        value={modules.proteinGoalEnabled}
-        onChange={(v) => patch({ proteinGoalEnabled: v })}
-      />
-      <RuleRow
-        label="Macro accuracy"
-        sub="Reward calories, protein & carbs within target bands"
-        value={modules.macroAccuracyEnabled}
-        onChange={(v) => patch({ macroAccuracyEnabled: v })}
-      />
-      <RuleRow
-        label="Streak milestones"
-        sub="Reward 7 / 14 / 21 / 30-day logging streaks"
-        value={modules.streakEnabled}
-        onChange={(v) => patch({ streakEnabled: v })}
-      />
+      <Card padded={false} style={{ marginBottom: 14 }}>
+        <RuleRow
+          label="Meal count goal"
+          sub={`Reward logging ${modules.mealCountRequired} meals in a day`}
+          value={modules.mealCountEnabled}
+          onChange={(v) => patch({ mealCountEnabled: v })}
+        />
+        <Divider inset={16} />
+        <RuleRow
+          label="Daily protein goal"
+          sub={`Reward reaching ${modules.proteinMinPct}% of your protein goal`}
+          value={modules.proteinGoalEnabled}
+          onChange={(v) => patch({ proteinGoalEnabled: v })}
+        />
+        <Divider inset={16} />
+        <RuleRow
+          label="Macro accuracy"
+          sub="Reward calories, protein & carbs within target bands"
+          value={modules.macroAccuracyEnabled}
+          onChange={(v) => patch({ macroAccuracyEnabled: v })}
+        />
+        <Divider inset={16} />
+        <RuleRow
+          label="Streak milestones"
+          sub="Reward 7 / 14 / 21 / 30-day logging streaks"
+          value={modules.streakEnabled}
+          onChange={(v) => patch({ streakEnabled: v })}
+        />
+      </Card>
 
-      <Text style={styles.note}>
+      <Text variant="body" color={colors.textTertiary} style={{ marginBottom: 24, fontSize: 12 }}>
         Base meal XP and points are always awarded. Changes apply to meals you log
         from now on.
       </Text>
 
-      <TouchableOpacity
-        style={[styles.saveBtn, isSaving && styles.saveBtnDisabled]}
+      <Button
+        label="Save rules"
         onPress={save}
-        disabled={isSaving}
-      >
-        <Text style={styles.saveBtnText}>{isSaving ? 'SAVING...' : 'SAVE RULES'}</Text>
-      </TouchableOpacity>
-    </ScrollView>
+        loading={isSaving}
+        loadingLabel="Saving…"
+      />
+    </Screen>
   );
 }
 
@@ -152,56 +154,25 @@ function RuleRow({
   value: boolean;
   onChange: (v: boolean) => void;
 }) {
+  const { colors } = useTheme();
   return (
-    <View style={styles.ruleRow}>
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 14,
+        paddingHorizontal: 16,
+      }}
+    >
       <View style={{ flex: 1, marginRight: 12 }}>
-        <Text style={styles.ruleLabel}>{label}</Text>
-        <Text style={styles.ruleSub}>{sub}</Text>
+        <Text variant="subhead" color={colors.ink}>
+          {label}
+        </Text>
+        <Text variant="label" color={colors.textSecondary} style={{ marginTop: 2 }}>
+          {sub}
+        </Text>
       </View>
-      <Switch
-        value={value}
-        onValueChange={onChange}
-        trackColor={{ false: Colors.surface2, true: Colors.primary + '88' }}
-        thumbColor={value ? Colors.primary : Colors.textSecondary}
-      />
+      <Switch value={value} onValueChange={onChange} />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  loadingBox: { alignItems: 'center', justifyContent: 'center' },
-  content: { padding: 20, paddingTop: 60 },
-  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 16 },
-  backText: { fontFamily: FontFamily.bodyMedium, fontSize: 15, color: Colors.primary },
-  title: { fontFamily: FontFamily.displayBold, fontSize: 24, color: Colors.textPrimary, letterSpacing: 1, marginBottom: 4 },
-  subtitle: { fontFamily: FontFamily.body, fontSize: 14, color: Colors.textSecondary, marginBottom: 24 },
-  ruleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 16,
-    marginBottom: 12,
-  },
-  ruleLabel: { fontFamily: FontFamily.bodySemiBold, fontSize: 15, color: Colors.textPrimary },
-  ruleSub: { fontFamily: FontFamily.body, fontSize: 12, color: Colors.textSecondary, marginTop: 3 },
-  note: {
-    fontFamily: FontFamily.body,
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: 8,
-    marginBottom: 20,
-    lineHeight: 17,
-  },
-  saveBtn: {
-    backgroundColor: Colors.primary,
-    borderRadius: 50,
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  saveBtnDisabled: { opacity: 0.6 },
-  saveBtnText: { fontFamily: FontFamily.displayBold, fontSize: 16, color: Colors.background },
-});

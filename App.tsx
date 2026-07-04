@@ -1,16 +1,24 @@
 import 'react-native-gesture-handler';
 import React, { useEffect, useState } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import {
+  NavigationContainer,
+  DefaultTheme,
+  DarkTheme,
+} from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { useFonts } from 'expo-font';
 import {
-  useFonts,
-  Nunito_400Regular,
-  Nunito_500Medium,
-  Nunito_600SemiBold,
-  Nunito_700Bold,
-  Nunito_800ExtraBold,
-} from '@expo-google-fonts/nunito';
+  DMSans_400Regular,
+  DMSans_500Medium,
+  DMSans_600SemiBold,
+  DMSans_700Bold,
+} from '@expo-google-fonts/dm-sans';
+import {
+  BarlowCondensed_500Medium,
+  BarlowCondensed_600SemiBold,
+  BarlowCondensed_700Bold,
+} from '@expo-google-fonts/barlow-condensed';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AuthNavigator from './src/navigation/AuthNavigator';
 import MainNavigator from './src/navigation/MainNavigator';
@@ -21,7 +29,7 @@ import TutorialScreen from './src/screens/onboarding/TutorialScreen';
 import { useUserStore } from './src/store/userStore';
 import { supabase } from './src/lib/supabase';
 import { setMonitoringUser } from './src/lib/monitoring';
-import { Colors } from './src/theme';
+import { ThemeProvider, useTheme } from './src/theme';
 
 // The tutorial (the "what is MacroLeague" intro slides) is shown exactly once
 // per account. We scope the seen-flag to the user id so it survives across
@@ -46,11 +54,13 @@ export default function App() {
   const [passwordRecovery, setPasswordRecovery] = useState(false);
 
   const [fontsLoaded] = useFonts({
-    Nunito_400Regular,
-    Nunito_500Medium,
-    Nunito_600SemiBold,
-    Nunito_700Bold,
-    Nunito_800ExtraBold,
+    DMSans_400Regular,
+    DMSans_500Medium,
+    DMSans_600SemiBold,
+    DMSans_700Bold,
+    BarlowCondensed_500Medium,
+    BarlowCondensed_600SemiBold,
+    BarlowCondensed_700Bold,
   });
 
   useEffect(() => {
@@ -161,26 +171,74 @@ export default function App() {
     setTutorialSeen(true);
   }
 
-  if (!fontsLoaded || loading || tutorialSeen === null) {
+  const notReady = !fontsLoaded || loading || tutorialSeen === null;
+
+  return (
+    <ThemeProvider>
+      <AppRoot
+        notReady={notReady}
+        passwordRecovery={passwordRecovery}
+        isAuthenticated={isAuthenticated}
+        isDeactivated={isDeactivated}
+        needsOnboarding={needsOnboarding}
+        tutorialSeen={tutorialSeen === true}
+        onTutorialDone={markTutorialSeen}
+        onResetDone={() => setPasswordRecovery(false)}
+      />
+    </ThemeProvider>
+  );
+}
+
+type AppRootProps = {
+  notReady: boolean;
+  passwordRecovery: boolean;
+  isAuthenticated: boolean;
+  isDeactivated: boolean;
+  needsOnboarding: boolean;
+  tutorialSeen: boolean;
+  onTutorialDone: () => void;
+  onResetDone: () => void;
+};
+
+// Rendered inside ThemeProvider so the status bar, loading screen and
+// navigation background all follow the active (light/dark) palette.
+function AppRoot({
+  notReady,
+  passwordRecovery,
+  isAuthenticated,
+  isDeactivated,
+  needsOnboarding,
+  tutorialSeen,
+  onTutorialDone,
+  onResetDone,
+}: AppRootProps) {
+  const { colors, isDark } = useTheme();
+  const base = isDark ? DarkTheme : DefaultTheme;
+  const navTheme = {
+    ...base,
+    colors: { ...base.colors, background: colors.canvas },
+  };
+
+  if (notReady) {
     return (
-      <View style={styles.loading}>
-        <ActivityIndicator color={Colors.primary} size="large" />
+      <View style={[styles.loading, { backgroundColor: colors.canvas }]}>
+        <ActivityIndicator color={colors.scarlet} size="large" />
       </View>
     );
   }
 
   return (
-    <NavigationContainer>
-      <StatusBar style="light" />
+    <NavigationContainer theme={navTheme}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       {passwordRecovery ? (
-        <ResetPasswordScreen onDone={() => setPasswordRecovery(false)} />
+        <ResetPasswordScreen onDone={onResetDone} />
       ) : isAuthenticated ? (
         isDeactivated ? (
           <ReactivateAccountScreen />
         ) : needsOnboarding ? (
           <OnboardingGoalsScreen />
         ) : !tutorialSeen ? (
-          <TutorialScreen onDone={markTutorialSeen} />
+          <TutorialScreen onDone={onTutorialDone} />
         ) : (
           <MainNavigator />
         )
@@ -194,7 +252,6 @@ export default function App() {
 const styles = StyleSheet.create({
   loading: {
     flex: 1,
-    backgroundColor: Colors.background,
     alignItems: 'center',
     justifyContent: 'center',
   },

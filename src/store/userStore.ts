@@ -65,6 +65,8 @@ interface UserState {
    */
   adjustPointsLocally: (delta: number) => void;
   setDailyGoals: (goals: DailyGoals) => void;
+  /** Update the cached avatar URL after the user picks a profile picture. */
+  setAvatarUrl: (avatarUrl: string | null) => void;
 }
 
 export const useUserStore = create<UserState>((set, get) => ({
@@ -167,4 +169,9 @@ export const useUserStore = create<UserState>((set, get) => ({
       return { user: { ...state.user, points: Math.max(0, state.user.points + delta) } };
     }),
   setDailyGoals: (goals: DailyGoals) => set({ dailyGoals: goals }),
+  setAvatarUrl: (avatarUrl: string | null) =>
+    set((state) => {
+      if (!state.user) return state;
+      return { user: { ...state.user, avatarUrl } };
+    }),
 }));

@@ -1,10 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Colors, FontFamily, FontSize, Spacing, Radius, alpha } from '../theme';
-import Avatar from './ui/Avatar';
-import RankMovement from './ui/RankMovement';
-import PixelFlame from './PixelFlame';
-import AppIcon from './ui/AppIcon';
+import { View, Pressable, StyleSheet } from 'react-native';
+import { FontFamily, Spacing, useTheme } from '../theme';
+import { Avatar, StreakPill, RankMovement, Text } from './ui';
 
 // Visual zone tint for a leaderboard row. Local type (no longer sourced from mock
 // league data); 'safe' is the neutral default used by the real global leaderboard.
@@ -24,17 +21,13 @@ export interface LeaderboardRowProps {
   onPress?: () => void;
 }
 
-const MEDAL_COLOR: Record<number, string> = {
-  1: Colors.gold,
-  2: '#BFC5CC',
-  3: '#C9824A',
-};
-
 /**
- * One league-table row. Conveys a lot at a glance: rank/medal, movement vs last
- * week, who it is + a status badge, points, and streak. The left edge is tinted
- * by promotion/relegation zone; the current user gets a brand highlight and the
- * rival a subtle accent ring so the chase reads instantly.
+ * One standings-table row (spec s15). Reads like a real sports table: a
+ * place-colored rank numeral, the person's avatar (medal ring for the podium),
+ * name + a YOU/RIVAL tag, an optional streak pill, the LP total in Barlow, and a
+ * movement arrow. The current user's row is tinted (brandTint) with a 3px
+ * scarlet left border so "you" reads instantly. Flat by design — it lives inside
+ * a Card and is divided from its neighbours by a hairline.
  */
 export default function LeaderboardRow({
   rank,
@@ -42,66 +35,95 @@ export default function LeaderboardRow({
   points,
   streak,
   movement,
-  zone = 'safe',
   isCurrentUser,
   isRival,
   badge,
   avatarUrl,
   onPress,
 }: LeaderboardRowProps) {
-  const zoneColor =
-    zone === 'promotion' ? Colors.promotion : zone === 'relegation' ? Colors.relegation : Colors.border;
+  const { colors } = useTheme();
 
-  const ring = isCurrentUser
-    ? Colors.primary
-    : rank === 1
-    ? Colors.gold
-    : isRival
-    ? Colors.accent
-    : undefined;
+  const rankColor =
+    rank === 1
+      ? colors.gold
+      : rank === 2
+      ? colors.medalSilver
+      : rank === 3
+      ? colors.medalBronze
+      : isCurrentUser
+      ? colors.scarlet
+      : colors.textSecondary;
 
-  const Wrapper: any = onPress ? TouchableOpacity : View;
+  const ring =
+    rank === 1
+      ? colors.goldActive
+      : rank === 2
+      ? colors.medalSilver
+      : rank === 3
+      ? colors.medalBronze
+      : isCurrentUser
+      ? colors.scarlet
+      : undefined;
+
+  const Wrapper: any = onPress ? Pressable : View;
 
   return (
     <Wrapper
-      {...(onPress ? { onPress, activeOpacity: 0.85 } : {})}
-      style={[
+      {...(onPress ? { onPress } : {})}
+      style={({ pressed }: { pressed?: boolean }) => [
         styles.row,
-        { borderLeftColor: zoneColor, borderLeftWidth: zone === 'safe' ? 1 : 3 },
-        isCurrentUser && styles.currentUser,
-        isRival && !isCurrentUser && styles.rival,
+        isCurrentUser && {
+          backgroundColor: colors.brandTint,
+          borderLeftWidth: 3,
+          borderLeftColor: colors.scarlet,
+          paddingLeft: Spacing.md - 3,
+        },
+        pressed && !isCurrentUser && { backgroundColor: colors.track },
       ]}
     >
-      <View style={styles.rankCol}>
-        {MEDAL_COLOR[rank] ? (
-          <AppIcon name="medal" size={19} color={MEDAL_COLOR[rank]} strokeWidth={2.4} />
-        ) : (
-          <Text style={[styles.rankNum, isCurrentUser && { color: Colors.primary }]}>{rank}</Text>
-        )}
-        <RankMovement movement={movement} />
-      </View>
+      <Text
+        color={rankColor}
+        style={styles.rank}
+        allowFontScaling={false}
+      >
+        {rank}
+      </Text>
 
-      <Avatar name={name} uri={avatarUrl} size={38} ring={ring} />
+      <Avatar name={name} url={avatarUrl} size={38} ring={ring} ringWidth={2} />
 
       <View style={styles.info}>
-        <Text style={[styles.name, isCurrentUser && { color: Colors.primary }]} numberOfLines={1}>
-          {name}{isCurrentUser ? ' (You)' : ''}
-        </Text>
+        <View style={styles.nameRow}>
+          <Text variant="cardTitle" color={colors.ink} numberOfLines={1} style={styles.name}>
+            {name}
+          </Text>
+          {isCurrentUser ? (
+            <View style={[styles.youTag, { backgroundColor: colors.card }]}>
+              <Text style={[styles.youTagText, { color: colors.scarlet }]}>YOU</Text>
+            </View>
+          ) : isRival ? (
+            <Text style={[styles.rivalTag, { color: colors.scarlet }]}>RIVAL</Text>
+          ) : null}
+        </View>
         {badge ? (
-          <Text style={styles.badge} numberOfLines={1}>{badge}</Text>
-        ) : (
-          <View style={styles.streakRow}>
-            <PixelFlame size={12} />
-            <Text style={styles.streakText}>{streak}-day</Text>
-          </View>
-        )}
+          <Text variant="labelSm" color={colors.textSecondary} numberOfLines={1} style={{ marginTop: 1 }}>
+            {badge}
+          </Text>
+        ) : null}
       </View>
 
-      <View style={styles.pointsCol}>
-        <Text style={[styles.points, isCurrentUser && { color: Colors.primary }]}>
+      {streak > 0 ? <StreakPill count={streak} size={14} animated={false} /> : null}
+
+      <View style={styles.lpCol}>
+        <Text color={colors.ink} style={styles.lpValue} allowFontScaling={false}>
           {points.toLocaleString()}
         </Text>
-        <Text style={styles.pointsLabel}>pts</Text>
+        <Text variant="labelSm" color={colors.textSecondary} style={styles.lpUnit}>
+          LP
+        </Text>
+      </View>
+
+      <View style={styles.moveCol}>
+        <RankMovement movement={movement} />
       </View>
     </Wrapper>
   );
@@ -112,29 +134,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.md,
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.md,
-    marginBottom: Spacing.sm,
-    borderWidth: 1,
-    borderColor: Colors.border,
   },
-  currentUser: {
-    backgroundColor: alpha(Colors.primary, 0.1),
-    borderColor: alpha(Colors.primary, 0.4),
+  rank: {
+    fontFamily: FontFamily.numBold,
+    fontSize: 20,
+    minWidth: 22,
+    textAlign: 'center',
   },
-  rival: {
-    borderColor: alpha(Colors.accent, 0.35),
-  },
-  rankCol: { width: 30, alignItems: 'center', gap: 2 },
-  rankNum: { fontFamily: FontFamily.displayBold, fontSize: FontSize.subhead, color: Colors.textSecondary },
   info: { flex: 1 },
-  name: { fontFamily: FontFamily.bodySemiBold, fontSize: FontSize.body, color: Colors.textPrimary },
-  badge: { fontFamily: FontFamily.bodyMedium, fontSize: FontSize.meta, color: Colors.accent, marginTop: 1 },
-  streakRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 1 },
-  streakText: { fontFamily: FontFamily.body, fontSize: FontSize.meta, color: Colors.textSecondary },
-  pointsCol: { alignItems: 'flex-end' },
-  points: { fontFamily: FontFamily.displayBold, fontSize: FontSize.subhead, color: Colors.textPrimary },
-  pointsLabel: { fontFamily: FontFamily.body, fontSize: FontSize.micro, color: Colors.textTertiary },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  name: { flexShrink: 1 },
+  youTag: { borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 },
+  youTagText: { fontFamily: FontFamily.semibold, fontSize: 10, lineHeight: 12 },
+  rivalTag: { fontFamily: FontFamily.medium, fontSize: 10, lineHeight: 12 },
+  lpCol: { flexDirection: 'row', alignItems: 'baseline', gap: 3 },
+  lpValue: { fontFamily: FontFamily.numBold, fontSize: 17 },
+  lpUnit: {},
+  moveCol: { minWidth: 20, alignItems: 'flex-end' },
 });

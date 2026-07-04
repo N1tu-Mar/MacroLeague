@@ -1,0 +1,1450 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@0.462.0/dist/umd/lucide.min.js"></script>
+<script src="l-icon.js"></script>
+<style>
+body{margin:0;background:#ECEEE9;font-family:'DM Sans',system-ui,sans-serif}
+*{box-sizing:border-box}
+l-icon{display:inline-block;flex:none}
+textarea,input{font-family:'DM Sans',sans-serif;outline:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes flame{to{background-position:-144px 0}}
+@keyframes rise{from{transform:translateY(24px);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes pop{0%{transform:scale(.6);opacity:0}70%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+.scr{position:absolute;inset:0;overflow-y:auto;scrollbar-width:none;background:#F5F6F3}
+.scr::-webkit-scrollbar{display:none}
+.dim{position:absolute;inset:0;background:rgba(23,26,31,.38);animation:fadein .2s;z-index:20}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:#F9FAF8;border-radius:24px 24px 0 0;box-shadow:0 -12px 40px rgba(23,26,31,.22);z-index:21;animation:rise .3s cubic-bezier(.2,.8,.2,1)}
+.btnp{cursor:pointer;user-select:none;transition:transform .1s,filter .15s}
+.btnp:active{transform:scale(.97);filter:brightness(.92)}
+</style>
+</helmet>
+
+<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px 16px 48px;gap:16px">
+
+<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:760px">
+<div style="width:100%;text-align:center;font:700 15px 'DM Sans';color:#171A1F;margin-bottom:2px">MacroLeague — clickable prototype</div>
+<div class="btnp" onClick="{{ flowA }}" style="padding:8px 14px;border-radius:99px;background:#fff;border:1px solid #E3E6E0;font:600 12.5px 'DM Sans';color:#171A1F"><span style="color:#D9364A">A</span> · New account</div>
+<div class="btnp" onClick="{{ flowB }}" style="padding:8px 14px;border-radius:99px;background:#fff;border:1px solid #E3E6E0;font:600 12.5px 'DM Sans';color:#171A1F"><span style="color:#D9364A">B</span> · Log a meal</div>
+<div class="btnp" onClick="{{ flowC }}" style="padding:8px 14px;border-radius:99px;background:#fff;border:1px solid #E3E6E0;font:600 12.5px 'DM Sans';color:#171A1F"><span style="color:#D9364A">C</span> · Fix an estimate</div>
+<div class="btnp" onClick="{{ flowD }}" style="padding:8px 14px;border-radius:99px;background:#fff;border:1px solid #E3E6E0;font:600 12.5px 'DM Sans';color:#171A1F"><span style="color:#D9364A">D</span> · Compete</div>
+<div class="btnp" onClick="{{ flowE }}" style="padding:8px 14px;border-radius:99px;background:#fff;border:1px solid #E3E6E0;font:600 12.5px 'DM Sans';color:#171A1F"><span style="color:#D9364A">E</span> · Rewards</div>
+<div class="btnp" onClick="{{ flowF }}" style="padding:8px 14px;border-radius:99px;background:#fff;border:1px solid #E3E6E0;font:600 12.5px 'DM Sans';color:#171A1F"><span style="color:#D9364A">F</span> · Account recovery</div>
+</div>
+
+<div style="width:390px;height:844px;border-radius:36px;overflow:hidden;position:relative;background:#F5F6F3;box-shadow:0 24px 60px rgba(23,26,31,.18),0 0 0 1px rgba(23,26,31,.08)">
+
+<div style="position:absolute;top:0;left:0;right:0;height:47px;display:flex;align-items:center;justify-content:space-between;padding:0 24px 0 30px;z-index:10;pointer-events:none">
+<span style="font:600 15px 'DM Sans';color:#171A1F">9:41</span>
+<span style="display:flex;gap:6px;align-items:center;color:#171A1F"><l-icon name="signal" style="width:15px;height:15px"></l-icon><l-icon name="wifi" style="width:15px;height:15px"></l-icon><l-icon name="battery-full" style="width:22px;height:22px"></l-icon></span>
+</div>
+
+<sc-if value="{{ isWelcome }}" hint-placeholder-val="{{ true }}">
+<div class="scr" data-screen-label="Welcome" style="display:flex;flex-direction:column;padding:55px 22px 34px">
+<div style="display:flex;align-items:center;gap:10px;flex:none">
+<svg viewBox="0 0 24 24" style="width:30px;height:30px;display:block" role="img" aria-label="MacroLeague"><path d="M12 2 L20.5 5.2 V12.2 C20.5 17.4 17 21 12 22.6 C7 21 3.5 17.4 3.5 12.2 V5.2 Z" fill="#171A1F"></path><text x="12" y="15.4" text-anchor="middle" font-family="Barlow Condensed" font-weight="700" font-size="11" fill="#D9364A">ML</text></svg>
+<div><div style="font:700 17px/1 'DM Sans';color:#171A1F;letter-spacing:-.01em">MacroLeague</div><div style="font:500 11px/1 'DM Sans';color:#68707D;margin-top:3px">Nutrition leagues for friends</div></div>
+</div>
+<h1 style="font:700 40px/1.12 'DM Sans';color:#171A1F;letter-spacing:-.025em;margin:22px 0 0">Track your food.<br><span style="color:#D9364A">Climb your league.</span></h1>
+<p style="font:400 16px/24px 'DM Sans';color:#68707D;margin:12px 0 0;max-width:310px">Log meals, hit your nutrition targets, and compete with friends.</p>
+<div style="margin:26px 2px 0;position:relative">
+<div style="background:#fff;border-radius:20px;box-shadow:0 10px 30px rgba(23,26,31,.10);padding:18px 20px 16px">
+<div style="display:flex;align-items:flex-start;justify-content:space-between">
+<div><div style="font:500 11px/1 'DM Sans';color:#68707D;text-transform:uppercase;letter-spacing:.08em">Nutrition Score</div><div style="font:600 14px 'DM Sans';color:#1E9E5A;margin-top:8px">Strong day</div></div>
+<div style="font:700 56px/0.9 'Barlow Condensed';color:#171A1F">78</div>
+</div>
+<div style="margin-top:12px">
+<div style="display:flex;justify-content:space-between;font:500 12.5px 'DM Sans';color:#171A1F"><span>Protein</span><span style="color:#68707D"><b style="color:#171A1F;font-weight:600">128</b> / 170g</span></div>
+<div style="height:8px;border-radius:4px;background:#EDEFEA;margin-top:6px;overflow:hidden"><div style="width:75%;height:100%;border-radius:4px;background:#171A1F"></div></div>
+</div>
+<div style="margin-top:14px;border-top:1px solid #E8EAE5;padding-top:11px;display:flex;align-items:center;gap:8px">
+<span style="font:700 20px/1 'Barlow Condensed';color:#D9364A">#4</span>
+<span style="font:500 12.5px 'DM Sans';color:#171A1F">18 pts behind Maya</span>
+<img src="https://api.dicebear.com/9.x/micah/svg?seed=Maya&backgroundColor=d8e4f2" alt="Maya" style="width:22px;height:22px;border-radius:50%;background:#D8E4F2">
+<span style="font:600 12px 'Barlow Condensed';color:#68707D;margin-left:auto;letter-spacing:.04em">2D 8H LEFT</span>
+</div>
+</div>
+<div style="position:absolute;left:50%;bottom:-18px;transform:translateX(-50%);background:#fff;border:1px solid #E8EAE5;border-radius:99px;box-shadow:0 6px 18px rgba(23,26,31,.12);padding:8px 14px;display:flex;align-items:center;gap:8px;white-space:nowrap">
+<span style="width:20px;height:20px;border-radius:10px;background:#E3F2E9;display:flex;align-items:center;justify-content:center"><l-icon name="check" style="width:12px;height:12px;color:#1E9E5A"></l-icon></span>
+<span style="font:600 12.5px 'DM Sans';color:#171A1F">Chicken rice bowl logged</span>
+<span style="font:700 12.5px 'Barlow Condensed';color:#1E9E5A">+50 XP</span>
+<span style="font:700 12.5px 'Barlow Condensed';color:#D9364A">+10 LP</span>
+</div>
+</div>
+<div style="flex:1"></div>
+<div style="display:flex;flex-direction:column;gap:10px">
+<div class="btnp" onClick="{{ goSignup }}" style="height:54px;border-radius:14px;background:#D9364A;display:flex;align-items:center;justify-content:center;font:600 16.5px 'DM Sans';color:#fff">Get started</div>
+<div class="btnp" onClick="{{ goSignup }}" style="height:54px;border-radius:14px;background:#fff;border:1.5px solid #CDD3D8;display:flex;align-items:center;justify-content:center;gap:10px;font:600 15.5px 'DM Sans';color:#171A1F">
+<svg viewBox="0 0 18 18" style="width:18px;height:18px"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92a8.78 8.78 0 0 0 2.68-6.62Z"></path><path fill="#34A853" d="M9 18a8.6 8.6 0 0 0 5.96-2.18l-2.92-2.26a5.4 5.4 0 0 1-8.09-2.85H.96v2.33A9 9 0 0 0 9 18Z"></path><path fill="#FBBC05" d="M3.95 10.71a5.4 5.4 0 0 1 0-3.42V4.96H.96a9 9 0 0 0 0 8.08l2.99-2.33Z"></path><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.59A9 9 0 0 0 .96 4.96l2.99 2.33A5.36 5.36 0 0 1 9 3.58Z"></path></svg>
+Continue with Google
+</div>
+<div class="btnp" onClick="{{ goSignin }}" style="text-align:center;font:400 14px 'DM Sans';color:#68707D;padding:10px 0">Already have an account? <span style="color:#D9364A;font-weight:600">Sign in</span></div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isSignin }}" hint-placeholder-val="{{ false }}">
+<div class="scr" data-screen-label="Sign in" style="display:flex;flex-direction:column;padding:55px 22px 34px">
+<div class="btnp" onClick="{{ goWelcome }}" role="button" aria-label="Back" style="width:44px;height:44px;border-radius:14px;background:#fff;border:1px solid #E3E6E0;display:flex;align-items:center;justify-content:center;margin-left:-4px;flex:none"><l-icon name="chevron-left" style="width:22px;height:22px;color:#171A1F"></l-icon></div>
+<h1 style="font:700 30px/1.15 'DM Sans';color:#171A1F;letter-spacing:-.02em;margin:22px 0 0">Welcome back</h1>
+<p style="font:400 15px/22px 'DM Sans';color:#68707D;margin:8px 0 0">Keep your streak and league progress moving.</p>
+<div style="margin-top:26px;display:flex;flex-direction:column;gap:12px">
+<label style="display:block;background:#fff;border:1.5px solid #CDD3D8;border-radius:14px;padding:10px 16px"><div style="font:500 11.5px 'DM Sans';color:#68707D">Email</div><input value="{{ email }}" onChange="{{ onEmail }}" style="border:none;width:100%;font:400 15.5px 'DM Sans';color:#171A1F;margin-top:2px;padding:0;background:transparent"></label>
+<label style="display:block;background:#fff;border:1.5px solid #CDD3D8;border-radius:14px;padding:10px 16px"><div style="font:500 11.5px 'DM Sans';color:#68707D">Password</div><input type="password" value="{{ pw }}" onChange="{{ onPw }}" style="border:none;width:100%;font:400 15.5px 'DM Sans';color:#171A1F;margin-top:2px;padding:0;background:transparent"></label>
+<div style="text-align:right;font:600 13.5px 'DM Sans';color:#D9364A;padding:2px 2px 0">Forgot password?</div>
+</div>
+<div class="btnp" onClick="{{ goTodayReturning }}" style="margin-top:22px;height:54px;border-radius:14px;background:#D9364A;display:flex;align-items:center;justify-content:center;font:600 16.5px 'DM Sans';color:#fff">Sign in</div>
+<div style="flex:1"></div>
+<div class="btnp" onClick="{{ goSignup }}" style="text-align:center;font:400 14px 'DM Sans';color:#68707D">New here? <span style="color:#D9364A;font-weight:600">Create an account</span></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isSignup }}" hint-placeholder-val="{{ false }}">
+<div class="scr" data-screen-label="Create account" style="display:flex;flex-direction:column;padding:55px 22px 34px">
+<div class="btnp" onClick="{{ goWelcome }}" role="button" aria-label="Back" style="width:44px;height:44px;border-radius:14px;background:#fff;border:1px solid #E3E6E0;display:flex;align-items:center;justify-content:center;margin-left:-4px;flex:none"><l-icon name="chevron-left" style="width:22px;height:22px;color:#171A1F"></l-icon></div>
+<h1 style="font:700 30px/1.15 'DM Sans';color:#171A1F;letter-spacing:-.02em;margin:22px 0 0">Create your account</h1>
+<p style="font:400 15px/22px 'DM Sans';color:#68707D;margin:8px 0 0">You'll set your league identity in the next step.</p>
+<div style="margin-top:26px;display:flex;flex-direction:column;gap:12px">
+<label style="display:block;background:#fff;border:1.5px solid #CDD3D8;border-radius:14px;padding:10px 16px"><div style="font:500 11.5px 'DM Sans';color:#68707D">Email</div><input value="{{ email }}" onChange="{{ onEmail }}" placeholder="you@university.edu" style="border:none;width:100%;font:400 15.5px 'DM Sans';color:#171A1F;margin-top:2px;padding:0;background:transparent"></label>
+<label style="display:block;background:#fff;border:1.5px solid #CDD3D8;border-radius:14px;padding:10px 16px"><div style="font:500 11.5px 'DM Sans';color:#68707D">Password</div><input type="password" value="{{ pw }}" onChange="{{ onPw }}" style="border:none;width:100%;font:400 15.5px 'DM Sans';color:#171A1F;margin-top:2px;padding:0;background:transparent"></label>
+</div>
+<div class="btnp" onClick="{{ goOnb1 }}" style="margin-top:22px;height:54px;border-radius:14px;background:#D9364A;display:flex;align-items:center;justify-content:center;font:600 16.5px 'DM Sans';color:#fff">Continue</div>
+<div style="flex:1"></div>
+<div style="text-align:center;font:400 12px 'DM Sans';color:#9AA1AB">By continuing, you agree to the <span style="text-decoration:underline">Terms</span> and <span style="text-decoration:underline">Privacy Policy</span>.</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isOnb1 }}" hint-placeholder-val="{{ false }}">
+<div class="scr" data-screen-label="Onboarding identity" style="display:flex;flex-direction:column;padding:55px 22px 34px">
+<div style="display:flex;align-items:center;gap:14px;flex:none">
+<div class="btnp" onClick="{{ goSignup }}" role="button" aria-label="Back" style="width:44px;height:44px;border-radius:14px;background:#fff;border:1px solid #E3E6E0;display:flex;align-items:center;justify-content:center;margin-left:-4px"><l-icon name="chevron-left" style="width:22px;height:22px;color:#171A1F"></l-icon></div>
+<div style="flex:1;display:flex;gap:6px" role="progressbar" aria-label="Step 1 of 4"><div style="flex:1;height:4px;border-radius:2px;background:#D9364A"></div><div style="flex:1;height:4px;border-radius:2px;background:#E3E6E0"></div><div style="flex:1;height:4px;border-radius:2px;background:#E3E6E0"></div><div style="flex:1;height:4px;border-radius:2px;background:#E3E6E0"></div></div>
+<span style="font:600 12px 'Barlow Condensed';color:#68707D;letter-spacing:.06em">1 / 4</span>
+</div>
+<h1 style="font:700 28px/1.2 'DM Sans';color:#171A1F;letter-spacing:-.02em;margin:26px 0 0">What should your league call you?</h1>
+<div style="margin-top:24px;display:flex;flex-direction:column;gap:12px">
+<label style="display:block;background:#fff;border:1.5px solid #171A1F;border-radius:14px;padding:10px 16px;box-shadow:0 0 0 3px rgba(23,26,31,.06)"><div style="font:500 11.5px 'DM Sans';color:#171A1F">Display name</div><input value="{{ dname }}" onChange="{{ onDname }}" style="border:none;width:100%;font:400 15.5px 'DM Sans';color:#171A1F;margin-top:2px;padding:0;background:transparent"></label>
+<div style="background:#fff;border:1.5px solid #CDD3D8;border-radius:14px;padding:10px 16px;display:flex;align-items:center;justify-content:space-between"><div><div style="font:500 11.5px 'DM Sans';color:#68707D">University</div><div style="font:400 15.5px 'DM Sans';color:#171A1F;margin-top:2px">Ohio State University</div></div><l-icon name="chevron-down" style="width:18px;height:18px;color:#68707D"></l-icon></div>
+</div>
+<div style="margin-top:24px;background:#fff;border:1px solid #E3E6E0;border-radius:16px;padding:14px 16px">
+<div style="display:flex;align-items:center;gap:6px;font:600 12px 'DM Sans';color:#68707D"><l-icon name="eye" style="width:14px;height:14px"></l-icon>WHAT THE LEAGUE SEES</div>
+<div style="margin-top:10px;display:flex;align-items:center;gap:10px;background:#F5F6F3;border-radius:12px;padding:10px 12px">
+<span style="font:700 15px 'Barlow Condensed';color:#68707D;width:18px">4</span>
+<img src="{{ dnameAvatar }}" alt="Your avatar" style="width:32px;height:32px;border-radius:50%;background:#F3DBC9">
+<div style="flex:1;min-width:0"><div style="font:600 13.5px 'DM Sans';color:#171A1F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ dname }}</div><div style="font:400 11px 'DM Sans';color:#68707D">Ohio State</div></div>
+<div style="display:flex;align-items:center;gap:3px"><div style="width:14px;height:14px;background-image:url('assets/streak-fire.png');background-size:84px 14px;image-rendering:pixelated"></div><span style="font:700 13px 'Barlow Condensed';color:#E86A33">7</span></div>
+<span style="font:700 15px 'Barlow Condensed';color:#171A1F">196 <span style="font:600 10px 'DM Sans';color:#68707D">LP</span></span>
+</div>
+<p style="font:400 12.5px/1.55 'DM Sans';color:#68707D;margin:10px 2px 0">The public leaderboard shows your display name, avatar, university, streak, and League Points — never your private meal details.</p>
+</div>
+<div style="flex:1"></div>
+<div class="btnp" onClick="{{ goOnb2 }}" style="height:54px;border-radius:14px;background:#D9364A;display:flex;align-items:center;justify-content:center;font:600 16.5px 'DM Sans';color:#fff">Continue</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isOnb2 }}" hint-placeholder-val="{{ false }}">
+<div class="scr" data-screen-label="Onboarding goal" style="display:flex;flex-direction:column;padding:55px 22px 34px">
+<div style="display:flex;align-items:center;gap:14px;flex:none">
+<div class="btnp" onClick="{{ goOnb1 }}" role="button" aria-label="Back" style="width:44px;height:44px;border-radius:14px;background:#fff;border:1px solid #E3E6E0;display:flex;align-items:center;justify-content:center;margin-left:-4px"><l-icon name="chevron-left" style="width:22px;height:22px;color:#171A1F"></l-icon></div>
+<div style="flex:1;display:flex;gap:6px" role="progressbar" aria-label="Step 2 of 4"><div style="flex:1;height:4px;border-radius:2px;background:#D9364A"></div><div style="flex:1;height:4px;border-radius:2px;background:#D9364A"></div><div style="flex:1;height:4px;border-radius:2px;background:#E3E6E0"></div><div style="flex:1;height:4px;border-radius:2px;background:#E3E6E0"></div></div>
+<span style="font:600 12px 'Barlow Condensed';color:#68707D;letter-spacing:.06em">2 / 4</span>
+</div>
+<h1 style="font:700 28px/1.2 'DM Sans';color:#171A1F;letter-spacing:-.02em;margin:26px 0 0">What are you working toward?</h1>
+<div style="margin-top:24px;display:flex;flex-direction:column;gap:10px" role="radiogroup">
+<sc-for list="{{ goalOptions }}" as="g" hint-placeholder-count="4">
+<div class="btnp" onClick="{{ g.pick }}" role="radio" aria-checked="{{ g.sel }}" style="background:#fff;border:{{ g.border }};border-radius:16px;padding:15px 16px;display:flex;align-items:center;gap:14px">
+<div style="width:40px;height:40px;border-radius:12px;background:{{ g.iconBg }};display:flex;align-items:center;justify-content:center;flex:none"><l-icon name="{{ g.icon }}" style="width:20px;height:20px;color:{{ g.iconC }}"></l-icon></div>
+<div style="flex:1"><div style="font:600 15.5px 'DM Sans';color:#171A1F">{{ g.title }}</div><div style="font:400 13px/1.4 'DM Sans';color:#68707D;margin-top:1px">{{ g.sub }}</div></div>
+<sc-if value="{{ g.sel }}" hint-placeholder-val="{{ false }}"><div style="width:22px;height:22px;border-radius:11px;background:#D9364A;display:flex;align-items:center;justify-content:center;flex:none"><l-icon name="check" style="width:13px;height:13px;color:#fff"></l-icon></div></sc-if>
+<sc-if value="{{ g.unsel }}" hint-placeholder-val="{{ false }}"><div style="width:22px;height:22px;border-radius:11px;border:1.5px solid #CDD3D8;flex:none"></div></sc-if>
+</div>
+</sc-for>
+</div>
+<div style="flex:1"></div>
+<div class="btnp" onClick="{{ goOnb3 }}" style="height:54px;border-radius:14px;background:#D9364A;display:flex;align-items:center;justify-content:center;font:600 16.5px 'DM Sans';color:#fff">Continue</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isOnb3 }}" hint-placeholder-val="{{ false }}">
+<div class="scr" data-screen-label="Onboarding targets" style="display:flex;flex-direction:column;padding:55px 22px 34px">
+<div style="display:flex;align-items:center;gap:14px;flex:none">
+<div class="btnp" onClick="{{ goOnb2 }}" role="button" aria-label="Back" style="width:44px;height:44px;border-radius:14px;background:#fff;border:1px solid #E3E6E0;display:flex;align-items:center;justify-content:center;margin-left:-4px"><l-icon name="chevron-left" style="width:22px;height:22px;color:#171A1F"></l-icon></div>
+<div style="flex:1;display:flex;gap:6px" role="progressbar" aria-label="Step 3 of 4"><div style="flex:1;height:4px;border-radius:2px;background:#D9364A"></div><div style="flex:1;height:4px;border-radius:2px;background:#D9364A"></div><div style="flex:1;height:4px;border-radius:2px;background:#D9364A"></div><div style="flex:1;height:4px;border-radius:2px;background:#E3E6E0"></div></div>
+<span style="font:600 12px 'Barlow Condensed';color:#68707D;letter-spacing:.06em">3 / 4</span>
+</div>
+<h1 style="font:700 28px/1.2 'DM Sans';color:#171A1F;letter-spacing:-.02em;margin:26px 0 0">Your daily targets</h1>
+<p style="font:400 13.5px/1.5 'DM Sans';color:#68707D;margin:8px 0 0">{{ targetsBlurb }} You can edit these anytime in Settings.</p>
+<div style="margin-top:20px;background:#fff;border:1px solid #E3E6E0;border-radius:16px;overflow:hidden">
+<sc-for list="{{ targetRows }}" as="t" hint-placeholder-count="4">
+<div style="display:flex;align-items:center;padding:14px 16px;border-bottom:1px solid #E8EAE5">
+<div style="flex:1"><div style="font:500 12.5px 'DM Sans';color:#68707D">{{ t.label }}</div><div style="font:700 32px/1 'Barlow Condensed';color:#171A1F;margin-top:2px">{{ t.value }} <span style="font:600 14px 'DM Sans';color:#68707D">{{ t.unit }}</span></div></div>
+<div style="display:flex;gap:8px">
+<div class="btnp" onClick="{{ t.dec }}" role="button" aria-label="Decrease {{ t.label }}" style="width:36px;height:36px;border-radius:10px;border:1.5px solid #CDD3D8;display:flex;align-items:center;justify-content:center"><l-icon name="minus" style="width:16px;height:16px;color:#171A1F"></l-icon></div>
+<div class="btnp" onClick="{{ t.inc }}" role="button" aria-label="Increase {{ t.label }}" style="width:36px;height:36px;border-radius:10px;border:1.5px solid #CDD3D8;display:flex;align-items:center;justify-content:center"><l-icon name="plus" style="width:16px;height:16px;color:#171A1F"></l-icon></div>
+</div>
+</div>
+</sc-for>
+</div>
+<div style="margin-top:14px;background:#fff;border:1px solid #E3E6E0;border-radius:16px;padding:14px 16px">
+<div style="display:flex;justify-content:space-between;font:500 12px 'DM Sans';color:#68707D"><span>Where your calories come from</span><span>{{ tCalF }} kcal</span></div>
+<div style="display:flex;height:10px;border-radius:5px;overflow:hidden;margin-top:9px">
+<div style="width:{{ pctPro }};background:#171A1F"></div>
+<div style="width:{{ pctCarb }};background:#9AA1AB"></div>
+<div style="width:{{ pctFat }};background:#D5D9DE"></div>
+</div>
+<div style="display:flex;gap:14px;margin-top:9px;font:500 11.5px 'DM Sans';color:#68707D">
+<span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:2px;background:#171A1F"></span>Protein {{ pctPro }}</span>
+<span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:2px;background:#9AA1AB"></span>Carbs {{ pctCarb }}</span>
+<span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:2px;background:#D5D9DE"></span>Fat {{ pctFat }}</span>
+</div>
+</div>
+<div style="flex:1"></div>
+<div class="btnp" onClick="{{ goOnb4 }}" style="height:54px;border-radius:14px;background:#D9364A;display:flex;align-items:center;justify-content:center;font:600 16.5px 'DM Sans';color:#fff">Continue</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isOnb4 }}" hint-placeholder-val="{{ false }}">
+<div class="scr" data-screen-label="Onboarding competition" style="display:flex;flex-direction:column;padding:55px 22px 34px">
+<div style="display:flex;align-items:center;gap:14px;flex:none">
+<div class="btnp" onClick="{{ goOnb3 }}" role="button" aria-label="Back" style="width:44px;height:44px;border-radius:14px;background:#fff;border:1px solid #E3E6E0;display:flex;align-items:center;justify-content:center;margin-left:-4px"><l-icon name="chevron-left" style="width:22px;height:22px;color:#171A1F"></l-icon></div>
+<div style="flex:1;display:flex;gap:6px" role="progressbar" aria-label="Step 4 of 4"><div style="flex:1;height:4px;border-radius:2px;background:#D9364A"></div><div style="flex:1;height:4px;border-radius:2px;background:#D9364A"></div><div style="flex:1;height:4px;border-radius:2px;background:#D9364A"></div><div style="flex:1;height:4px;border-radius:2px;background:#D9364A"></div></div>
+<span style="font:600 12px 'Barlow Condensed';color:#68707D;letter-spacing:.06em">4 / 4</span>
+</div>
+<h1 style="font:700 28px/1.2 'DM Sans';color:#171A1F;letter-spacing:-.02em;margin:26px 0 0">Every meal moves you up</h1>
+<p style="font:400 13.5px/1.5 'DM Sans';color:#68707D;margin:8px 0 0">Confirmed meals earn XP for your level and League Points for your rank.</p>
+<div style="margin-top:22px;background:#fff;border-radius:20px;box-shadow:0 10px 30px rgba(23,26,31,.10);padding:18px">
+<div style="display:flex;align-items:center;gap:12px;background:#F5F6F3;border-radius:14px;padding:12px 14px">
+<div style="width:40px;height:40px;border-radius:12px;background:#F3E4D2;display:flex;align-items:center;justify-content:center;flex:none"><l-icon name="utensils" style="width:19px;height:19px;color:#A0642A"></l-icon></div>
+<div style="flex:1"><div style="font:600 14px 'DM Sans';color:#171A1F">Chicken rice bowl</div><div style="font:400 12px 'DM Sans';color:#68707D">Logged 12:47 PM · 620 kcal</div></div>
+</div>
+<div style="display:flex;justify-content:center;padding:6px 0"><l-icon name="arrow-down" style="width:16px;height:16px;color:#9AA1AB"></l-icon></div>
+<div style="display:flex;gap:10px">
+<div style="flex:1;background:#F5F6F3;border-radius:14px;padding:12px 14px"><div style="font:700 24px/1 'Barlow Condensed';color:#1E9E5A">+50 XP</div><div style="font:400 11.5px 'DM Sans';color:#68707D;margin-top:3px">Levels up your profile</div></div>
+<div style="flex:1;background:#F5F6F3;border-radius:14px;padding:12px 14px"><div style="font:700 24px/1 'Barlow Condensed';color:#D9364A">+10 LP</div><div style="font:400 11.5px 'DM Sans';color:#68707D;margin-top:3px">Scores in your league</div></div>
+</div>
+<div style="display:flex;justify-content:center;padding:6px 0"><l-icon name="arrow-down" style="width:16px;height:16px;color:#9AA1AB"></l-icon></div>
+<div style="background:#F5F6F3;border-radius:14px;padding:6px 0">
+<div style="display:flex;align-items:center;gap:10px;padding:8px 14px">
+<span style="font:700 14px 'Barlow Condensed';color:#68707D;width:16px">3</span>
+<img src="https://api.dicebear.com/9.x/micah/svg?seed=Maya&backgroundColor=d8e4f2" alt="Maya" style="width:26px;height:26px;border-radius:50%;background:#D8E4F2">
+<span style="flex:1;font:500 13px 'DM Sans';color:#171A1F">Maya</span>
+<span style="font:700 14px 'Barlow Condensed';color:#171A1F">214 LP</span>
+</div>
+<div style="display:flex;align-items:center;gap:10px;padding:8px 14px;background:#FBEAEC;border-left:3px solid #D9364A">
+<span style="font:700 14px 'Barlow Condensed';color:#D9364A;width:16px">4</span>
+<img src="{{ dnameAvatar }}" alt="You" style="width:26px;height:26px;border-radius:50%;background:#F3DBC9">
+<span style="flex:1;font:600 13px 'DM Sans';color:#171A1F">You</span>
+<span style="font:700 14px 'Barlow Condensed';color:#171A1F">196 LP</span>
+</div>
+</div>
+</div>
+<div style="flex:1"></div>
+<div class="btnp" onClick="{{ enterApp }}" style="height:54px;border-radius:14px;background:#D9364A;display:flex;align-items:center;justify-content:center;font:600 16.5px 'DM Sans';color:#fff">Enter MacroLeague</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isToday }}" hint-placeholder-val="{{ false }}">
+<div class="scr" data-screen-label="Today" style="padding:53px 20px 120px;display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:8px">
+<div style="flex:1;min-width:0"><div style="font:700 21px/1.15 'DM Sans';color:#171A1F;letter-spacing:-.015em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Good afternoon, {{ dname }}</div><div style="font:500 12.5px 'DM Sans';color:#68707D;margin-top:2px">Today, Jul 3</div></div>
+<sc-if value="{{ isRanked }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:4px;background:#FBEFE8;border-radius:99px;padding:6px 10px 6px 7px" aria-label="7-day streak"><div style="width:16px;height:16px;background-image:url('assets/streak-fire.png');background-size:96px 16px;image-rendering:pixelated;animation:flame .6s steps(6) infinite"></div><span style="font:700 13.5px 'Barlow Condensed';color:#E86A33">7</span></div>
+<div style="display:flex;align-items:center;gap:3px;background:#EDEFEA;border-radius:99px;padding:6px 10px"><span style="font:700 13.5px 'Barlow Condensed';color:#171A1F">{{ lpF }}</span><span style="font:600 10px 'DM Sans';color:#68707D">LP</span></div>
+</sc-if>
+<img class="btnp" onClick="{{ goProfile }}" src="{{ dnameAvatar }}" alt="Open profile" style="width:36px;height:36px;border-radius:50%;background:#F3DBC9;border:1.5px solid #fff;box-shadow:0 0 0 1px #E3E6E0;cursor:pointer">
+</div>
+
+<sc-if value="{{ isNewToday }}" hint-placeholder-val="{{ false }}">
+<div style="background:#fff;border-radius:20px;box-shadow:0 6px 20px rgba(23,26,31,.08);padding:22px 18px 18px;text-align:center">
+<div style="font:500 11px 'DM Sans';color:#68707D;text-transform:uppercase;letter-spacing:.08em">Nutrition Score</div>
+<div style="font:700 72px/0.9 'Barlow Condensed';color:#D5D9DE;margin-top:6px">—</div>
+<div style="font:600 16px 'DM Sans';color:#171A1F;margin-top:10px">Log your first meal to start today's score.</div>
+<div style="font:400 13px/1.5 'DM Sans';color:#68707D;margin-top:6px">Confirmed meals earn <b style="color:#1E9E5A;font-weight:700">50 XP</b> and <b style="color:#D9364A;font-weight:700">10 League Points</b>.</div>
+<div class="btnp" onClick="{{ openLog }}" style="margin-top:16px;height:54px;border-radius:14px;background:#D9364A;display:flex;align-items:center;justify-content:center;gap:8px;font:600 16.5px 'DM Sans';color:#fff"><l-icon name="plus" style="width:20px;height:20px"></l-icon>Log meal</div>
+</div>
+<div style="background:#fff;border:1px solid #E3E6E0;border-radius:16px;padding:14px 16px">
+<div style="font:500 11px 'DM Sans';color:#68707D;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Today's targets</div>
+<div style="display:flex;flex-direction:column;gap:10px;opacity:.75">
+<div><div style="display:flex;justify-content:space-between;font:500 12.5px 'DM Sans';color:#68707D"><span>Calories</span><span>0 / {{ calTF }} kcal</span></div><div style="height:6px;border-radius:3px;background:#EDEFEA;margin-top:5px"></div></div>
+<div><div style="display:flex;justify-content:space-between;font:500 12.5px 'DM Sans';color:#68707D"><span>Protein</span><span>0 / {{ proTF }}g</span></div><div style="height:6px;border-radius:3px;background:#EDEFEA;margin-top:5px"></div></div>
+<div><div style="display:flex;justify-content:space-between;font:500 12.5px 'DM Sans';color:#68707D"><span>Carbs</span><span>0 / {{ carbTF }}g</span></div><div style="height:6px;border-radius:3px;background:#EDEFEA;margin-top:5px"></div></div>
+</div>
+</div>
+<div style="background:#fff;border:1px solid #E3E6E0;border-radius:16px;padding:14px 16px;display:flex;align-items:center;gap:12px">
+<div style="width:40px;height:40px;border-radius:12px;background:#EDEFEA;display:flex;align-items:center;justify-content:center;flex:none"><l-icon name="trophy" style="width:19px;height:19px;color:#9AA1AB"></l-icon></div>
+<div style="flex:1"><div style="font:600 13.5px 'DM Sans';color:#171A1F">2-week league</div><div style="font:400 12.5px/1.45 'DM Sans';color:#68707D;margin-top:1px">You'll enter the standings after your first confirmed meal.</div></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFullToday }}" hint-placeholder-val="{{ false }}">
+<div style="background:#fff;border-radius:20px;box-shadow:0 6px 20px rgba(23,26,31,.08);padding:18px 18px 16px">
+<div style="display:flex;align-items:flex-start;justify-content:space-between">
+<div>
+<div style="font:500 11px 'DM Sans';color:#68707D;text-transform:uppercase;letter-spacing:.08em">Nutrition Score</div>
+<div style="display:flex;align-items:baseline;gap:8px;margin-top:4px"><span style="font:700 72px/0.85 'Barlow Condensed';color:#171A1F">{{ scoreF }}</span><span style="font:600 20px 'Barlow Condensed';color:#9AA1AB">/100</span></div>
+</div>
+<div style="text-align:right">
+<span style="display:inline-block;font:600 12.5px 'DM Sans';color:#1E7A48;background:#E3F2E9;border-radius:99px;padding:5px 11px">{{ scoreWord }}</span>
+<div style="display:flex;align-items:center;justify-content:flex-end;gap:3px;font:600 12.5px 'DM Sans';color:#1E9E5A;margin-top:8px"><l-icon name="arrow-up" style="width:13px;height:13px"></l-icon>{{ scoreDelta }}</div>
+</div>
+</div>
+<div style="margin-top:16px">
+<div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font:600 13.5px 'DM Sans';color:#171A1F">Calories</span><span style="font:700 16px 'Barlow Condensed';color:#171A1F">{{ calNowF }} <span style="color:#9AA1AB;font-weight:600">/ {{ calTF }} kcal</span></span></div>
+<div style="height:12px;border-radius:6px;background:#EDEFEA;margin-top:7px;overflow:hidden"><div style="width:{{ calPct }};height:100%;border-radius:6px;background:#171A1F;transition:width .4s cubic-bezier(.2,.8,.2,1)"></div></div>
+</div>
+<div style="margin-top:13px;display:flex;flex-direction:column;gap:9px">
+<div><div style="display:flex;justify-content:space-between;font:500 12.5px 'DM Sans';color:#68707D"><span>Protein</span><span><b style="color:#171A1F;font-weight:600">{{ proNowF }}</b> / {{ proTF }}g</span></div><div style="height:6px;border-radius:3px;background:#EDEFEA;margin-top:5px;overflow:hidden"><div style="width:{{ proPct }};height:100%;border-radius:3px;background:#D9364A;transition:width .4s cubic-bezier(.2,.8,.2,1)"></div></div></div>
+<div><div style="display:flex;justify-content:space-between;font:500 12.5px 'DM Sans';color:#68707D"><span>Carbs</span><span><b style="color:#171A1F;font-weight:600">{{ carbNow }}</b> / {{ carbTF }}g</span></div><div style="height:6px;border-radius:3px;background:#EDEFEA;margin-top:5px;overflow:hidden"><div style="width:{{ carbPct }};height:100%;border-radius:3px;background:#9AA1AB"></div></div></div>
+</div>
+<sc-if value="{{ hasRecommend }}" hint-placeholder-val="{{ false }}">
+<div style="margin-top:14px;background:#FBEAEC;border-radius:12px;padding:10px 12px;display:flex;align-items:center;gap:9px">
+<l-icon name="target" style="width:16px;height:16px;color:#A8141E;flex:none"></l-icon>
+<span style="font:500 13px 'DM Sans';color:#7C2A33;flex:1">{{ recommendText }}</span>
+</div>
+</sc-if>
+<div class="btnp" onClick="{{ openLog }}" style="margin-top:12px;height:50px;border-radius:14px;background:#D9364A;display:flex;align-items:center;justify-content:center;gap:8px;font:600 16px 'DM Sans';color:#fff"><l-icon name="plus" style="width:19px;height:19px"></l-icon>Log meal</div>
+</div>
+
+<div class="btnp" onClick="{{ goLeague }}" style="background:#fff;border:1px solid #E3E6E0;border-radius:16px;overflow:hidden">
+<div style="display:flex;align-items:center;padding:13px 16px 10px">
+<div style="flex:1"><span style="font:500 11px 'DM Sans';color:#68707D;text-transform:uppercase;letter-spacing:.08em">2-week league</span></div>
+<span style="display:flex;align-items:center;gap:4px;font:700 13px 'Barlow Condensed';color:#171A1F;letter-spacing:.04em"><l-icon name="clock" style="width:13px;height:13px;color:#68707D"></l-icon>2D 8H REMAINING</span>
+</div>
+<sc-for list="{{ standings }}" as="row" hint-placeholder-count="3">
+<sc-if value="{{ row.isYou }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:10px;padding:8px 13px;background:#FBEAEC;border-left:3px solid #D9364A">
+<span style="font:700 15px 'Barlow Condensed';color:#D9364A;width:18px;text-align:center">{{ row.rank }}</span>
+<img src="{{ row.avatar }}" alt="You" style="width:30px;height:30px;border-radius:50%;background:#F3DBC9">
+<div style="flex:1;min-width:0;display:flex;align-items:center;gap:6px"><span style="font:600 13.5px 'DM Sans';color:#171A1F">{{ row.name }}</span><span style="font:600 10.5px 'DM Sans';color:#D9364A;background:#fff;border-radius:5px;padding:2px 6px">YOU</span></div>
+<span style="font:700 15px 'Barlow Condensed';color:#171A1F">{{ row.lpF }} <span style="font:600 10px 'DM Sans';color:#9AA1AB">LP</span></span>
+</div>
+</sc-if>
+<sc-if value="{{ row.notYou }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;align-items:center;gap:10px;padding:8px 16px;border-top:1px solid #F0F1ED">
+<span style="font:700 15px 'Barlow Condensed';color:#68707D;width:18px;text-align:center">{{ row.rank }}</span>
+<img src="{{ row.avatar }}" alt="{{ row.name }}" style="width:30px;height:30px;border-radius:50%;background:#EDEFEA">
+<div style="flex:1"><div style="font:500 13.5px 'DM Sans';color:#171A1F">{{ row.name }}</div></div>
+<span style="font:700 15px 'Barlow Condensed';color:#171A1F">{{ row.lpF }} <span style="font:600 10px 'DM Sans';color:#9AA1AB">LP</span></span>
+</div>
+</sc-if>
+</sc-for>
+<div style="display:flex;align-items:center;padding:11px 16px;border-top:1px solid #F0F1ED">
+<span style="font:500 12.5px 'DM Sans';color:#68707D;flex:1">{{ behindMayaF }} pts behind Maya · {{ aheadJordanF }} ahead of Jordan</span>
+<l-icon name="chevron-right" style="width:16px;height:16px;color:#9AA1AB"></l-icon>
+</div>
+</div>
+
+<div>
+<div style="display:flex;align-items:baseline;justify-content:space-between;padding:2px 2px 8px"><span style="font:700 16px 'DM Sans';color:#171A1F;letter-spacing:-.01em">Today's meals</span><span style="font:500 12.5px 'DM Sans';color:#68707D">{{ calNowF }} kcal logged</span></div>
+<div style="background:#fff;border:1px solid #E3E6E0;border-radius:16px;overflow:hidden">
+<sc-for list="{{ meals }}" as="m" hint-placeholder-count="3">
+<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid #F0F1ED">
+<div style="width:44px;height:44px;border-radius:12px;background:{{ m.bg }};display:flex;align-items:center;justify-content:center;flex:none"><l-icon name="{{ m.icon }}" style="width:21px;height:21px;color:{{ m.ic }}"></l-icon></div>
+<div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:6px"><span style="font:600 14px 'DM Sans';color:#171A1F">{{ m.name }}</span><sc-if value="{{ m.usda }}" hint-placeholder-val="{{ false }}"><span style="font:600 9.5px 'DM Sans';color:#1E7A48;background:#E3F2E9;border-radius:4px;padding:2px 5px">USDA</span></sc-if></div><div style="font:400 12px 'DM Sans';color:#68707D;margin-top:1px">{{ m.meta }}</div></div>
+<div style="text-align:right"><div style="font:700 15px 'Barlow Condensed';color:#171A1F">{{ m.cal }} <span style="font:600 10.5px 'DM Sans';color:#9AA1AB">kcal</span></div><div style="font:500 11.5px 'DM Sans';color:#68707D">{{ m.pro }}</div></div>
+<div style="width:32px;height:44px;display:flex;align-items:center;justify-content:center" role="button" aria-label="Meal options"><l-icon name="ellipsis" style="width:17px;height:17px;color:#9AA1AB"></l-icon></div>
+</div>
+</sc-for>
+<sc-if value="{{ showDinnerSlot }}" hint-placeholder-val="{{ false }}">
+<div class="btnp" onClick="{{ openLog }}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid #F0F1ED">
+<div style="width:44px;height:44px;border-radius:12px;border:1.5px dashed #CDD3D8;display:flex;align-items:center;justify-content:center;flex:none"><l-icon name="plus" style="width:18px;height:18px;color:#9AA1AB"></l-icon></div>
+<div style="flex:1"><div style="font:500 14px 'DM Sans';color:#68707D">Add dinner</div><div style="font:400 12px 'DM Sans';color:#9AA1AB;margin-top:1px">Usually around 7 PM</div></div>
+<div style="display:flex;align-items:center;gap:5px;border:1.5px solid #CDD3D8;border-radius:99px;padding:7px 12px;font:600 12px 'DM Sans';color:#171A1F"><l-icon name="rotate-ccw" style="width:13px;height:13px"></l-icon>Repeat</div>
+</div>
+</sc-if>
+</div>
+</div>
+
+<div class="btnp" onClick="{{ goDetail }}" style="background:#fff;border:1px solid #E3E6E0;border-radius:16px;padding:14px 16px">
+<div style="display:flex;align-items:center;gap:8px">
+<span style="font:600 14.5px 'DM Sans';color:#171A1F;flex:1">Protein Push</span>
+<span style="font:600 10.5px 'DM Sans';color:#68707D;background:#EDEFEA;border-radius:5px;padding:3px 7px">GROUP · 8</span>
+<span style="font:700 13px 'Barlow Condensed';color:#D9364A">#2 OF 8</span>
+<l-icon name="chevron-right" style="width:15px;height:15px;color:#9AA1AB"></l-icon>
+</div>
+<div style="display:flex;justify-content:space-between;font:500 12px 'DM Sans';color:#68707D;margin-top:10px"><span><b style="color:#171A1F;font-weight:600">{{ proNowF }}</b> / 150g today</span><span>Day 4 of 7 · 8h left today</span></div>
+<div style="height:8px;border-radius:4px;background:#EDEFEA;margin-top:6px;overflow:hidden"><div style="width:{{ proPct }};height:100%;border-radius:4px;background:#D9364A"></div></div>
+</div>
+
+<div>
+<div style="padding:2px 2px 8px;font:700 16px 'DM Sans';color:#171A1F;letter-spacing:-.01em">Friend activity</div>
+<div style="background:#fff;border:1px solid #E3E6E0;border-radius:16px;overflow:hidden">
+<div style="display:flex;align-items:center;gap:11px;padding:11px 14px">
+<img src="https://api.dicebear.com/9.x/micah/svg?seed=Maya&backgroundColor=d8e4f2" alt="Maya" style="width:32px;height:32px;border-radius:50%;background:#D8E4F2">
+<div style="flex:1;font:400 13px/1.35 'DM Sans';color:#171A1F"><b style="font-weight:600">Maya</b> moved into 3rd<div style="font:400 11px 'DM Sans';color:#9AA1AB;margin-top:1px">1h ago</div></div>
+<div role="button" aria-label="React with fire" style="width:32px;height:32px;border-radius:10px;background:#F5F6F3;display:flex;align-items:center;justify-content:center"><l-icon name="flame" style="width:15px;height:15px;color:#9AA1AB"></l-icon></div>
+</div>
+<div style="display:flex;align-items:center;gap:11px;padding:11px 14px;border-top:1px solid #F0F1ED">
+<img src="https://api.dicebear.com/9.x/micah/svg?seed=Jordan&backgroundColor=e4d8f0" alt="Jordan" style="width:32px;height:32px;border-radius:50%;background:#E4D8F0">
+<div style="flex:1;font:400 13px/1.35 'DM Sans';color:#171A1F"><b style="font-weight:600">Jordan</b> completed a 7-day streak<div style="font:400 11px 'DM Sans';color:#9AA1AB;margin-top:1px">3h ago</div></div>
+<div role="button" aria-label="React with fire" style="width:32px;height:32px;border-radius:10px;background:#FBEFE8;display:flex;align-items:center;justify-content:center"><l-icon name="flame" style="width:15px;height:15px;color:#E86A33"></l-icon></div>
+</div>
+</div>
+</div>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ isLeague }}" hint-placeholder-val="{{ false }}">
+<div class="scr" data-screen-label="League" style="padding:53px 20px 120px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center">
+<h1 style="font:700 26px 'DM Sans';color:#171A1F;letter-spacing:-.02em;margin:0;flex:1">League</h1>
+<div role="button" aria-label="How scoring works" style="width:40px;height:40px;border-radius:13px;background:#fff;border:1px solid #E3E6E0;display:flex;align-items:center;justify-content:center"><l-icon name="info" style="width:18px;height:18px;color:#68707D"></l-icon></div>
+</div>
+<div style="display:flex;align-items:center;gap:10px">
+<div style="background:#EDEFEA;border-radius:12px;padding:3px;display:flex;flex:1">
+<div style="flex:1;background:#fff;border-radius:9px;padding:8px 0;text-align:center;font:600 12.5px 'DM Sans';color:#171A1F;box-shadow:0 1px 3px rgba(23,26,31,.10)">2 Weeks</div>
+<div style="flex:1;padding:8px 0;text-align:center;font:500 12.5px 'DM Sans';color:#68707D">3 Weeks</div>
+<div style="flex:1;padding:8px 0;text-align:center;font:500 12.5px 'DM Sans';color:#68707D">1 Month</div>
+</div>
+<span style="display:flex;align-items:center;gap:4px;font:700 14px 'Barlow Condensed';color:#171A1F"><l-icon name="clock" style="width:14px;height:14px;color:#68707D"></l-icon>2D 8H</span>
+</div>
+<div style="background:#171A1F;border-radius:18px;padding:16px 18px;display:flex;align-items:center;gap:16px">
+<div><div style="font:500 10.5px 'DM Sans';color:#9AA1AB;text-transform:uppercase;letter-spacing:.08em">Your rank</div><div style="font:700 44px/1 'Barlow Condensed';color:#fff;margin-top:2px">{{ rankF }}</div></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:6px;border-left:1px solid rgba(255,255,255,.12);padding-left:16px">
+<div style="display:flex;justify-content:space-between;font:500 12.5px 'DM Sans';color:#B8BDC4"><span>League Points</span><span style="font:700 14px 'Barlow Condensed';color:#fff">{{ lpF }} LP</span></div>
+<div style="display:flex;justify-content:space-between;font:500 12.5px 'DM Sans';color:#B8BDC4"><span style="display:flex;align-items:center;gap:4px"><l-icon name="arrow-up" style="width:12px;height:12px;color:#2FD27A"></l-icon>To the rank above</span><span style="font:600 12.5px 'DM Sans';color:#fff">{{ behindMayaF }} pts</span></div>
+<div style="display:flex;justify-content:space-between;font:500 12.5px 'DM Sans';color:#B8BDC4"><span style="display:flex;align-items:center;gap:4px"><l-icon name="arrow-down" style="width:12px;height:12px;color:#FF8A8A"></l-icon>Rank below</span><span style="font:600 12.5px 'DM Sans';color:#fff">{{ aheadJordanF }} pts</span></div>
+</div>
+</div>
+<div style="display:flex;gap:18px;padding:2px 4px 0;border-bottom:1.5px solid #E3E6E0">
+<sc-if value="{{ isGlobalTab }}" hint-placeholder-val="{{ true }}"><div style="font:600 14px 'DM Sans';color:#171A1F;padding-bottom:9px;border-bottom:2.5px solid #D9364A;margin-bottom:-1.5px">Global</div><div class="btnp" onClick="{{ setFriends }}" style="font:500 14px 'DM Sans';color:#68707D;padding-bottom:9px">Friends</div></sc-if>
+<sc-if value="{{ isFriendsTab }}" hint-placeholder-val="{{ false }}"><div class="btnp" onClick="{{ setGlobal }}" style="font:500 14px 'DM Sans';color:#68707D;padding-bottom:9px">Global</div><div style="font:600 14px 'DM Sans';color:#171A1F;padding-bottom:9px;border-bottom:2.5px solid #D9364A;margin-bottom:-1.5px">Friends</div></sc-if>
+</div>
+<div style="background:#fff;border:1px solid #E3E6E0;border-radius:16px;overflow:hidden">
+<sc-for list="{{ leagueRows }}" as="row" hint-placeholder-count="5">
+<sc-if value="{{ row.isYou }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:10px;padding:10px 11px;background:#FBEAEC;border-top:1px solid #F0F1ED;border-left:3px solid #D9364A">
+<div style="width:22px;text-align:center;font:700 14px 'Barlow Condensed';color:#D9364A">{{ row.rank }}</div>
+<img src="{{ row.avatar }}" alt="You" style="width:34px;height:34px;border-radius:50%;background:#F3DBC9">
+<div style="flex:1;min-width:0"><div style="font:700 13.5px 'DM Sans';color:#171A1F">{{ row.name }} <span style="font:600 10px 'DM Sans';color:#D9364A;background:#fff;border-radius:5px;padding:2px 6px">YOU</span></div><div style="font:400 11px 'DM Sans';color:#68707D">{{ row.uni }}</div></div>
+<sc-if value="{{ row.hasSt }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:3px"><div style="width:13px;height:13px;background-image:url('assets/streak-fire.png');background-size:78px 13px;image-rendering:pixelated"></div><span style="font:700 12.5px 'Barlow Condensed';color:#E86A33">{{ row.st }}</span></div></sc-if>
+<span style="font:700 15px 'Barlow Condensed';color:#171A1F;width:52px;text-align:right">{{ row.lpF }} <span style="font:600 10px 'DM Sans';color:#9AA1AB">LP</span></span>
+</div>
+</sc-if>
+<sc-if value="{{ row.notYou }}" hint-placeholder-val="{{ true }}">
+<div class="btnp" onClick="{{ row.openFriend }}" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid #F0F1ED">
+<div style="width:22px;text-align:center;font:700 14px 'Barlow Condensed';color:{{ row.rc }}">{{ row.rank }}</div>
+<img src="{{ row.avatar }}" alt="{{ row.name }}" style="width:34px;height:34px;border-radius:50%;background:#EDEFEA">
+<div style="flex:1;min-width:0"><div style="font:600 13.5px 'DM Sans';color:#171A1F">{{ row.name }} <sc-if value="{{ row.isMaya }}" hint-placeholder-val="{{ false }}"><span style="font:500 10px 'DM Sans';color:#D9364A">RIVAL</span></sc-if></div><div style="font:400 11px 'DM Sans';color:#68707D">{{ row.uni }}</div></div>
+<sc-if value="{{ row.hasSt }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:3px"><div style="width:13px;height:13px;background-image:url('assets/streak-fire.png');background-size:78px 13px;image-rendering:pixelated"></div><span style="font:700 12.5px 'Barlow Condensed';color:#E86A33">{{ row.st }}</span></div></sc-if>
+<span style="font:700 15px 'Barlow Condensed';color:#171A1F;width:52px;text-align:right">{{ row.lpF }} <span style="font:600 10px 'DM Sans';color:#9AA1AB">LP</span></span>
+<span style="width:26px;display:flex;justify-content:flex-end">
+<sc-if value="{{ row.up }}" hint-placeholder-val="{{ false }}"><span style="display:flex;align-items:center;gap:1px;font:600 11px 'DM Sans';color:#1E9E5A"><l-icon name="arrow-up" style="width:10px;height:10px"></l-icon>{{ row.mvAbs }}</span></sc-if>
+<sc-if value="{{ row.down }}" hint-placeholder-val="{{ false }}"><span style="display:flex;align-items:center;gap:1px;font:600 11px 'DM Sans';color:#C43D3D"><l-icon name="arrow-down" style="width:10px;height:10px"></l-icon>{{ row.mvAbs }}</span></sc-if>
+<sc-if value="{{ row.flat }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'DM Sans';color:#9AA1AB">—</span></sc-if>
+</span>
+</div>
+</sc-if>
+</sc-for>
+</div>
+<div style="font:400 11.5px/1.5 'DM Sans';color:#9AA1AB;text-align:center;padding:0 10px">Tap a player to see their public profile and start a challenge.</div>
+</div>
+</sc-if>
+</div>
+
+<sc-if value="{{ isChallenges }}" hint-placeholder-val="{{ false }}">
+<div class="scr" data-screen-label="Challenges" style="padding:53px 20px 120px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center">
+<h1 style="font:700 26px 'DM Sans';color:#171A1F;letter-spacing:-.02em;margin:0;flex:1">Challenges</h1>
+<div class="btnp" onClick="{{ goCreate }}" role="button" aria-label="Create challenge" style="width:40px;height:40px;border-radius:13px;background:#171A1F;display:flex;align-items:center;justify-content:center"><l-icon name="plus" style="width:19px;height:19px;color:#fff"></l-icon></div>
+</div>
+<div class="btnp" onClick="{{ goDetail }}" style="background:#fff;border-radius:20px;box-shadow:0 6px 20px rgba(23,26,31,.08);padding:16px 18px">
+<div style="display:flex;align-items:center;gap:8px">
+<span style="font:500 10.5px 'DM Sans';color:#68707D;text-transform:uppercase;letter-spacing:.08em;flex:1">Most urgent</span>
+<span style="display:flex;align-items:center;gap:4px;font:700 13px 'Barlow Condensed';color:#D9364A"><l-icon name="clock" style="width:13px;height:13px"></l-icon>8H LEFT TODAY</span>
+</div>
+<div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+<span style="font:700 20px 'DM Sans';color:#171A1F;letter-spacing:-.01em;flex:1">Protein Push</span>
+<span style="font:700 15px 'Barlow Condensed';color:#D9364A">#2 OF 8</span>
+</div>
+<div style="display:flex;justify-content:space-between;font:500 12.5px 'DM Sans';color:#68707D;margin-top:12px"><span><b style="color:#171A1F;font-weight:700">{{ proNowF }}</b> / 150g today</span><span>Day 4 of 7</span></div>
+<div style="height:10px;border-radius:5px;background:#EDEFEA;margin-top:6px;overflow:hidden"><div style="width:{{ proPct }};height:100%;border-radius:5px;background:#D9364A"></div></div>
+<div style="display:flex;align-items:center;margin-top:13px">
+<div style="display:flex;flex:1">
+<img src="https://api.dicebear.com/9.x/micah/svg?seed=Maya&backgroundColor=d8e4f2" alt="Maya" style="width:26px;height:26px;border-radius:50%;background:#D8E4F2;border:2px solid #fff">
+<img src="{{ dnameAvatar }}" alt="You" style="width:26px;height:26px;border-radius:50%;background:#F3DBC9;border:2px solid #fff;margin-left:-8px">
+<img src="https://api.dicebear.com/9.x/micah/svg?seed=Diego&backgroundColor=d8e8ea" alt="Diego" style="width:26px;height:26px;border-radius:50%;background:#D8E8EA;border:2px solid #fff;margin-left:-8px">
+<span style="font:600 11px 'DM Sans';color:#68707D;margin-left:6px;align-self:center">+5</span>
+</div>
+<span style="font:600 12.5px 'DM Sans';color:#D9364A;display:flex;align-items:center;gap:3px">Open<l-icon name="chevron-right" style="width:14px;height:14px"></l-icon></span>
+</div>
+</div>
+<div>
+<div style="font:500 11px 'DM Sans';color:#68707D;text-transform:uppercase;letter-spacing:.08em;padding:0 2px 8px">Invites · 1</div>
+<div style="background:#fff;border:1.5px dashed #CDD3D8;border-radius:16px;padding:13px 14px;display:flex;align-items:center;gap:11px">
+<img src="https://api.dicebear.com/9.x/micah/svg?seed=Maya&backgroundColor=d8e4f2" alt="Maya" style="width:36px;height:36px;border-radius:50%;background:#D8E4F2">
+<div style="flex:1;min-width:0"><div style="font:600 13.5px 'DM Sans';color:#171A1F">Log Every Day</div><div style="font:400 11.5px 'DM Sans';color:#68707D">Maya invited you · 14 days · starts Mon</div></div>
+<div class="btnp" style="height:36px;padding:0 14px;border-radius:11px;background:#D9364A;color:#fff;font:600 13px/36px 'DM Sans'">Join</div>
+<div role="button" aria-label="Decline invite" style="width:36px;height:36px;border-radius:11px;border:1.5px solid #CDD3D8;display:flex;align-items:center;justify-content:center"><l-icon name="x" style="width:16px;height:16px;color:#68707D"></l-icon></div>
+</div>
+</div>
+<sc-if value="{{ hasMyChallenge }}" hint-placeholder-val="{{ false }}">
+<div>
+<div style="font:500 11px 'DM Sans';color:#68707D;text-transform:uppercase;letter-spacing:.08em;padding:0 2px 8px">Your new challenge</div>
+<div class="btnp" onClick="{{ goDetail }}" style="background:#fff;border:2px solid #D9364A;border-radius:16px;padding:13px 14px;display:flex;align-items:center;gap:12px">
+<div style="width:40px;height:40px;border-radius:12px;background:#FBEAEC;display:flex;align-items:center;justify-content:center;flex:none"><l-icon name="swords" style="width:18px;height:18px;color:#D9364A"></l-icon></div>
+<div style="flex:1;min-width:0"><div style="font:600 14px 'DM Sans';color:#171A1F">{{ chalName }}</div><div style="font:400 11.5px 'DM Sans';color:#68707D;margin-top:2px">{{ chalDur }} · invites sent to Maya</div></div>
+<span style="height:32px;padding:0 12px;border-radius:10px;background:#E3F2E9;color:#1E7A48;font:600 12px/32px 'DM Sans'">Created</span>
+</div>
+</div>
+</sc-if>
+<div>
+<div style="font:500 11px 'DM Sans';color:#68707D;text-transform:uppercase;letter-spacing:.08em;padding:0 2px 8px">Active · 2</div>
+<div style="background:#fff;border:1px solid #E3E6E0;border-radius:16px;padding:13px 14px;display:flex;align-items:center;gap:12px">
+<div style="width:40px;height:40px;border-radius:12px;background:#FBEFE8;display:flex;align-items:center;justify-content:center;flex:none"><div style="width:18px;height:18px;background-image:url('assets/streak-fire.png');background-size:108px 18px;image-rendering:pixelated"></div></div>
+<div style="flex:1;min-width:0">
+<div style="display:flex;align-items:center;gap:6px"><span style="font:600 14px 'DM Sans';color:#171A1F">Streak Sprint</span><span style="font:600 9.5px 'DM Sans';color:#68707D;background:#EDEFEA;border-radius:4px;padding:2px 6px">1 v 1</span></div>
+<div style="font:400 11.5px 'DM Sans';color:#68707D;margin-top:2px">vs Jordan · you lead 7–6 · 10 days left</div>
+</div>
+<span style="font:700 14px 'Barlow Condensed';color:#1E9E5A">#1 OF 2</span>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isCreate }}" hint-placeholder-val="{{ false }}">
+<div class="scr" data-screen-label="Create challenge" style="padding:53px 20px 40px;display:flex;flex-direction:column;gap:13px">
+<div style="display:flex;align-items:center;gap:12px">
+<div class="btnp" onClick="{{ goChallenges }}" role="button" aria-label="Close" style="width:44px;height:44px;border-radius:14px;background:#fff;border:1px solid #E3E6E0;display:flex;align-items:center;justify-content:center;margin-left:-2px"><l-icon name="x" style="width:20px;height:20px;color:#171A1F"></l-icon></div>
+<div style="font:700 20px 'DM Sans';color:#171A1F;letter-spacing:-.015em">Create challenge</div>
+</div>
+<div>
+<sc-if value="{{ cNoErr }}" hint-placeholder-val="{{ true }}">
+<label style="display:block;background:#fff;border:1.5px solid #CDD3D8;border-radius:14px;padding:10px 16px"><div style="font:500 11.5px 'DM Sans';color:#68707D">Challenge name</div><input value="{{ cname }}" onChange="{{ onCname }}" placeholder="e.g. Protein Push" style="border:none;width:100%;font:400 15.5px 'DM Sans';color:#171A1F;margin-top:2px;padding:0;background:transparent"></label>
+</sc-if>
+<sc-if value="{{ cErr }}" hint-placeholder-val="{{ false }}">
+<label style="display:block;background:#fff;border:1.5px solid #C43D3D;border-radius:14px;padding:10px 16px"><div style="font:500 11.5px 'DM Sans';color:#C43D3D">Challenge name</div><input value="{{ cname }}" onChange="{{ onCname }}" placeholder="e.g. Protein Push" style="border:none;width:100%;font:400 15.5px 'DM Sans';color:#171A1F;margin-top:2px;padding:0;background:transparent"></label>
+<div style="display:flex;align-items:center;gap:5px;margin-top:6px;font:500 12.5px 'DM Sans';color:#C43D3D"><l-icon name="circle-alert" style="width:14px;height:14px"></l-icon>Give your challenge a name. Everything else is saved.</div>
+</sc-if>
+</div>
+<div>
+<div style="font:500 12px 'DM Sans';color:#68707D;padding:0 2px 7px">Goal</div>
+<div style="display:flex;gap:8px">
+<sc-for list="{{ goalChips }}" as="c" hint-placeholder-count="3">
+<sc-if value="{{ c.sel }}" hint-placeholder-val="{{ false }}"><div style="flex:1;padding:11px 0;border-radius:12px;background:#171A1F;color:#fff;font:600 13px 'DM Sans';text-align:center">{{ c.label }}</div></sc-if>
+<sc-if value="{{ c.unsel }}" hint-placeholder-val="{{ true }}"><div class="btnp" onClick="{{ c.pick }}" style="flex:1;padding:11px 0;border-radius:12px;border:1.5px solid #CDD3D8;color:#171A1F;font:500 13px 'DM Sans';text-align:center;background:#fff">{{ c.label }}</div></sc-if>
+</sc-for>
+</div>
+</div>
+<div>
+<div style="font:500 12px 'DM Sans';color:#68707D;padding:0 2px 7px">Duration</div>
+<div style="display:flex;gap:8px">
+<sc-for list="{{ durChips }}" as="c" hint-placeholder-count="4">
+<sc-if value="{{ c.sel }}" hint-placeholder-val="{{ false }}"><div style="flex:1;padding:10px 0;border-radius:99px;background:#171A1F;color:#fff;font:600 12.5px 'DM Sans';text-align:center">{{ c.label }}</div></sc-if>
+<sc-if value="{{ c.unsel }}" hint-placeholder-val="{{ true }}"><div class="btnp" onClick="{{ c.pick }}" style="flex:1;padding:10px 0;border-radius:99px;border:1.5px solid #CDD3D8;color:#171A1F;font:500 12.5px 'DM Sans';text-align:center;background:#fff">{{ c.label }}</div></sc-if>
+</sc-for>
+</div>
+</div>
+<div style="background:#fff;border:1.5px solid #CDD3D8;border-radius:14px;padding:10px 16px;display:flex;align-items:center;justify-content:space-between"><div><div style="font:500 11.5px 'DM Sans';color:#68707D">Stakes <span style="color:#9AA1AB">— optional</span></div><div style="font:400 15px 'DM Sans';color:#171A1F;margin-top:2px">Loser buys smoothies</div></div><l-icon name="pencil" style="width:16px;height:16px;color:#9AA1AB"></l-icon></div>
+<div>
+<div style="font:500 12px 'DM Sans';color:#68707D;padding:0 2px 7px">Invite friends · 1 selected</div>
+<div style="display:flex;gap:10px">
+<div style="text-align:center"><div style="position:relative"><img src="https://api.dicebear.com/9.x/micah/svg?seed=Maya&backgroundColor=d8e4f2" alt="Maya selected" style="width:48px;height:48px;border-radius:50%;background:#D8E4F2;box-shadow:0 0 0 2.5px #D9364A"><span style="position:absolute;bottom:-2px;right:-2px;width:17px;height:17px;border-radius:9px;background:#D9364A;display:flex;align-items:center;justify-content:center;border:2px solid #F5F6F3"><l-icon name="check" style="width:9px;height:9px;color:#fff"></l-icon></span></div><div style="font:500 11px 'DM Sans';color:#171A1F;margin-top:5px">Maya</div></div>
+<div style="text-align:center"><img src="https://api.dicebear.com/9.x/micah/svg?seed=Jordan&backgroundColor=e4d8f0" alt="Jordan" style="width:48px;height:48px;border-radius:50%;background:#E4D8F0;opacity:.7"><div style="font:500 11px 'DM Sans';color:#68707D;margin-top:5px">Jordan</div></div>
+<div style="text-align:center"><img src="https://api.dicebear.com/9.x/micah/svg?seed=Alex&backgroundColor=d5e8dc" alt="Alex" style="width:48px;height:48px;border-radius:50%;background:#D5E8DC;opacity:.7"><div style="font:500 11px 'DM Sans';color:#68707D;margin-top:5px">Alex</div></div>
+</div>
+</div>
+<div style="background:#F0F1ED;border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:11px">
+<div style="width:36px;height:36px;border-radius:11px;background:#FBEAEC;display:flex;align-items:center;justify-content:center;flex:none"><l-icon name="swords" style="width:16px;height:16px;color:#D9364A"></l-icon></div>
+<div style="flex:1"><div style="font:600 13px 'DM Sans';color:#171A1F">{{ cPreviewName }} · Solo · {{ cGoal }}</div><div style="font:400 11.5px 'DM Sans';color:#68707D">{{ cPreviewMeta }}</div></div>
+</div>
+<div class="btnp" onClick="{{ createChallenge }}" style="height:54px;border-radius:14px;background:#D9364A;display:flex;align-items:center;justify-content:center;font:600 16.5px 'DM Sans';color:#fff">Create challenge</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isDetail }}" hint-placeholder-val="{{ false }}">
+<div class="scr" data-screen-label="Challenge detail" style="padding:53px 20px 40px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:12px">
+<div class="btnp" onClick="{{ goChallenges }}" role="button" aria-label="Back" style="width:44px;height:44px;border-radius:14px;background:#fff;border:1px solid #E3E6E0;display:flex;align-items:center;justify-content:center;margin-left:-2px"><l-icon name="chevron-left" style="width:22px;height:22px;color:#171A1F"></l-icon></div>
+<div style="flex:1"></div>
+<div style="display:flex;align-items:center;gap:6px;background:#fff;border:1.5px solid #CDD3D8;border-radius:99px;padding:8px 13px;font:600 12.5px 'DM Sans';color:#171A1F"><l-icon name="user-plus" style="width:14px;height:14px"></l-icon>Invite</div>
+</div>
+<sc-if value="{{ chalJustCreated }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:8px;background:#E3F2E9;border-radius:12px;padding:10px 14px;animation:rise .3s"><l-icon name="check" style="width:15px;height:15px;color:#1E7A48"></l-icon><span style="font:500 13px 'DM Sans';color:#1E7A48">Challenge created — Maya has been invited.</span></div>
+</sc-if>
+<div style="background:#171A1F;border-radius:20px;padding:18px">
+<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+<span style="font:600 10.5px 'DM Sans';color:#B8BDC4;background:rgba(255,255,255,.1);border-radius:5px;padding:3px 8px">SOLO</span>
+<span style="font:600 10.5px 'DM Sans';color:#B8BDC4;background:rgba(255,255,255,.1);border-radius:5px;padding:3px 8px">{{ chalGoalLabel }}</span>
+<span style="display:flex;align-items:center;gap:4px;font:700 13px 'Barlow Condensed';color:#FF9AA6;margin-left:auto"><l-icon name="clock" style="width:12px;height:12px"></l-icon>{{ chalDur }}</span>
+</div>
+<div style="font:700 26px 'DM Sans';color:#fff;letter-spacing:-.015em;margin-top:10px">{{ chalName }}</div>
+<div style="display:flex;align-items:center;gap:16px;margin-top:12px">
+<div><div style="font:700 40px/1 'Barlow Condensed';color:#fff">#1</div><div style="font:500 10.5px 'DM Sans';color:#9AA1AB;margin-top:2px">OF 2 · STARTS TODAY</div></div>
+<div style="flex:1">
+<div style="display:flex;justify-content:space-between;font:500 12px 'DM Sans';color:#B8BDC4"><span>Today</span><span><b style="color:#fff;font-weight:700">{{ proNowF }}</b> / 150g</span></div>
+<div style="height:8px;border-radius:4px;background:rgba(255,255,255,.14);margin-top:6px;overflow:hidden"><div style="width:{{ proPct }};height:100%;border-radius:4px;background:#D9364A"></div></div>
+</div>
+</div>
+</div>
+<div style="background:#fff;border:1px solid #E3E6E0;border-radius:16px;overflow:hidden">
+<div style="padding:12px 14px 8px;font:500 11px 'DM Sans';color:#68707D;text-transform:uppercase;letter-spacing:.08em">Standings</div>
+<div style="display:flex;align-items:center;gap:10px;padding:9px 11px;background:#FBEAEC;border-left:3px solid #D9364A">
+<span style="width:18px;text-align:center;font:700 14px 'Barlow Condensed';color:#D9364A">1</span>
+<img src="{{ dnameAvatar }}" alt="You" style="width:32px;height:32px;border-radius:50%;background:#F3DBC9">
+<span style="flex:1;font:700 13.5px 'DM Sans';color:#171A1F">You</span>
+<span style="font:700 14px 'Barlow Condensed';color:#171A1F">0/7</span>
+</div>
+<div style="display:flex;align-items:center;gap:10px;padding:9px 14px">
+<span style="width:18px;text-align:center;font:700 14px 'Barlow Condensed';color:#68707D">—</span>
+<img src="https://api.dicebear.com/9.x/micah/svg?seed=Maya&backgroundColor=d8e4f2" alt="Maya" style="width:32px;height:32px;border-radius:50%;background:#D8E4F2">
+<span style="flex:1;font:600 13.5px 'DM Sans';color:#171A1F">Maya</span>
+<span style="font:600 11px 'DM Sans';color:#8A6A15;background:#F7EFD8;border-radius:6px;padding:4px 8px">Invited</span>
+</div>
+</div>
+<div style="background:#fff;border:1px solid #E3E6E0;border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:9px;font:400 13px/1.5 'DM Sans';color:#68707D">
+<div style="display:flex;justify-content:space-between"><span>Goal</span><b style="color:#171A1F;font-weight:600">{{ cGoal }} · daily target, {{ chalDur }}</b></div>
+<div style="display:flex;justify-content:space-between"><span>Points</span><b style="color:#171A1F;font-weight:600">+5 LP per goal day · +40 LP winner</b></div>
+<div style="display:flex;justify-content:space-between"><span>Stakes</span><b style="color:#171A1F;font-weight:600">Loser buys smoothies</b></div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isCoach }}" hint-placeholder-val="{{ false }}">
+<div class="scr" data-screen-label="Coach" style="padding:53px 20px 190px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center">
+<div style="flex:1"><h1 style="font:700 26px 'DM Sans';color:#171A1F;letter-spacing:-.02em;margin:0">MacroCoach</h1><div style="font:500 12.5px 'DM Sans';color:#68707D;margin-top:2px">Nutrition guide</div></div>
+<div role="button" aria-label="About MacroCoach" style="width:40px;height:40px;border-radius:13px;background:#fff;border:1px solid #E3E6E0;display:flex;align-items:center;justify-content:center"><l-icon name="info" style="width:18px;height:18px;color:#68707D"></l-icon></div>
+</div>
+<sc-if value="{{ coachIdle }}" hint-placeholder-val="{{ true }}">
+<div style="margin-top:16px;font:700 22px/1.3 'DM Sans';color:#171A1F;letter-spacing:-.015em">What can I help with?</div>
+<div style="font:400 13.5px/1.5 'DM Sans';color:#68707D">Suggestions based on your day.</div>
+<div style="background:#fff;border:1px solid #E3E6E0;border-radius:16px;overflow:hidden">
+<div class="btnp" onClick="{{ askProtein }}" style="display:flex;align-items:center;gap:12px;padding:14px 16px">
+<l-icon name="beef" style="width:18px;height:18px;color:#68707D"></l-icon>
+<span style="flex:1;font:500 14px 'DM Sans';color:#171A1F">How am I doing on protein today?</span>
+<l-icon name="chevron-right" style="width:15px;height:15px;color:#9AA1AB"></l-icon>
+</div>
+<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-top:1px solid #F0F1ED">
+<l-icon name="utensils" style="width:18px;height:18px;color:#68707D"></l-icon>
+<span style="flex:1;font:500 14px 'DM Sans';color:#171A1F">What could I eat with my remaining calories?</span>
+<l-icon name="chevron-right" style="width:15px;height:15px;color:#9AA1AB"></l-icon>
+</div>
+<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-top:1px solid #F0F1ED">
+<l-icon name="wheat" style="width:18px;height:18px;color:#68707D"></l-icon>
+<span style="flex:1;font:500 14px 'DM Sans';color:#171A1F">Why does fiber matter?</span>
+<l-icon name="chevron-right" style="width:15px;height:15px;color:#9AA1AB"></l-icon>
+</div>
+</div>
+</sc-if>
+<sc-if value="{{ coachAsked }}" hint-placeholder-val="{{ false }}">
+<div style="align-self:flex-end;max-width:280px;background:#171A1F;color:#fff;border-radius:18px 18px 5px 18px;padding:11px 15px;font:400 14px/1.5 'DM Sans';animation:rise .25s">How am I doing on protein today?</div>
+<div style="align-self:flex-start;max-width:300px;display:flex;flex-direction:column;gap:8px;animation:rise .3s">
+<div style="background:#fff;border:1px solid #E3E6E0;border-radius:18px 18px 18px 5px;padding:12px 15px;font:400 14px/1.55 'DM Sans';color:#171A1F">{{ coachProLine }}</div>
+<div style="background:#fff;border:1px solid #E3E6E0;border-radius:14px;padding:11px 14px;width:250px">
+<div style="display:flex;justify-content:space-between;font:500 12px 'DM Sans';color:#68707D"><span>Protein today</span><span><b style="color:#171A1F;font-weight:700">{{ proNowF }}</b> / {{ proTF }}g</span></div>
+<div style="height:7px;border-radius:4px;background:#EDEFEA;margin-top:6px;overflow:hidden"><div style="width:{{ coachProPct }};height:100%;border-radius:4px;background:#D9364A"></div></div>
+<div style="font:400 11px 'DM Sans';color:#9AA1AB;margin-top:6px">From your logged meals</div>
+</div>
+</div>
+</sc-if>
+<div style="position:absolute;left:0;right:0;bottom:88px;padding:10px 20px 4px;background:linear-gradient(to top,#F5F6F3 78%,rgba(245,246,243,0));z-index:8">
+<div style="text-align:center;font:400 11px/1.5 'DM Sans';color:#9AA1AB;padding-bottom:8px">MacroCoach provides general nutrition education, not medical advice.</div>
+<div style="display:flex;align-items:center;gap:10px">
+<div style="flex:1;background:#fff;border:1.5px solid #CDD3D8;border-radius:99px;padding:13px 18px;font:400 14.5px 'DM Sans';color:#9AA1AB">Ask about your nutrition…</div>
+<div role="button" aria-label="Send" style="width:48px;height:48px;border-radius:24px;background:#EDEFEA;display:flex;align-items:center;justify-content:center"><l-icon name="arrow-up" style="width:20px;height:20px;color:#AEB4BC"></l-icon></div>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isProfile }}" hint-placeholder-val="{{ false }}">
+<div class="scr" data-screen-label="Profile" style="padding:53px 20px 40px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:12px">
+<div class="btnp" onClick="{{ goToday }}" role="button" aria-label="Back" style="width:44px;height:44px;border-radius:14px;background:#fff;border:1px solid #E3E6E0;display:flex;align-items:center;justify-content:center;margin-left:-2px"><l-icon name="chevron-left" style="width:22px;height:22px;color:#171A1F"></l-icon></div>
+<div style="flex:1"></div>
+<div class="btnp" onClick="{{ goSettings }}" role="button" aria-label="Settings" style="width:44px;height:44px;border-radius:14px;background:#fff;border:1px solid #E3E6E0;display:flex;align-items:center;justify-content:center"><l-icon name="settings" style="width:20px;height:20px;color:#171A1F"></l-icon></div>
+</div>
+<div style="display:flex;align-items:center;gap:14px;padding:0 2px">
+<img src="{{ dnameAvatar }}" alt="{{ dname }}" style="width:64px;height:64px;border-radius:50%;background:#F3DBC9;border:2px solid #fff;box-shadow:0 0 0 1.5px #E3E6E0">
+<div><div style="font:700 22px 'DM Sans';color:#171A1F;letter-spacing:-.015em">{{ dname }}</div><div style="font:400 13px 'DM Sans';color:#68707D;margin-top:2px">Ohio State · Member since Feb 2026</div></div>
+</div>
+<div style="background:#171A1F;border-radius:20px;padding:16px 18px">
+<div style="display:flex;align-items:center;gap:10px">
+<span style="font:700 15px 'Barlow Condensed';color:#fff;background:#D9364A;border-radius:8px;padding:4px 10px;letter-spacing:.04em">LVL 4</span>
+<span style="font:600 14px 'DM Sans';color:#fff">Dedicated</span>
+<span style="font:500 12px 'DM Sans';color:#9AA1AB;margin-left:auto">340 XP to Level 5</span>
+</div>
+<div style="height:8px;border-radius:4px;background:rgba(255,255,255,.14);margin-top:11px;overflow:hidden"><div style="width:66%;height:100%;border-radius:4px;background:#D9364A"></div></div>
+<div style="display:flex;margin-top:14px;border-top:1px solid rgba(255,255,255,.1);padding-top:13px">
+<div style="flex:1;text-align:center"><div style="display:flex;align-items:center;justify-content:center;gap:4px"><div style="width:15px;height:15px;background-image:url('assets/streak-fire.png');background-size:90px 15px;image-rendering:pixelated;animation:flame .6s steps(6) infinite"></div><span style="font:700 22px/1 'Barlow Condensed';color:#fff">7</span></div><div style="font:500 10px 'DM Sans';color:#9AA1AB;margin-top:3px">STREAK</div></div>
+<div style="flex:1;text-align:center;border-left:1px solid rgba(255,255,255,.1)"><div style="font:700 22px/1 'Barlow Condensed';color:#fff">{{ lpF }}</div><div style="font:500 10px 'DM Sans';color:#9AA1AB;margin-top:3px">LP BALANCE</div></div>
+<div style="flex:1;text-align:center;border-left:1px solid rgba(255,255,255,.1)"><div style="font:700 22px/1 'Barlow Condensed';color:#D9364A">{{ rankF }}</div><div style="font:500 10px 'DM Sans';color:#9AA1AB;margin-top:3px">LEAGUE RANK</div></div>
+</div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+<div style="background:#fff;border:1px solid #E3E6E0;border-radius:14px;padding:12px 14px"><div style="font:700 22px/1 'Barlow Condensed';color:#171A1F">14</div><div style="font:500 11px 'DM Sans';color:#68707D;margin-top:3px">Longest streak</div></div>
+<div style="background:#fff;border:1px solid #E3E6E0;border-radius:14px;padding:12px 14px"><div style="font:700 22px/1 'Barlow Condensed';color:#171A1F">186</div><div style="font:500 11px 'DM Sans';color:#68707D;margin-top:3px">Meals logged</div></div>
+<div style="background:#fff;border:1px solid #E3E6E0;border-radius:14px;padding:12px 14px"><div style="font:700 22px/1 'Barlow Condensed';color:#171A1F">3</div><div style="font:500 11px 'DM Sans';color:#68707D;margin-top:3px">Challenges won</div></div>
+<div style="background:#fff;border:1px solid #E3E6E0;border-radius:14px;padding:12px 14px"><div style="font:700 22px/1 'Barlow Condensed';color:#171A1F">2,140</div><div style="font:500 11px 'DM Sans';color:#68707D;margin-top:3px">Total XP</div></div>
+</div>
+<div>
+<div style="padding:2px 2px 8px;font:700 16px 'DM Sans';color:#171A1F;letter-spacing:-.01em">Achievements</div>
+<div style="background:#fff;border:1px solid #E3E6E0;border-radius:16px;overflow:hidden">
+<div style="display:flex;align-items:center;gap:12px;padding:12px 14px">
+<div style="width:42px;height:42px;border-radius:12px;background:#FBEFE8;display:flex;align-items:center;justify-content:center;flex:none"><div style="width:18px;height:18px;background-image:url('assets/streak-fire.png');background-size:108px 18px;image-rendering:pixelated"></div></div>
+<div style="flex:1"><div style="font:600 14px 'DM Sans';color:#171A1F">Week One</div><div style="font:400 12px 'DM Sans';color:#68707D">7-day streak · earned yesterday</div></div>
+<span style="font:600 11px 'DM Sans';color:#1E7A48;background:#E3F2E9;border-radius:6px;padding:4px 8px">NEW</span>
+</div>
+<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid #F0F1ED">
+<div style="width:42px;height:42px;border-radius:12px;background:#EDEFEA;display:flex;align-items:center;justify-content:center;flex:none"><l-icon name="lock" style="width:17px;height:17px;color:#9AA1AB"></l-icon></div>
+<div style="flex:1"><div style="font:600 14px 'DM Sans';color:#68707D">Consistency King</div>
+<div style="display:flex;align-items:center;gap:8px;margin-top:5px"><div style="flex:1;height:5px;border-radius:3px;background:#EDEFEA;overflow:hidden"><div style="width:72%;height:100%;border-radius:3px;background:#9AA1AB"></div></div><span style="font:600 11.5px 'DM Sans';color:#68707D">18 / 25 meals</span></div></div>
+</div>
+</div>
+</div>
+<div style="background:#fff;border:1px solid #E3E6E0;border-radius:16px;overflow:hidden">
+<div class="btnp" onClick="{{ goRewards }}" style="display:flex;align-items:center;gap:12px;padding:14px 16px"><l-icon name="gift" style="width:18px;height:18px;color:#B7791B"></l-icon><span style="flex:1;font:500 14px 'DM Sans';color:#171A1F">Rewards</span><span style="font:700 13px 'Barlow Condensed';color:#171A1F">{{ lpF }} LP</span><l-icon name="chevron-right" style="width:15px;height:15px;color:#9AA1AB"></l-icon></div>
+<div class="btnp" onClick="{{ goSettings }}" style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-top:1px solid #F0F1ED"><l-icon name="target" style="width:18px;height:18px;color:#68707D"></l-icon><span style="flex:1;font:500 14px 'DM Sans';color:#171A1F">Edit goals</span><l-icon name="chevron-right" style="width:15px;height:15px;color:#9AA1AB"></l-icon></div>
+<div class="btnp" onClick="{{ goSettings }}" style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-top:1px solid #F0F1ED"><l-icon name="settings" style="width:18px;height:18px;color:#68707D"></l-icon><span style="flex:1;font:500 14px 'DM Sans';color:#171A1F">Settings</span><l-icon name="chevron-right" style="width:15px;height:15px;color:#9AA1AB"></l-icon></div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isRewards }}" hint-placeholder-val="{{ false }}">
+<div class="scr" data-screen-label="Rewards" style="padding:53px 20px 40px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:12px">
+<div class="btnp" onClick="{{ goProfile }}" role="button" aria-label="Back" style="width:44px;height:44px;border-radius:14px;background:#fff;border:1px solid #E3E6E0;display:flex;align-items:center;justify-content:center;margin-left:-2px"><l-icon name="chevron-left" style="width:22px;height:22px;color:#171A1F"></l-icon></div>
+<div style="font:700 20px 'DM Sans';color:#171A1F;letter-spacing:-.015em">Rewards</div>
+</div>
+<div style="background:#fff;border-radius:20px;box-shadow:0 6px 20px rgba(23,26,31,.08);padding:16px 18px">
+<div style="display:flex;align-items:baseline;justify-content:space-between">
+<div><div style="font:500 11px 'DM Sans';color:#68707D;text-transform:uppercase;letter-spacing:.08em">Balance</div><div style="font:700 44px/1 'Barlow Condensed';color:#171A1F;margin-top:4px">{{ balanceF }} <span style="font-size:18px;color:#68707D">LP</span></div></div>
+<l-icon name="gift" style="width:26px;height:26px;color:#B7791B"></l-icon>
+</div>
+<div style="margin-top:12px">
+<div style="display:flex;justify-content:space-between;font:500 12.5px 'DM Sans';color:#68707D"><span>Next reward: Free smoothie</span><span><b style="color:#171A1F;font-weight:700">400 LP</b></span></div>
+<div style="height:8px;border-radius:4px;background:#EDEFEA;margin-top:6px;overflow:hidden"><div style="width:100%;height:100%;border-radius:4px;background:#B7791B"></div></div>
+</div>
+</div>
+<div style="font:500 11px 'DM Sans';color:#68707D;text-transform:uppercase;letter-spacing:.08em;padding:2px 2px 0">Available now</div>
+<div style="background:#fff;border:1px solid #E3E6E0;border-radius:16px;overflow:hidden">
+<sc-for list="{{ rewardRows }}" as="r" hint-placeholder-count="2">
+<div style="display:flex;align-items:center;gap:12px;padding:13px 14px;border-top:1px solid #F0F1ED">
+<div style="width:46px;height:46px;border-radius:13px;background:#EDEFEA;display:flex;align-items:center;justify-content:center;flex:none;font:700 14px 'Barlow Condensed';color:#68707D">{{ r.mono }}</div>
+<div style="flex:1"><div style="font:600 14px 'DM Sans';color:#171A1F">{{ r.name }}</div><div style="font:400 12px 'DM Sans';color:#68707D;margin-top:1px">{{ r.partner }}</div></div>
+<div class="btnp" onClick="{{ r.open }}" style="height:38px;padding:0 15px;border-radius:11px;background:#171A1F;color:#fff;font:600 13px/38px 'DM Sans'">{{ r.costF }}</div>
+</div>
+</sc-for>
+</div>
+<sc-if value="{{ notRedeemed }}" hint-placeholder-val="{{ true }}"></sc-if>
+<div style="font:500 11px 'DM Sans';color:#68707D;text-transform:uppercase;letter-spacing:.08em;padding:2px 2px 0">Redeemed</div>
+<div style="background:#fff;border:1px solid #E3E6E0;border-radius:16px;padding:13px 14px;display:flex;align-items:center;gap:12px;opacity:.75">
+<div style="width:46px;height:46px;border-radius:13px;background:#EDEFEA;display:flex;align-items:center;justify-content:center;flex:none;font:700 14px 'Barlow Condensed';color:#9AA1AB">PB</div>
+<div style="flex:1"><div style="font:600 14px 'DM Sans';color:#68707D">Protein bar 2-pack</div><div style="font:400 12px 'DM Sans';color:#9AA1AB;margin-top:1px">Redeemed Jun 12</div></div>
+<span style="display:flex;align-items:center;gap:5px;font:600 12.5px 'DM Sans';color:#1E9E5A"><l-icon name="check" style="width:14px;height:14px"></l-icon>Used</span>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isPass }}" hint-placeholder-val="{{ false }}">
+<div class="scr" data-screen-label="Redemption pass" style="padding:53px 20px 40px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:12px">
+<div class="btnp" onClick="{{ goRewards }}" role="button" aria-label="Back" style="width:44px;height:44px;border-radius:14px;background:#fff;border:1px solid #E3E6E0;display:flex;align-items:center;justify-content:center;margin-left:-2px"><l-icon name="chevron-left" style="width:22px;height:22px;color:#171A1F"></l-icon></div>
+<div style="font:700 20px 'DM Sans';color:#171A1F;letter-spacing:-.015em">Your reward</div>
+</div>
+<div style="display:flex;align-items:center;gap:8px;background:#E3F2E9;border-radius:12px;padding:10px 14px;animation:rise .3s"><l-icon name="check" style="width:15px;height:15px;color:#1E7A48"></l-icon><span style="font:500 13px 'DM Sans';color:#1E7A48">Redeemed. Balance is now {{ balanceF }} LP.</span></div>
+<div style="background:#fff;border-radius:20px;box-shadow:0 10px 30px rgba(23,26,31,.10);overflow:hidden">
+<div style="background:#171A1F;padding:16px 18px;display:flex;align-items:center;gap:12px">
+<div style="width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;font:700 14px 'Barlow Condensed';color:#fff">SM</div>
+<div style="flex:1"><div style="font:700 16px 'DM Sans';color:#fff">Free smoothie</div><div style="font:400 12px 'DM Sans';color:#9AA1AB">Campus Smoothie Co.</div></div>
+<span style="font:600 11px 'DM Sans';color:#171A1F;background:#E8B931;border-radius:6px;padding:4px 8px">ACTIVE</span>
+</div>
+<div style="padding:20px;display:flex;flex-direction:column;align-items:center;border-bottom:1.5px dashed #E3E6E0">
+<div style="width:150px;height:150px;background:#171A1F;border-radius:8px;display:grid;grid-template-columns:repeat(11,1fr);grid-template-rows:repeat(11,1fr);gap:2px;padding:10px">
+<div style="grid-column:1/4;grid-row:1/4;border:3px solid #fff;border-radius:3px"></div>
+<div style="grid-column:9/12;grid-row:1/4;border:3px solid #fff;border-radius:3px"></div>
+<div style="grid-column:1/4;grid-row:9/12;border:3px solid #fff;border-radius:3px"></div>
+<div style="grid-column:5;grid-row:2;background:#fff"></div><div style="grid-column:6;grid-row:3;background:#fff"></div><div style="grid-column:7;grid-row:1;background:#fff"></div><div style="grid-column:5;grid-row:5;background:#fff"></div><div style="grid-column:6;grid-row:6;background:#fff"></div><div style="grid-column:7;grid-row:5;background:#fff"></div><div style="grid-column:9;grid-row:6;background:#fff"></div><div style="grid-column:11;grid-row:6;background:#fff"></div><div style="grid-column:5;grid-row:9;background:#fff"></div><div style="grid-column:7;grid-row:11;background:#fff"></div><div style="grid-column:9;grid-row:9;background:#fff"></div><div style="grid-column:11;grid-row:10;background:#fff"></div><div style="grid-column:6;grid-row:8;background:#fff"></div><div style="grid-column:8;grid-row:7;background:#fff"></div>
+</div>
+<div style="font:700 18px 'Barlow Condensed';color:#171A1F;letter-spacing:.25em;margin-top:12px">SMTH-4K7Q-92</div>
+</div>
+<div style="padding:14px 18px;display:flex;flex-direction:column;gap:8px;font:400 13px/1.5 'DM Sans';color:#68707D">
+<div style="display:flex;justify-content:space-between"><span>Expires</span><b style="color:#171A1F;font-weight:600">Jul 31, 2026</b></div>
+<div style="display:flex;align-items:flex-start;gap:8px"><l-icon name="info" style="width:14px;height:14px;color:#9AA1AB;flex:none;margin-top:2px"></l-icon><span>Show this pass at the register. Staff will scan or enter the code.</span></div>
+</div>
+</div>
+<div class="btnp" onClick="{{ goToday }}" style="height:50px;border-radius:14px;background:#fff;border:1.5px solid #CDD3D8;display:flex;align-items:center;justify-content:center;gap:8px;font:600 15px 'DM Sans';color:#171A1F"><l-icon name="check" style="width:17px;height:17px"></l-icon>Mark as used</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isSettings }}" hint-placeholder-val="{{ false }}">
+<div class="scr" data-screen-label="Settings" style="padding:53px 20px 40px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:12px">
+<div class="btnp" onClick="{{ goProfile }}" role="button" aria-label="Back" style="width:44px;height:44px;border-radius:14px;background:#fff;border:1px solid #E3E6E0;display:flex;align-items:center;justify-content:center;margin-left:-2px"><l-icon name="chevron-left" style="width:22px;height:22px;color:#171A1F"></l-icon></div>
+<div style="font:700 20px 'DM Sans';color:#171A1F;letter-spacing:-.015em">Settings</div>
+</div>
+<div style="background:#fff;border:1px solid #E3E6E0;border-radius:16px;overflow:hidden">
+<div style="display:flex;align-items:center;gap:12px;padding:14px 16px"><l-icon name="user" style="width:18px;height:18px;color:#68707D"></l-icon><div style="flex:1"><div style="font:500 14px 'DM Sans';color:#171A1F">Account</div><div style="font:400 11.5px 'DM Sans';color:#9AA1AB">Email, password, avatar</div></div><l-icon name="chevron-right" style="width:15px;height:15px;color:#9AA1AB"></l-icon></div>
+<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-top:1px solid #F0F1ED"><l-icon name="target" style="width:18px;height:18px;color:#68707D"></l-icon><div style="flex:1"><div style="font:500 14px 'DM Sans';color:#171A1F">Nutrition goals</div><div style="font:400 11.5px 'DM Sans';color:#9AA1AB">2,300 kcal · 170g protein</div></div><l-icon name="chevron-right" style="width:15px;height:15px;color:#9AA1AB"></l-icon></div>
+<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-top:1px solid #F0F1ED"><l-icon name="scale" style="width:18px;height:18px;color:#68707D"></l-icon><div style="flex:1"><div style="font:500 14px 'DM Sans';color:#171A1F">Scoring rules</div></div><l-icon name="chevron-right" style="width:15px;height:15px;color:#9AA1AB"></l-icon></div>
+<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-top:1px solid #F0F1ED"><l-icon name="bell" style="width:18px;height:18px;color:#68707D"></l-icon><div style="flex:1"><div style="font:500 14px 'DM Sans';color:#171A1F">Notifications</div><div style="font:400 11.5px 'DM Sans';color:#9AA1AB">4 of 5 on</div></div><l-icon name="chevron-right" style="width:15px;height:15px;color:#9AA1AB"></l-icon></div>
+<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-top:1px solid #F0F1ED"><l-icon name="graduation-cap" style="width:18px;height:18px;color:#68707D"></l-icon><div style="flex:1"><div style="font:500 14px 'DM Sans';color:#171A1F">University</div><div style="font:400 11.5px 'DM Sans';color:#9AA1AB">Ohio State · Traditions at Scott</div></div><l-icon name="chevron-right" style="width:15px;height:15px;color:#9AA1AB"></l-icon></div>
+</div>
+<div style="background:#fff;border:1px solid #E3E6E0;border-radius:16px;overflow:hidden">
+<div style="display:flex;align-items:center;gap:12px;padding:14px 16px"><l-icon name="log-out" style="width:18px;height:18px;color:#68707D"></l-icon><span style="font:500 14px 'DM Sans';color:#171A1F">Sign out</span></div>
+<div class="btnp" onClick="{{ openDelete }}" style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-top:1px solid #F0F1ED"><l-icon name="trash-2" style="width:18px;height:18px;color:#C43D3D"></l-icon><span style="font:500 14px 'DM Sans';color:#C43D3D">Delete account</span></div>
+</div>
+<div style="text-align:center;font:400 11.5px 'DM Sans';color:#9AA1AB">MacroLeague 2.0.0 (418)</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isReactivate }}" hint-placeholder-val="{{ false }}">
+<div class="scr" data-screen-label="Reactivate" style="display:flex;flex-direction:column;padding:47px 0 0">
+<div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 28px">
+<div style="width:52px;height:52px;border-radius:16px;background:#fff;border:1px solid #E3E6E0;display:flex;align-items:center;justify-content:center"><l-icon name="archive" style="width:24px;height:24px;color:#68707D"></l-icon></div>
+<h1 style="font:700 26px/1.25 'DM Sans';color:#171A1F;letter-spacing:-.02em;margin:18px 0 0">This account is scheduled for deletion.</h1>
+<p style="font:400 14.5px/1.6 'DM Sans';color:#68707D;margin:10px 0 0">Your data is archived and hidden from leagues and friends. It will be permanently deleted on <b style="color:#171A1F;font-weight:600">Jul 17, 2026</b>.</p>
+<p style="font:400 14.5px/1.6 'DM Sans';color:#68707D;margin:8px 0 0">Reactivate before then and everything — meals, streaks, points, friends — is restored exactly as you left it.</p>
+</div>
+<div style="padding:0 22px 34px;display:flex;flex-direction:column;gap:10px">
+<div class="btnp" onClick="{{ confirmReact }}" style="height:54px;border-radius:14px;background:#D9364A;display:flex;align-items:center;justify-content:center;font:600 16.5px 'DM Sans';color:#fff">Reactivate account</div>
+<div class="btnp" onClick="{{ goWelcome }}" style="height:50px;border-radius:14px;background:#fff;border:1.5px solid #CDD3D8;display:flex;align-items:center;justify-content:center;font:600 15px 'DM Sans';color:#171A1F">Sign out</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isEstimating }}" hint-placeholder-val="{{ false }}">
+<div class="scr" data-screen-label="Estimating" style="padding:53px 20px 34px;display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;align-items:center"><h2 style="font:700 20px 'DM Sans';color:#171A1F;margin:0;flex:1;letter-spacing:-.015em">Estimating your meal</h2><div class="btnp" onClick="{{ cancelEstimate }}" role="button" aria-label="Cancel" style="width:36px;height:36px;border-radius:18px;background:#EDEFEA;display:flex;align-items:center;justify-content:center"><l-icon name="x" style="width:17px;height:17px;color:#68707D"></l-icon></div></div>
+<div style="background:#fff;border:1px solid #E3E6E0;border-radius:14px;padding:12px 14px;display:flex;gap:10px">
+<l-icon name="quote" style="width:15px;height:15px;color:#9AA1AB;flex:none;margin-top:2px"></l-icon>
+<span style="font:400 14px/1.5 'DM Sans';color:#3C4149">{{ desc }}</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:0">
+<div style="display:flex;align-items:center;gap:12px;padding:9px 2px">
+<sc-if value="{{ est1 }}" hint-placeholder-val="{{ false }}"><div style="width:24px;height:24px;border-radius:12px;background:#1E9E5A;display:flex;align-items:center;justify-content:center;flex:none"><l-icon name="check" style="width:14px;height:14px;color:#fff"></l-icon></div></sc-if>
+<span style="font:500 14px 'DM Sans';color:#171A1F">Finding nutrition matches</span>
+</div>
+<div style="width:2px;height:10px;background:#E3E6E0;margin-left:13px"></div>
+<div style="display:flex;align-items:center;gap:12px;padding:9px 2px">
+<sc-if value="{{ est2sp }}" hint-placeholder-val="{{ true }}"><div style="width:24px;height:24px;border-radius:12px;border:2.5px solid #EDEFEA;border-top-color:#D9364A;animation:spin 1s linear infinite;flex:none"></div></sc-if>
+<sc-if value="{{ est3 }}" hint-placeholder-val="{{ false }}"><div style="width:24px;height:24px;border-radius:12px;background:#1E9E5A;display:flex;align-items:center;justify-content:center;flex:none"><l-icon name="check" style="width:14px;height:14px;color:#fff"></l-icon></div></sc-if>
+<sc-if value="{{ est2wait }}" hint-placeholder-val="{{ false }}"><div style="width:24px;height:24px;border-radius:12px;border:2px solid #E3E6E0;flex:none"></div></sc-if>
+<span style="font:600 14px 'DM Sans';color:#171A1F">Estimating portions</span>
+</div>
+<div style="width:2px;height:10px;background:#E3E6E0;margin-left:13px"></div>
+<div style="display:flex;align-items:center;gap:12px;padding:9px 2px">
+<sc-if value="{{ est3sp }}" hint-placeholder-val="{{ false }}"><div style="width:24px;height:24px;border-radius:12px;border:2.5px solid #EDEFEA;border-top-color:#D9364A;animation:spin 1s linear infinite;flex:none"></div></sc-if>
+<sc-if value="{{ est3wait }}" hint-placeholder-val="{{ true }}"><div style="width:24px;height:24px;border-radius:12px;border:2px solid #E3E6E0;flex:none"></div></sc-if>
+<span style="font:500 14px 'DM Sans';color:#9AA1AB">Preparing your review</span>
+</div>
+</div>
+<div style="background:#fff;border:1px solid #E8EAE5;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:12px"><div style="width:40px;height:40px;border-radius:11px;background:#EDEFEA"></div><div style="flex:1"><div style="height:12px;width:60%;border-radius:5px;background:#EDEFEA"></div><div style="height:9px;width:40%;border-radius:4px;background:#F0F1ED;margin-top:7px"></div></div><div style="height:16px;width:52px;border-radius:6px;background:#EDEFEA"></div></div>
+<div style="display:flex;gap:10px"><div style="height:9px;flex:1;border-radius:4px;background:#F0F1ED"></div><div style="height:9px;flex:1;border-radius:4px;background:#F0F1ED"></div><div style="height:9px;flex:1;border-radius:4px;background:#F0F1ED"></div></div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isResults }}" hint-placeholder-val="{{ false }}">
+<div class="scr" data-screen-label="Estimate results" style="padding:53px 20px 40px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:12px">
+<div class="btnp" onClick="{{ goToday }}" role="button" aria-label="Back" style="width:44px;height:44px;border-radius:14px;background:#fff;border:1px solid #E3E6E0;display:flex;align-items:center;justify-content:center;margin-left:-2px"><l-icon name="chevron-left" style="width:22px;height:22px;color:#171A1F"></l-icon></div>
+<div><div style="font:700 20px 'DM Sans';color:#171A1F;letter-spacing:-.015em">Choose an estimate</div><div style="font:400 12px 'DM Sans';color:#68707D;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:270px">"{{ desc }}"</div></div>
+</div>
+<div class="btnp" onClick="{{ goReview }}" style="background:#fff;border:2px solid #D9364A;border-radius:18px;padding:16px;position:relative">
+<span style="position:absolute;top:-11px;left:16px;font:700 11px 'DM Sans';color:#fff;background:#D9364A;border-radius:6px;padding:4px 9px;letter-spacing:.04em">RECOMMENDED</span>
+<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-top:4px">
+<div><div style="font:700 17px 'DM Sans';color:#171A1F;letter-spacing:-.01em">Chicken rice bowl</div><div style="font:400 12.5px 'DM Sans';color:#68707D;margin-top:2px">5 oz chicken · 1.25 cups rice · vegetables · oil</div></div>
+<div style="text-align:right"><div style="font:700 30px/1 'Barlow Condensed';color:#171A1F">620</div><div style="font:600 10.5px 'DM Sans';color:#9AA1AB">KCAL</div></div>
+</div>
+<div style="display:flex;gap:8px;margin-top:12px">
+<div style="flex:1;background:#F5F6F3;border-radius:10px;padding:8px 10px;text-align:center"><div style="font:700 17px 'Barlow Condensed';color:#171A1F">46g</div><div style="font:500 10.5px 'DM Sans';color:#68707D">Protein</div></div>
+<div style="flex:1;background:#F5F6F3;border-radius:10px;padding:8px 10px;text-align:center"><div style="font:700 17px 'Barlow Condensed';color:#171A1F">68g</div><div style="font:500 10.5px 'DM Sans';color:#68707D">Carbs</div></div>
+<div style="flex:1;background:#F5F6F3;border-radius:10px;padding:8px 10px;text-align:center"><div style="font:700 17px 'Barlow Condensed';color:#171A1F">18g</div><div style="font:500 10.5px 'DM Sans';color:#68707D">Fat</div></div>
+</div>
+<div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap">
+<span style="font:600 11px 'DM Sans';color:#68707D;background:#EDEFEA;border-radius:6px;padding:4px 8px">Composite estimate</span>
+<span style="display:flex;align-items:center;gap:5px;font:600 11px 'DM Sans';color:#8A6A15;background:#F7EFD8;border-radius:6px;padding:4px 8px"><span style="width:6px;height:6px;border-radius:3px;background:#B7791B"></span>Medium confidence</span>
+</div>
+<div style="margin-top:12px;border-top:1px solid #F0F1ED;padding-top:11px">
+<div style="font:600 12px 'DM Sans';color:#171A1F">Assumptions</div>
+<ul style="margin:6px 0 0;padding-left:18px;font:400 12.5px/1.6 'DM Sans';color:#68707D">
+<li>Approximately 5 oz grilled chicken.</li>
+<li>Approximately 1.25 cups cooked rice.</li>
+<li>One tablespoon olive oil.</li>
+</ul>
+</div>
+<div style="margin-top:13px;height:48px;border-radius:13px;background:#D9364A;display:flex;align-items:center;justify-content:center;font:600 15px 'DM Sans';color:#fff">Use this estimate</div>
+</div>
+<div class="btnp" onClick="{{ goReview }}" style="background:#fff;border:1.5px solid #E3E6E0;border-radius:16px;padding:14px 16px;display:flex;align-items:center;gap:12px">
+<div style="flex:1"><div style="font:600 14.5px 'DM Sans';color:#171A1F">Chicken &amp; broccoli, no rice</div><div style="font:400 12px 'DM Sans';color:#68707D;margin-top:2px">If the rice was a side you didn't eat</div><div style="display:flex;gap:6px;margin-top:8px"><span style="font:600 10.5px 'DM Sans';color:#1E7A48;background:#E3F2E9;border-radius:5px;padding:3px 7px">USDA match</span><span style="font:600 10.5px 'DM Sans';color:#1E7A48;background:#E3F2E9;border-radius:5px;padding:3px 7px">High confidence</span></div></div>
+<div style="text-align:right"><div style="font:700 24px/1 'Barlow Condensed';color:#171A1F">340</div><div style="font:600 10px 'DM Sans';color:#9AA1AB">KCAL</div></div>
+</div>
+<div class="btnp" onClick="{{ goManual }}" style="text-align:center;font:600 14px 'DM Sans';color:#68707D;padding:6px 0 0">None of these? <span style="color:#D9364A">Enter manually</span></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isReview }}" hint-placeholder-val="{{ false }}">
+<div class="scr" data-screen-label="Review meal" style="padding:53px 20px 40px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:12px">
+<div class="btnp" onClick="{{ goResults }}" role="button" aria-label="Back" style="width:44px;height:44px;border-radius:14px;background:#fff;border:1px solid #E3E6E0;display:flex;align-items:center;justify-content:center;margin-left:-2px"><l-icon name="chevron-left" style="width:22px;height:22px;color:#171A1F"></l-icon></div>
+<div style="flex:1;font:700 20px 'DM Sans';color:#171A1F;letter-spacing:-.015em">Review meal</div>
+<span style="font:500 12.5px 'DM Sans';color:#68707D">{{ mealType }}</span>
+</div>
+<div style="background:#fff;border-radius:20px;box-shadow:0 6px 20px rgba(23,26,31,.08);padding:18px">
+<div style="display:flex;align-items:center;gap:8px">
+<span style="font:700 18px 'DM Sans';color:#171A1F;letter-spacing:-.01em;flex:1">Chicken rice bowl</span>
+<div style="width:34px;height:34px;border-radius:10px;background:#F5F6F3;display:flex;align-items:center;justify-content:center"><l-icon name="pencil" style="width:15px;height:15px;color:#68707D"></l-icon></div>
+</div>
+<div style="display:flex;align-items:center;gap:10px;margin-top:12px">
+<span style="font:500 13px 'DM Sans';color:#68707D">Servings</span>
+<div style="display:flex;align-items:center;border:1.5px solid #CDD3D8;border-radius:12px;overflow:hidden">
+<div class="btnp" onClick="{{ decServ }}" role="button" aria-label="Decrease servings" style="width:38px;height:38px;display:flex;align-items:center;justify-content:center"><l-icon name="minus" style="width:15px;height:15px;color:#171A1F"></l-icon></div>
+<span style="font:700 16px 'Barlow Condensed';color:#171A1F;width:40px;text-align:center;border-left:1.5px solid #E8EAE5;border-right:1.5px solid #E8EAE5;line-height:38px">{{ servingsF }}</span>
+<div class="btnp" onClick="{{ incServ }}" role="button" aria-label="Increase servings" style="width:38px;height:38px;display:flex;align-items:center;justify-content:center"><l-icon name="plus" style="width:15px;height:15px;color:#171A1F"></l-icon></div>
+</div>
+</div>
+<div style="display:flex;align-items:baseline;gap:8px;margin-top:16px">
+<span style="font:700 56px/0.9 'Barlow Condensed';color:#171A1F">{{ revCal }}</span>
+<span style="font:600 15px 'DM Sans';color:#68707D">kcal</span>
+<div style="display:flex;gap:6px;margin-left:auto">
+<div class="btnp" onClick="{{ decCal }}" role="button" aria-label="Decrease calories" style="width:34px;height:34px;border-radius:10px;background:#F5F6F3;display:flex;align-items:center;justify-content:center"><l-icon name="minus" style="width:15px;height:15px;color:#68707D"></l-icon></div>
+<div class="btnp" onClick="{{ incCal }}" role="button" aria-label="Increase calories" style="width:34px;height:34px;border-radius:10px;background:#F5F6F3;display:flex;align-items:center;justify-content:center"><l-icon name="plus" style="width:15px;height:15px;color:#68707D"></l-icon></div>
+</div>
+</div>
+<div style="display:flex;gap:8px;margin-top:14px">
+<div style="flex:1;background:#F5F6F3;border-radius:12px;padding:10px 12px"><div style="font:700 20px 'Barlow Condensed';color:#171A1F">{{ revPro }}</div><div style="font:500 11px 'DM Sans';color:#68707D;margin-top:1px">Protein</div></div>
+<div style="flex:1;background:#F5F6F3;border-radius:12px;padding:10px 12px"><div style="font:700 20px 'Barlow Condensed';color:#171A1F">{{ revCarb }}</div><div style="font:500 11px 'DM Sans';color:#68707D;margin-top:1px">Carbs</div></div>
+<div style="flex:1;background:#F5F6F3;border-radius:12px;padding:10px 12px"><div style="font:700 20px 'Barlow Condensed';color:#171A1F">{{ revFat }}</div><div style="font:500 11px 'DM Sans';color:#68707D;margin-top:1px">Total fat</div></div>
+</div>
+<div style="margin-top:14px;border-top:1px solid #F0F1ED;padding-top:12px">
+<div class="btnp" onClick="{{ toggleDetails }}" style="display:flex;align-items:center;justify-content:space-between"><span style="font:600 13.5px 'DM Sans';color:#171A1F">More nutrition details</span>
+<sc-if value="{{ detailsClosed }}" hint-placeholder-val="{{ true }}"><l-icon name="chevron-down" style="width:16px;height:16px;color:#68707D"></l-icon></sc-if>
+<sc-if value="{{ detailsOpen }}" hint-placeholder-val="{{ false }}"><l-icon name="chevron-up" style="width:16px;height:16px;color:#68707D"></l-icon></sc-if>
+</div>
+<sc-if value="{{ detailsOpen }}" hint-placeholder-val="{{ false }}">
+<div style="margin-top:10px;display:flex;flex-direction:column;gap:8px;font:400 13px 'DM Sans';color:#68707D">
+<div style="display:flex;justify-content:space-between"><span>Saturated fat</span><b style="color:#171A1F;font-weight:600">{{ revSat }}</b></div>
+<div style="display:flex;justify-content:space-between"><span>Trans fat</span><b style="color:#171A1F;font-weight:600">0g</b></div>
+<div style="display:flex;justify-content:space-between"><span>Unsaturated fat</span><b style="color:#171A1F;font-weight:600">{{ revUnsat }}</b></div>
+<div style="display:flex;justify-content:space-between"><span>Source</span><span style="font:600 11px 'DM Sans';color:#68707D;background:#EDEFEA;border-radius:5px;padding:3px 7px">Composite estimate</span></div>
+<div style="background:#F5F6F3;border-radius:10px;padding:9px 11px;font:400 12px/1.55 'DM Sans';color:#68707D">Fiber and sodium are unavailable for one component, so they're not shown.</div>
+</div>
+</sc-if>
+</div>
+</div>
+<div style="display:flex;align-items:center;gap:7px;padding:0 4px"><l-icon name="shield-check" style="width:14px;height:14px;color:#68707D;flex:none"></l-icon><span style="font:400 12px/1.5 'DM Sans';color:#68707D">Estimated from USDA data. Review portions before logging.</span></div>
+<div class="btnp" onClick="{{ confirmEstimate }}" style="height:54px;border-radius:14px;background:#D9364A;display:flex;align-items:center;justify-content:center;font:600 16.5px 'DM Sans';color:#fff">Log {{ mealTypeLower }}</div>
+<div class="btnp" onClick="{{ goManual }}" style="height:50px;border-radius:14px;background:#fff;border:1.5px solid #CDD3D8;display:flex;align-items:center;justify-content:center;font:600 15px 'DM Sans';color:#171A1F">Edit manually</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isManual }}" hint-placeholder-val="{{ false }}">
+<div class="scr" data-screen-label="Manual entry" style="padding:53px 20px 40px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:12px">
+<div class="btnp" onClick="{{ goResults }}" role="button" aria-label="Back" style="width:44px;height:44px;border-radius:14px;background:#fff;border:1px solid #E3E6E0;display:flex;align-items:center;justify-content:center;margin-left:-2px"><l-icon name="chevron-left" style="width:22px;height:22px;color:#171A1F"></l-icon></div>
+<div style="font:700 20px 'DM Sans';color:#171A1F;letter-spacing:-.015em">Add meal manually</div>
+</div>
+<div style="background:#fff;border:1.5px solid #CDD3D8;border-radius:14px;padding:10px 16px"><div style="font:500 11.5px 'DM Sans';color:#68707D">Food name</div><div style="font:400 15.5px 'DM Sans';color:#171A1F;margin-top:2px">Protein oatmeal</div></div>
+<div style="display:flex;gap:10px">
+<div style="flex:1;background:#fff;border:1.5px solid #CDD3D8;border-radius:14px;padding:10px 14px;display:flex;align-items:baseline;justify-content:space-between"><div><div style="font:500 11.5px 'DM Sans';color:#68707D">Calories</div><div style="font:400 15.5px 'DM Sans';color:#171A1F;margin-top:2px">{{ manCal }}</div></div><span style="font:500 12px 'DM Sans';color:#9AA1AB">kcal</span></div>
+<div style="flex:1;background:#fff;border:1.5px solid #CDD3D8;border-radius:14px;padding:10px 14px;display:flex;align-items:baseline;justify-content:space-between"><div><div style="font:500 11.5px 'DM Sans';color:#68707D">Protein</div><div style="font:400 15.5px 'DM Sans';color:#171A1F;margin-top:2px">{{ manPro }}</div></div><span style="font:500 12px 'DM Sans';color:#9AA1AB">g</span></div>
+</div>
+<div style="display:flex;gap:10px">
+<div style="flex:1;background:#fff;border:1.5px solid #CDD3D8;border-radius:14px;padding:10px 14px;display:flex;align-items:baseline;justify-content:space-between"><div><div style="font:500 11.5px 'DM Sans';color:#68707D">Carbohydrates</div><div style="font:400 15.5px 'DM Sans';color:#171A1F;margin-top:2px">58</div></div><span style="font:500 12px 'DM Sans';color:#9AA1AB">g</span></div>
+<div style="flex:1;background:#fff;border:1.5px solid #CDD3D8;border-radius:14px;padding:10px 14px;display:flex;align-items:baseline;justify-content:space-between"><div><div style="font:500 11.5px 'DM Sans';color:#68707D">Total fat</div><div style="font:400 15.5px 'DM Sans';color:#171A1F;margin-top:2px">12</div></div><span style="font:500 12px 'DM Sans';color:#9AA1AB">g</span></div>
+</div>
+<div style="display:flex;gap:10px;align-items:center">
+<span style="font:500 13px 'DM Sans';color:#68707D">Quantity</span>
+<div style="display:flex;align-items:center;border:1.5px solid #CDD3D8;border-radius:12px;overflow:hidden;background:#fff">
+<div class="btnp" onClick="{{ decQty }}" role="button" aria-label="Decrease quantity" style="width:38px;height:38px;display:flex;align-items:center;justify-content:center"><l-icon name="minus" style="width:15px;height:15px;color:#171A1F"></l-icon></div>
+<span style="font:700 16px 'Barlow Condensed';color:#171A1F;width:34px;text-align:center;border-left:1.5px solid #E8EAE5;border-right:1.5px solid #E8EAE5;line-height:38px">{{ manualQtyF }}</span>
+<div class="btnp" onClick="{{ incQty }}" role="button" aria-label="Increase quantity" style="width:38px;height:38px;display:flex;align-items:center;justify-content:center"><l-icon name="plus" style="width:15px;height:15px;color:#171A1F"></l-icon></div>
+</div>
+<div style="flex:1"></div>
+<div style="display:flex;align-items:center;gap:5px;background:#fff;border:1.5px solid #CDD3D8;border-radius:99px;padding:8px 12px;font:600 13px 'DM Sans';color:#171A1F">{{ mealType }}<l-icon name="chevron-down" style="width:14px;height:14px;color:#68707D"></l-icon></div>
+</div>
+<div style="background:#fff;border:1px solid #E3E6E0;border-radius:14px;padding:13px 16px;display:flex;align-items:center;justify-content:space-between">
+<span style="font:600 13.5px 'DM Sans';color:#171A1F">Fat breakdown <span style="font:400 12px 'DM Sans';color:#9AA1AB">— optional</span></span>
+<l-icon name="chevron-down" style="width:16px;height:16px;color:#68707D"></l-icon>
+</div>
+<div class="btnp" onClick="{{ saveManual }}" style="height:54px;border-radius:14px;background:#D9364A;display:flex;align-items:center;justify-content:center;font:600 16.5px 'DM Sans';color:#fff;margin-top:4px">Save meal</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isSuccess }}" hint-placeholder-val="{{ false }}">
+<div class="scr" data-screen-label="Log success" style="display:flex;flex-direction:column;justify-content:flex-end;background:rgba(23,26,31,.38)">
+<div style="background:#F9FAF8;border-radius:24px 24px 0 0;box-shadow:0 -12px 40px rgba(23,26,31,.22);padding:8px 20px 34px;text-align:center;animation:rise .3s cubic-bezier(.2,.8,.2,1)">
+<div style="width:40px;height:5px;border-radius:3px;background:#D5D9DE;margin:4px auto 16px"></div>
+<sc-if value="{{ sucMoved }}" hint-placeholder-val="{{ false }}">
+<div style="width:56px;height:56px;border-radius:28px;background:#FBEAEC;display:flex;align-items:center;justify-content:center;margin:0 auto;animation:pop .4s"><l-icon name="trending-up" style="width:26px;height:26px;color:#D9364A"></l-icon></div>
+<div style="font:700 22px 'DM Sans';color:#171A1F;letter-spacing:-.015em;margin-top:12px">{{ sucRankLine }}</div>
+</sc-if>
+<sc-if value="{{ sucUnmoved }}" hint-placeholder-val="{{ true }}">
+<div style="width:56px;height:56px;border-radius:28px;background:#E3F2E9;display:flex;align-items:center;justify-content:center;margin:0 auto;animation:pop .4s"><l-icon name="check" style="width:28px;height:28px;color:#1E9E5A"></l-icon></div>
+<div style="font:700 22px 'DM Sans';color:#171A1F;letter-spacing:-.015em;margin-top:12px">{{ sucTitle }}</div>
+</sc-if>
+<div style="display:flex;justify-content:center;gap:8px;margin-top:12px">
+<span style="font:700 15px 'Barlow Condensed';color:#fff;background:#1E9E5A;border-radius:8px;padding:6px 12px">+50 XP</span>
+<span style="font:700 15px 'Barlow Condensed';color:#fff;background:#D9364A;border-radius:8px;padding:6px 12px">+10 LP</span>
+</div>
+<sc-if value="{{ sucHasPassed }}" hint-placeholder-val="{{ false }}">
+<div style="margin-top:14px;background:#fff;border:1px solid #E3E6E0;border-radius:14px;padding:14px 16px;display:flex;align-items:center;justify-content:center;gap:14px">
+<div style="text-align:center"><div style="font:700 30px/1 'Barlow Condensed';color:#9AA1AB">{{ sucPrev }}</div><div style="font:500 10.5px 'DM Sans';color:#9AA1AB">BEFORE</div></div>
+<l-icon name="arrow-right" style="width:18px;height:18px;color:#68707D"></l-icon>
+<div style="text-align:center"><div style="font:700 38px/1 'Barlow Condensed';color:#D9364A">{{ sucNew }}</div><div style="font:500 10.5px 'DM Sans';color:#68707D">NOW</div></div>
+<div style="border-left:1px solid #E8EAE5;padding-left:14px;display:flex;align-items:center;gap:8px">
+<img src="{{ sucPassedAv }}" alt="{{ sucPassed }}" style="width:30px;height:30px;border-radius:50%;background:#E4D8F0">
+<div style="text-align:left"><div style="font:600 12.5px 'DM Sans';color:#171A1F">Passed {{ sucPassed }}</div></div>
+</div>
+</div>
+</sc-if>
+<sc-if value="{{ sucStreak }}" hint-placeholder-val="{{ false }}">
+<div style="margin-top:10px;background:#FBEFE8;border-radius:12px;padding:10px 14px;display:flex;align-items:center;justify-content:center;gap:8px"><div style="width:16px;height:16px;background-image:url('assets/streak-fire.png');background-size:96px 16px;image-rendering:pixelated;animation:flame .6s steps(6) infinite"></div><span style="font:600 13.5px 'DM Sans';color:#8A4A22">7-day streak secured.</span></div>
+</sc-if>
+<div style="margin-top:14px;background:#fff;border:1px solid #E3E6E0;border-radius:14px;padding:12px 16px;display:flex;flex-direction:column;gap:7px;text-align:left;font:400 13.5px 'DM Sans';color:#68707D">
+<div style="display:flex;justify-content:space-between"><span>Nutrition Score</span><span style="font:600 13.5px 'DM Sans';color:#171A1F">{{ sucScore }}</span></div>
+<div style="display:flex;justify-content:space-between"><span>Protein</span><span style="font:600 13.5px 'DM Sans';color:#171A1F">{{ sucPro }}</span></div>
+</div>
+<div class="btnp" onClick="{{ dismissSuccess }}" style="margin-top:14px;height:54px;border-radius:14px;background:#D9364A;display:flex;align-items:center;justify-content:center;font:600 16.5px 'DM Sans';color:#fff">Done</div>
+<div class="btnp" onClick="{{ dismissSuccess }}" style="height:44px;display:flex;align-items:center;justify-content:center;font:600 14.5px 'DM Sans';color:#D9364A">View today</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ showTabs }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:0;right:0;bottom:0;z-index:9">
+<div style="background:#fff;border-top:1px solid #E8EAE5;padding:9px 14px 0;display:flex;align-items:flex-start">
+<div class="btnp" onClick="{{ goToday }}" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;color:{{ navTodayC }}"><l-icon name="house" style="width:22px;height:22px"></l-icon><span style="font:600 10.5px 'DM Sans'">Today</span></div>
+<div class="btnp" onClick="{{ goLeague }}" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;color:{{ navLeagueC }}"><l-icon name="trophy" style="width:22px;height:22px"></l-icon><span style="font:500 10.5px 'DM Sans'">League</span></div>
+<div style="width:68px;display:flex;justify-content:center"><div class="btnp" onClick="{{ openLog }}" role="button" aria-label="Log meal" style="width:54px;height:54px;border-radius:27px;background:#D9364A;display:flex;align-items:center;justify-content:center;margin-top:-24px;box-shadow:0 8px 20px rgba(217,54,74,.35);border:4px solid #fff"><l-icon name="plus" style="width:24px;height:24px;color:#fff"></l-icon></div></div>
+<div class="btnp" onClick="{{ goChallenges }}" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;color:{{ navChalC }}"><l-icon name="swords" style="width:22px;height:22px"></l-icon><span style="font:500 10.5px 'DM Sans'">Challenges</span></div>
+<div class="btnp" onClick="{{ goCoach }}" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;color:{{ navCoachC }}"><l-icon name="message-circle" style="width:22px;height:22px"></l-icon><span style="font:500 10.5px 'DM Sans'">Coach</span></div>
+</div>
+<div style="background:#fff;height:22px;display:flex;align-items:center;justify-content:center"><div style="width:134px;height:5px;border-radius:3px;background:#171A1F;opacity:.18"></div></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ showLog }}" hint-placeholder-val="{{ false }}">
+<div class="dim" onClick="{{ closeLog }}"></div>
+<div class="sheet" data-screen-label="Log meal launcher" style="padding:8px 20px 30px;max-height:88%;overflow-y:auto">
+<div style="width:40px;height:5px;border-radius:3px;background:#D5D9DE;margin:4px auto 12px"></div>
+<div style="display:flex;align-items:center">
+<h2 style="font:700 22px 'DM Sans';color:#171A1F;letter-spacing:-.015em;margin:0;flex:1">Log a meal</h2>
+<div class="btnp" onClick="{{ closeLog }}" role="button" aria-label="Close" style="width:36px;height:36px;border-radius:18px;background:#EDEFEA;display:flex;align-items:center;justify-content:center"><l-icon name="x" style="width:17px;height:17px;color:#68707D"></l-icon></div>
+</div>
+<div style="background:#EDEFEA;border-radius:12px;padding:3px;display:flex;margin-top:14px">
+<div style="flex:1;background:#fff;border-radius:9px;padding:9px 0;text-align:center;font:600 13.5px 'DM Sans';color:#171A1F;box-shadow:0 1px 3px rgba(23,26,31,.10)">Describe</div>
+<div style="flex:1;padding:9px 0;text-align:center;font:500 13.5px 'DM Sans';color:#68707D">Manual</div>
+</div>
+<div style="display:flex;align-items:center;gap:8px;margin-top:14px">
+<span style="font:500 13px 'DM Sans';color:#68707D">Logging</span>
+<div style="display:flex;align-items:center;gap:5px;background:#fff;border:1.5px solid #CDD3D8;border-radius:99px;padding:6px 11px;font:600 13px 'DM Sans';color:#171A1F">{{ mealType }}<l-icon name="chevron-down" style="width:14px;height:14px;color:#68707D"></l-icon></div>
+<span style="font:400 12px 'DM Sans';color:#9AA1AB">inferred from time</span>
+</div>
+<div style="margin-top:10px;background:#fff;border:1.5px solid #171A1F;border-radius:16px;padding:6px 12px;box-shadow:0 0 0 3px rgba(23,26,31,.06)">
+<textarea value="{{ desc }}" onChange="{{ onDesc }}" placeholder="Describe what you ate — e.g. &quot;grilled chicken breast, rice, broccoli, and olive oil&quot;" style="border:none;width:100%;min-height:88px;resize:none;font:400 15.5px/1.5 'DM Sans';color:#171A1F;padding:8px 2px;background:transparent"></textarea>
+</div>
+<div style="margin-top:16px;font:500 11px 'DM Sans';color:#68707D;text-transform:uppercase;letter-spacing:.08em">Usual for this time</div>
+<div style="margin-top:8px;background:#fff;border:1px solid #E3E6E0;border-radius:14px;overflow:hidden">
+<div style="display:flex;align-items:center;gap:11px;padding:11px 13px">
+<div style="width:38px;height:38px;border-radius:11px;background:#E2EDD9;display:flex;align-items:center;justify-content:center;flex:none"><l-icon name="salad" style="width:18px;height:18px;color:#5A7A3A"></l-icon></div>
+<div style="flex:1"><div style="font:600 13.5px 'DM Sans';color:#171A1F">Salmon, rice &amp; greens</div><div style="font:400 11.5px 'DM Sans';color:#68707D">680 kcal · 42g protein · logged 6×</div></div>
+<div style="display:flex;align-items:center;gap:5px;border:1.5px solid #CDD3D8;border-radius:99px;padding:7px 12px;font:600 12px 'DM Sans';color:#171A1F"><l-icon name="rotate-ccw" style="width:13px;height:13px"></l-icon>Repeat</div>
+</div>
+</div>
+<sc-if value="{{ hasDesc }}" hint-placeholder-val="{{ false }}">
+<div class="btnp" onClick="{{ startEstimate }}" style="margin-top:14px;height:54px;border-radius:14px;background:#D9364A;display:flex;align-items:center;justify-content:center;font:600 16px 'DM Sans';color:#fff">Continue</div>
+</sc-if>
+<sc-if value="{{ noDesc }}" hint-placeholder-val="{{ true }}">
+<div style="margin-top:14px;height:54px;border-radius:14px;background:#EDEFEA;display:flex;align-items:center;justify-content:center;font:600 16px 'DM Sans';color:#AEB4BC">Continue</div>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ friendSheetOpen }}" hint-placeholder-val="{{ false }}">
+<div class="dim" onClick="{{ closeFriend }}"></div>
+<div class="sheet" data-screen-label="Friend profile" style="padding:8px 20px 30px">
+<div style="width:40px;height:5px;border-radius:3px;background:#D5D9DE;margin:4px auto 14px"></div>
+<div style="display:flex;align-items:center;gap:13px">
+<img src="{{ friendSheetAv }}" alt="{{ friendSheetName }}" style="width:56px;height:56px;border-radius:50%;background:#D8E4F2">
+<div style="flex:1"><div style="font:700 20px 'DM Sans';color:#171A1F;letter-spacing:-.01em">{{ friendSheetName }}</div><div style="font:400 12.5px 'DM Sans';color:#68707D;margin-top:1px">Ohio State · {{ friendSheetRank }} this league</div></div>
+</div>
+<div style="margin-top:14px;display:flex;gap:8px">
+<div style="flex:1;background:#F5F6F3;border-radius:12px;padding:12px;text-align:center"><div style="font:700 22px/1 'Barlow Condensed';color:#171A1F">{{ friendSheetLP }}</div><div style="font:500 11px 'DM Sans';color:#68707D;margin-top:3px">League Points</div></div>
+<div style="flex:1;background:#F5F6F3;border-radius:12px;padding:12px;text-align:center"><div style="font:700 22px/1 'Barlow Condensed';color:#171A1F">9</div><div style="font:500 11px 'DM Sans';color:#68707D;margin-top:3px">Day streak</div></div>
+<div style="flex:1;background:#F5F6F3;border-radius:12px;padding:12px;text-align:center"><div style="font:700 22px/1 'Barlow Condensed';color:#171A1F">Lvl 5</div><div style="font:500 11px 'DM Sans';color:#68707D;margin-top:3px">Committed</div></div>
+</div>
+<div style="margin-top:8px;font:400 11.5px/1.5 'DM Sans';color:#9AA1AB;text-align:center">Public profile only — meal details stay private.</div>
+<div class="btnp" onClick="{{ goCreate }}" style="margin-top:14px;height:54px;border-radius:14px;background:#D9364A;display:flex;align-items:center;justify-content:center;gap:8px;font:600 16px 'DM Sans';color:#fff"><l-icon name="swords" style="width:18px;height:18px"></l-icon>Challenge {{ friendSheetName }}</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ redeemSheet }}" hint-placeholder-val="{{ false }}">
+<div class="dim" onClick="{{ closeRedeem }}"></div>
+<div class="sheet" data-screen-label="Reward detail" style="padding:8px 20px 30px">
+<div style="width:40px;height:5px;border-radius:3px;background:#D5D9DE;margin:4px auto 14px"></div>
+<div style="display:flex;align-items:center;gap:13px">
+<div style="width:52px;height:52px;border-radius:15px;background:#EDEFEA;display:flex;align-items:center;justify-content:center;flex:none;font:700 16px 'Barlow Condensed';color:#68707D">SM</div>
+<div><div style="font:700 19px 'DM Sans';color:#171A1F;letter-spacing:-.01em">Free smoothie</div><div style="font:400 12.5px 'DM Sans';color:#68707D;margin-top:1px">Campus Smoothie Co.</div></div>
+</div>
+<div style="margin-top:14px;background:#fff;border:1px solid #E3E6E0;border-radius:14px;padding:13px 16px;display:flex;flex-direction:column;gap:9px;font:400 13px/1.5 'DM Sans';color:#68707D">
+<div style="display:flex;justify-content:space-between"><span>Cost</span><b style="color:#171A1F;font-weight:700">400 LP</b></div>
+<div style="display:flex;justify-content:space-between"><span>Balance after</span><b style="color:#171A1F;font-weight:700">{{ balanceAfterF }} LP</b></div>
+<div style="display:flex;justify-content:space-between"><span>Expires</span><b style="color:#171A1F;font-weight:600">Jul 31, 2026</b></div>
+</div>
+<div style="margin-top:10px;font:400 12px/1.6 'DM Sans';color:#68707D;padding:0 2px">One 16 oz smoothie, any menu item. The code is generated after you confirm.</div>
+<div class="btnp" onClick="{{ confirmRedeem }}" style="margin-top:14px;height:54px;border-radius:14px;background:#D9364A;display:flex;align-items:center;justify-content:center;font:600 16px 'DM Sans';color:#fff">Redeem for 400 LP</div>
+<div class="btnp" onClick="{{ closeRedeem }}" style="height:46px;display:flex;align-items:center;justify-content:center;font:600 14.5px 'DM Sans';color:#68707D">Not now</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ deleteSheet }}" hint-placeholder-val="{{ false }}">
+<div class="dim" onClick="{{ closeDelete }}"></div>
+<div class="sheet" data-screen-label="Delete account" style="padding:8px 20px 30px">
+<div style="width:40px;height:5px;border-radius:3px;background:#D5D9DE;margin:4px auto 14px"></div>
+<div style="width:48px;height:48px;border-radius:16px;background:#FBEAEC;display:flex;align-items:center;justify-content:center"><l-icon name="trash-2" style="width:22px;height:22px;color:#A8141E"></l-icon></div>
+<div style="font:700 20px 'DM Sans';color:#171A1F;letter-spacing:-.015em;margin-top:12px">Delete your account?</div>
+<div style="margin-top:10px;display:flex;flex-direction:column;gap:8px;font:400 13.5px/1.55 'DM Sans';color:#68707D">
+<div style="display:flex;gap:9px"><l-icon name="archive" style="width:16px;height:16px;color:#68707D;flex:none;margin-top:2px"></l-icon><span>Your account is <b style="color:#171A1F;font-weight:600">archived today</b> — hidden from leagues and friends immediately.</span></div>
+<div style="display:flex;gap:9px"><l-icon name="calendar-x" style="width:16px;height:16px;color:#68707D;flex:none;margin-top:2px"></l-icon><span>Permanent deletion happens on <b style="color:#171A1F;font-weight:600">Jul 17, 2026</b> — 14 days from now.</span></div>
+<div style="display:flex;gap:9px"><l-icon name="undo-2" style="width:16px;height:16px;color:#68707D;flex:none;margin-top:2px"></l-icon><span>Sign back in before then to <b style="color:#171A1F;font-weight:600">reactivate</b> with everything intact.</span></div>
+</div>
+<div class="btnp" onClick="{{ confirmDelete }}" style="margin-top:16px;height:54px;border-radius:14px;background:#C43D3D;display:flex;align-items:center;justify-content:center;font:600 16px 'DM Sans';color:#fff">Delete my account</div>
+<div class="btnp" onClick="{{ closeDelete }}" style="height:48px;display:flex;align-items:center;justify-content:center;font:600 15px 'DM Sans';color:#171A1F">Cancel</div>
+</div>
+</sc-if>
+
+<div style="max-width:600px;text-align:center;font:400 12px/1.6 'DM Sans';color:#8A9098">
+Flows: <b>A</b> Welcome → sign up → onboarding → empty Today · <b>B</b> Today → describe → estimate → review → success · <b>C</b> results → adjust servings/calories → details → confirm · <b>D</b> League → challenge Maya → create → detail · <b>E</b> Profile → Rewards → redeem → pass · <b>F</b> scheduled-deletion → reactivate.
+Log twice in one session and your rank actually moves.
+</div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+
+class Component extends DCLogic {
+  state = {
+    screen: 'welcome', newUser: false,
+    email: 'nityanth@osu.edu', pw: 'password12', dname: 'Nityanth',
+    obGoal: 'muscle', tCal: 2300, tPro: 170, tCarb: 260, tFat: 38,
+    session: [], desc: '', estStage: 1, servings: 1, calAdj: 0, editNums: false, detailsOpen: false, mealType: 'Dinner',
+    success: null, showLog: false,
+    manualQty: 1,
+    leagueTab: 'global', friendSheet: null,
+    cname: '', cGoal: 'Protein', cDur: '7 days', cErr: false, myChallenge: null,
+    balance: 480, redeemSheet: false, redeemed: false,
+    coachAsked: false, deleteSheet: false, reactSheet: false,
+  };
+
+  others = [
+    { n: 'Priya', lp: 268, u: 'Ohio State', bg: 'f0d8dc', st: 21, mv: 0 },
+    { n: 'Diego', lp: 241, u: 'Ohio State', bg: 'd8e8ea', st: 12, mv: 1 },
+    { n: 'Maya', lp: 214, u: 'Ohio State', bg: 'd8e4f2', st: 9, mv: 1 },
+    { n: 'Jordan', lp: 169, u: 'Ohio State', bg: 'e4d8f0', st: 7, mv: -2 },
+    { n: 'Alex', lp: 154, u: 'Michigan', bg: 'd5e8dc', st: 3, mv: 0 },
+    { n: 'Emma', lp: 131, u: 'Ohio State', bg: 'eae4d0', st: 0, mv: -1 },
+  ];
+
+  av(seed, bg) { return 'https://api.dicebear.com/9.x/micah/svg?seed=' + encodeURIComponent(seed) + '&backgroundColor=' + bg; }
+  fmt(n) { return n.toLocaleString('en-US'); }
+  baseMeals() {
+    if (this.state.newUser) return [];
+    return [
+      { name: 'Greek yogurt bowl', type: 'Breakfast', time: '8:12 AM', cal: 420, pro: 28, icon: 'egg-fried', bg: '#F3E4D2', ic: '#A0642A', usda: false },
+      { name: 'Chicken rice bowl', type: 'Lunch', time: '12:47 PM', cal: 620, pro: 46, icon: 'salad', bg: '#E2EDD9', ic: '#5A7A3A', usda: true },
+      { name: 'Protein shake', type: 'Snack', time: '3:05 PM', cal: 600, pro: 54, icon: 'cup-soda', bg: '#E3E8F2', ic: '#4A6288', usda: false },
+    ];
+  }
+  allMeals() { return this.baseMeals().concat(this.state.session); }
+  calNow() { return this.allMeals().reduce((a, m) => a + m.cal, 0); }
+  proNow() { return this.allMeals().reduce((a, m) => a + m.pro, 0); }
+  youLP() { return (this.state.newUser ? 0 : 196) + this.state.session.length * 10; }
+  rankOf(lp) { return 1 + this.others.filter(o => o.lp > lp).length; }
+  rank() { return this.rankOf(this.youLP()); }
+  score() {
+    const n = this.state.session.length;
+    if (this.state.newUser) return n === 0 ? null : Math.min(70, 46 + n * 8);
+    return Math.min(92, 78 + n * 6);
+  }
+  reviewCal() { return Math.round(620 * this.state.servings) + this.state.calAdj; }
+  reviewPro() { return Math.round(46 * this.state.servings); }
+  reviewCarb() { return Math.round(68 * this.state.servings); }
+  reviewFat() { return Math.round(18 * this.state.servings); }
+
+  go(s) { this.setState({ screen: s, showLog: false, friendSheet: null, redeemSheet: false, deleteSheet: false, reactSheet: false }); }
+  resetCommon() { return { session: [], desc: '', servings: 1, calAdj: 0, editNums: false, detailsOpen: false, success: null, showLog: false, manualQty: 1, friendSheet: null, cname: '', cErr: false, myChallenge: null, redeemSheet: false, redeemed: false, balance: 480, coachAsked: false, deleteSheet: false, reactSheet: false, leagueTab: 'global' }; }
+
+  startEstimate = () => {
+    this.setState({ screen: 'estimating', estStage: 1, showLog: false });
+    clearTimeout(this._t1); clearTimeout(this._t2); clearTimeout(this._t3);
+    this._t1 = setTimeout(() => this.setState({ estStage: 2 }), 900);
+    this._t2 = setTimeout(() => this.setState({ estStage: 3 }), 1800);
+    this._t3 = setTimeout(() => { if (this.state.screen === 'estimating') this.setState({ screen: 'results' }); }, 2500);
+  };
+  componentWillUnmount() { clearTimeout(this._t1); clearTimeout(this._t2); clearTimeout(this._t3); }
+
+  confirmMeal(name, cal, pro) {
+    const s = this.state;
+    const prevLP = this.youLP(), prevRank = this.rank();
+    const newLP = prevLP + 10;
+    const newRank = this.rankOf(newLP);
+    const passed = this.others.find(o => o.lp > prevLP && o.lp < newLP);
+    const proAfter = this.proNow() + pro;
+    const scoreAfter = (() => { const n = s.session.length + 1; return s.newUser ? Math.min(70, 46 + n * 8) : Math.min(92, 78 + n * 6); })();
+    const meal = { name, type: s.mealType, time: 'Just now', cal, pro, icon: 'salad', bg: '#E2EDD9', ic: '#5A7A3A', usda: false };
+    const proLeft = Math.max(0, s.tPro - proAfter);
+    this.setState({
+      session: s.session.concat(meal),
+      desc: '', servings: 1, calAdj: 0, editNums: false, detailsOpen: false,
+      screen: 'success',
+      success: {
+        title: s.mealType + ' logged.',
+        moved: newRank < prevRank,
+        prevRank, newRank,
+        passed: passed ? passed.n : null,
+        passedAv: passed ? this.av(passed.n, this.others.find(o => o.n === passed.n).bg) : null,
+        firstEver: s.newUser && s.session.length === 0,
+        streak: !s.newUser && s.session.length === 0,
+        scoreLine: scoreAfter + (s.session.length === 0 && !s.newUser ? ' · up 6' : ''),
+        proLeft,
+        proLine: proLeft > 0 ? proLeft + 'g protein remaining' : 'Protein target hit — ' + proAfter + 'g',
+      },
+    });
+  }
+
+  renderVals() {
+    const s = this.state;
+    const S = s.screen;
+    const cal = this.calNow(), pro = this.proNow(), lp = this.youLP(), rank = this.rank(), score = this.score();
+    const hasMeals = this.allMeals().length > 0;
+    const proLeft = Math.max(0, s.tPro - pro);
+    const set = (patch) => () => this.setState(patch);
+
+    // standings rows
+    const mkRow = (o, r) => ({
+      rank: r, name: o.n, uni: o.u, avatar: this.av(o.n, o.bg),
+      st: o.st, hasSt: o.st > 0, lpF: String(o.lp),
+      isYou: false, notYou: true,
+      rc: r === 1 ? '#B7791B' : r === 2 ? '#8C9096' : r === 3 ? '#A9743C' : '#68707D',
+      up: o.mv > 0, down: o.mv < 0, flat: o.mv === 0, mvAbs: String(Math.abs(o.mv)),
+      isMaya: o.n === 'Maya',
+      openFriend: () => this.setState({ friendSheet: o.n }),
+    });
+    const ranked = hasMeals || !s.newUser ? true : false;
+    let standings = [];
+    if (ranked) {
+      const rows = this.others.map(o => ({ lp: o.lp, o })).concat([{ lp, you: true }]).sort((a, b) => b.lp - a.lp);
+      standings = rows.map((r, i) => r.you ? {
+        rank: i + 1, name: s.dname, uni: 'Ohio State', avatar: this.av(s.dname, 'f3dbc9'),
+        st: 7, hasSt: !s.newUser, lpF: String(lp), isYou: true, notYou: false, rc: '#D9364A',
+        up: s.session.length > 0 && !s.newUser, down: false, flat: !(s.session.length > 0 && !s.newUser), mvAbs: '1', isMaya: false,
+        openFriend: () => {},
+      } : mkRow(r.o, i + 1));
+    }
+    const friendNames = ['Maya', 'Jordan', 'Alex'];
+    const friendRows = standings.filter(r => r.isYou || friendNames.includes(r.name)).map((r, i) => Object.assign({}, r, { rank: i + 1, rc: r.isYou ? '#D9364A' : i === 0 ? '#B7791B' : '#68707D' }));
+
+    const goalDefs = [
+      { id: 'muscle', title: 'Build muscle', sub: 'Higher protein and calorie targets to support training.', icon: 'dumbbell' },
+      { id: 'lose', title: 'Lose weight', sub: 'A steady calorie deficit while keeping protein high.', icon: 'trending-down' },
+      { id: 'clean', title: 'Eat cleaner', sub: 'Balanced targets that reward whole-food choices.', icon: 'leaf' },
+      { id: 'track', title: 'Just track', sub: 'Neutral targets — see your patterns without pressure.', icon: 'notebook-pen' },
+    ];
+    const goalPresets = { muscle: [2300, 170, 260, 38], lose: [1900, 150, 190, 32], clean: [2100, 140, 240, 40], track: [2000, 130, 230, 35] };
+    const goalOptions = goalDefs.map(g => ({
+      title: g.title, sub: g.sub, icon: g.icon,
+      sel: s.obGoal === g.id, unsel: s.obGoal !== g.id,
+      border: s.obGoal === g.id ? '2px solid #D9364A' : '1.5px solid #E3E6E0',
+      iconBg: s.obGoal === g.id ? '#FBEAEC' : '#EDEFEA', iconC: s.obGoal === g.id ? '#D9364A' : '#68707D',
+      pick: () => { const p = goalPresets[g.id]; this.setState({ obGoal: g.id, tCal: p[0], tPro: p[1], tCarb: p[2], tFat: p[3] }); },
+    }));
+    const goalTitle = (goalDefs.find(g => g.id === s.obGoal) || goalDefs[0]).title.toLowerCase();
+
+    const targetRows = [
+      { label: 'Calories', value: this.fmt(s.tCal), unit: 'kcal', dec: set({ tCal: Math.max(1200, s.tCal - 50) }), inc: set({ tCal: s.tCal + 50 }) },
+      { label: 'Protein', value: String(s.tPro), unit: 'g', dec: set({ tPro: Math.max(60, s.tPro - 5) }), inc: set({ tPro: s.tPro + 5 }) },
+      { label: 'Carbohydrates', value: String(s.tCarb), unit: 'g', dec: set({ tCarb: Math.max(80, s.tCarb - 5) }), inc: set({ tCarb: s.tCarb + 5 }) },
+      { label: 'Unsaturated fat', value: String(s.tFat), unit: 'g', dec: set({ tFat: Math.max(15, s.tFat - 2) }), inc: set({ tFat: s.tFat + 2 }) },
+    ];
+    const kc = s.tPro * 4 + s.tCarb * 4 + s.tFat * 9;
+    const pct = (x) => Math.round(x / kc * 100) + '%';
+
+    // meals rows for Today
+    const meals = this.allMeals().map((m, i) => ({
+      name: m.name, meta: m.type + ' · ' + m.time, cal: String(m.cal), pro: m.pro + 'g protein',
+      icon: m.icon, bg: m.bg, ic: m.ic, usda: !!m.usda, first: i === 0,
+    }));
+    const dinnerLogged = this.allMeals().some(m => m.type === 'Dinner');
+
+    const recommendText = s.newUser && !hasMeals ? '' : (proLeft > 0 ? proLeft + 'g protein left — log ' + (dinnerLogged ? 'a snack' : 'dinner') + ' to stay on pace.' : 'Protein target hit — ' + pro + 'g logged. Strong finish.');
+
+    const suc = s.success || {};
+    const behindMaya = Math.max(0, 214 - lp);
+    const aheadJordan = lp - 169;
+
+    const rewards = [
+      { id: 'smoothie', name: 'Free smoothie', partner: 'Campus Smoothie Co.', mono: 'SM', cost: 400, exp: 'Jul 31' },
+      { id: 'gym', name: 'Gym day pass', partner: 'RPAC', mono: 'GY', cost: 250, exp: 'Sep 15' },
+    ];
+    const rewardRows = rewards.map(r => ({
+      name: r.name, partner: r.partner + ' · expires ' + r.exp, mono: r.mono, costF: r.cost + ' LP',
+      afford: s.balance >= r.cost,
+      open: () => this.setState({ redeemSheet: true }),
+    }));
+
+    const est1 = s.estStage >= 1, est2 = s.estStage >= 2, est3 = s.estStage >= 3;
+
+    return {
+      // flow entries
+      flowA: () => this.setState(Object.assign(this.resetCommon(), { screen: 'welcome', newUser: true, dname: 'Nityanth', email: '', pw: '' })),
+      flowB: () => this.setState(Object.assign(this.resetCommon(), { screen: 'today', newUser: false })),
+      flowC: () => this.setState(Object.assign(this.resetCommon(), { screen: 'results', newUser: false, desc: 'grilled chicken breast, rice, broccoli, and olive oil', mealType: 'Dinner' })),
+      flowD: () => this.setState(Object.assign(this.resetCommon(), { screen: 'league', newUser: false })),
+      flowE: () => this.setState(Object.assign(this.resetCommon(), { screen: 'profile', newUser: false })),
+      flowF: () => this.setState(Object.assign(this.resetCommon(), { screen: 'reactivate', newUser: false })),
+
+      // nav
+      goWelcome: () => this.go('welcome'), goSignin: () => this.go('signin'), goSignup: () => this.go('signup'),
+      goOnb1: () => this.go('onb1'), goOnb2: () => this.go('onb2'), goOnb3: () => this.go('onb3'), goOnb4: () => this.go('onb4'),
+      enterApp: () => this.go('today'),
+      goToday: () => this.go('today'), goLeague: () => this.go('league'), goChallenges: () => this.go('challenges'), goCoach: () => this.go('coach'),
+      goProfile: () => this.go('profile'), goRewards: () => this.go('rewards'), goSettings: () => this.go('settings'),
+      goTodayReturning: () => this.setState(Object.assign(this.resetCommon(), { screen: 'today', newUser: false })),
+      goCreate: () => this.setState({ screen: 'createChallenge', friendSheet: null, cErr: false }),
+      goDetail: () => this.go('challengeDetail'),
+      goManual: () => this.go('manual'),
+      goResults: () => this.go('results'),
+      goReview: () => this.go('review'),
+      goReactivate: () => this.go('reactivate'),
+
+      // inputs
+      onEmail: (e) => this.setState({ email: e.target.value }),
+      onPw: (e) => this.setState({ pw: e.target.value }),
+      onDname: (e) => this.setState({ dname: e.target.value || '' }),
+      onDesc: (e) => this.setState({ desc: e.target.value }),
+      onCname: (e) => this.setState({ cname: e.target.value, cErr: false }),
+      email: s.email, pw: s.pw, dname: s.dname || 'Nityanth',
+      dnameAvatar: this.av(s.dname || 'Nityanth', 'f3dbc9'),
+      desc: s.desc, hasDesc: s.desc.trim().length > 0, noDesc: s.desc.trim().length === 0,
+      cname: s.cname, cErr: s.cErr, cNoErr: !s.cErr,
+
+      // screen flags
+      isWelcome: S === 'welcome', isSignin: S === 'signin', isSignup: S === 'signup',
+      isOnb1: S === 'onb1', isOnb2: S === 'onb2', isOnb3: S === 'onb3', isOnb4: S === 'onb4',
+      isToday: S === 'today', isLeague: S === 'league', isChallenges: S === 'challenges', isCoach: S === 'coach',
+      isEstimating: S === 'estimating', isResults: S === 'results', isReview: S === 'review', isManual: S === 'manual', isSuccess: S === 'success',
+      isCreate: S === 'createChallenge', isDetail: S === 'challengeDetail',
+      isProfile: S === 'profile', isRewards: S === 'rewards', isPass: S === 'pass', isSettings: S === 'settings', isReactivate: S === 'reactivate',
+      showTabs: ['today', 'league', 'challenges', 'coach'].includes(S),
+      navTodayC: S === 'today' ? '#D9364A' : '#9AA1AB', navLeagueC: S === 'league' ? '#D9364A' : '#9AA1AB',
+      navChalC: S === 'challenges' ? '#D9364A' : '#9AA1AB', navCoachC: S === 'coach' ? '#D9364A' : '#9AA1AB',
+
+      // onboarding
+      goalOptions, targetRows,
+      targetsBlurb: 'Recommended for ' + goalTitle + '.',
+      tCalF: this.fmt(s.tCal), pctPro: pct(s.tPro * 4), pctCarb: pct(s.tCarb * 4), pctFat: pct(s.tFat * 9),
+
+      // today
+      isNewToday: s.newUser && !hasMeals, isFullToday: hasMeals,
+      calNowF: this.fmt(cal), calTF: this.fmt(s.tCal), calPct: Math.min(100, Math.round(cal / s.tCal * 100)) + '%',
+      proNowF: String(pro), proTF: String(s.tPro), proPct: Math.min(100, Math.round(pro / s.tPro * 100)) + '%',
+      carbNow: String(Math.round(cal * 0.11)), carbPct: Math.min(100, Math.round(cal * 0.11 / s.tCarb * 100)) + '%', carbTF: String(s.tCarb),
+      scoreF: score === null ? '—' : String(score), scoreKnown: score !== null,
+      scoreWord: score === null ? '' : score >= 84 ? 'Excellent day' : score >= 70 ? 'Strong day' : 'Good start',
+      scoreDelta: s.session.length > 0 ? 'Up ' + (s.newUser ? 8 : 6) + ' from your last meal' : 'Up 6 from yesterday',
+      recommendText, hasRecommend: recommendText.length > 0, proLeftF: String(proLeft),
+      meals, hasMealsFlag: meals.length > 0,
+      showDinnerSlot: !dinnerLogged && hasMeals,
+      lpF: String(lp), rankF: '#' + rank, rankN: String(rank),
+      behindMayaF: String(behindMaya), aheadJordanF: String(aheadJordan),
+      isRanked: !s.newUser || hasMeals,
+      standings, friendRows, leagueRows: s.leagueTab === 'global' ? standings : friendRows,
+      isGlobalTab: s.leagueTab === 'global', isFriendsTab: s.leagueTab === 'friends',
+      setGlobal: set({ leagueTab: 'global' }), setFriends: set({ leagueTab: 'friends' }),
+
+      // log flow
+      openLog: () => this.setState({ showLog: true, mealType: dinnerLogged ? 'Snack' : (s.newUser && !hasMeals ? 'Breakfast' : 'Dinner') }),
+      closeLog: set({ showLog: false }),
+      showLog: s.showLog,
+      mealType: s.mealType, mealTypeLower: s.mealType.toLowerCase(),
+      startEstimate: this.startEstimate,
+      cancelEstimate: () => { clearTimeout(this._t3); this.go('today'); },
+      est1, est2, est3, est2sp: s.estStage === 2, est3sp: s.estStage === 3, est2wait: s.estStage < 2, est3wait: s.estStage < 3,
+      servingsF: String(s.servings),
+      decServ: () => this.setState({ servings: Math.max(0.5, s.servings - 0.5) }),
+      incServ: () => this.setState({ servings: Math.min(4, s.servings + 0.5) }),
+      decCal: set({ calAdj: s.calAdj - 20 }), incCal: set({ calAdj: s.calAdj + 20 }),
+      toggleNums: set({ editNums: !s.editNums }), editNums: s.editNums,
+      toggleDetails: set({ detailsOpen: !s.detailsOpen }), detailsOpen: s.detailsOpen, detailsClosed: !s.detailsOpen,
+      revCal: this.fmt(this.reviewCal()), revPro: this.reviewPro() + 'g', revCarb: this.reviewCarb() + 'g', revFat: this.reviewFat() + 'g',
+      revUnsat: Math.round(this.reviewFat() * 0.72) + 'g', revSat: Math.round(this.reviewFat() * 0.22) + 'g',
+      confirmEstimate: () => this.confirmMeal('Chicken rice bowl', this.reviewCal(), this.reviewPro()),
+      manualQtyF: String(s.manualQty),
+      decQty: () => this.setState({ manualQty: Math.max(1, s.manualQty - 1) }),
+      incQty: () => this.setState({ manualQty: s.manualQty + 1 }),
+      saveManual: () => this.confirmMeal('Protein oatmeal', 450 * s.manualQty, 32 * s.manualQty),
+      manCal: this.fmt(450 * s.manualQty), manPro: String(32 * s.manualQty),
+
+      // success
+      sucTitle: suc.title || '', sucMoved: !!suc.moved, sucUnmoved: s.success ? !suc.moved : false,
+      sucPrev: '#' + (suc.prevRank || ''), sucNew: '#' + (suc.newRank || ''),
+      sucPassed: suc.passed || '', sucHasPassed: !!suc.passed, sucPassedAv: suc.passedAv || '',
+      sucStreak: !!suc.streak, sucFirstEver: !!suc.firstEver,
+      sucScore: suc.scoreLine || '', sucPro: suc.proLine || '',
+      sucRankLine: suc.moved ? 'You moved to ' + this.ord(suc.newRank) + '.' : (suc.firstEver ? "You're on the board — " + this.ord(suc.newRank) + ' of 7.' : '#' + (suc.newRank || rank) + ' — unchanged'),
+      dismissSuccess: () => this.go('today'),
+
+      // league / friends / challenge
+      friendSheetOpen: !!s.friendSheet, friendSheetName: s.friendSheet || '',
+      friendSheetAv: s.friendSheet ? this.av(s.friendSheet, (this.others.find(o => o.n === s.friendSheet) || { bg: 'd8e4f2' }).bg) : '',
+      friendSheetLP: s.friendSheet ? String((this.others.find(o => o.n === s.friendSheet) || {}).lp || '') : '',
+      friendSheetRank: s.friendSheet ? '#' + (this.others.findIndex(o => o.n === s.friendSheet) + 1 + (lp > ((this.others.find(o => o.n === s.friendSheet) || {}).lp || 0) ? 1 : 0)) : '',
+      closeFriend: set({ friendSheet: null }),
+      cGoal: s.cGoal, cDur: s.cDur,
+      goalChips: ['Protein', 'Meals', 'Streak'].map(g => ({ label: g, sel: s.cGoal === g, pick: set({ cGoal: g }) })),
+      durChips: ['7 days', '14 days', '21 days', '30 days'].map(d => ({ label: d.replace(' days', ''), full: d, sel: s.cDur === d, pick: set({ cDur: d }) })),
+      cPreviewName: s.cname.trim() || 'Untitled',
+      cPreviewMeta: s.cDur + ' · you + Maya · winner takes bragging rights',
+      createChallenge: () => {
+        if (!s.cname.trim()) { this.setState({ cErr: true }); return; }
+        this.setState({ myChallenge: { name: s.cname.trim(), goal: s.cGoal, dur: s.cDur }, screen: 'challengeDetail' });
+      },
+      hasMyChallenge: !!s.myChallenge,
+      chalName: s.myChallenge ? s.myChallenge.name : 'Protein Push',
+      chalGoalLabel: s.myChallenge ? ({ Protein: '150g PROTEIN / DAY', Meals: '1+ MEAL / DAY', Streak: 'LONGEST STREAK' })[s.myChallenge.goal] : '150g PROTEIN / DAY',
+      chalDur: s.myChallenge ? s.myChallenge.dur : '7 days',
+      chalJustCreated: !!s.myChallenge,
+
+      // rewards
+      balanceF: this.fmt(s.balance), rewardRows,
+      redeemSheet: s.redeemSheet, closeRedeem: set({ redeemSheet: false }),
+      canAffordSmoothie: s.balance >= 400,
+      confirmRedeem: () => this.setState({ balance: s.balance - 400, redeemed: true, redeemSheet: false, screen: 'pass' }),
+      balanceAfterF: this.fmt(s.balance - 400),
+      notRedeemed: !s.redeemed,
+
+      // coach
+      coachAsked: s.coachAsked, coachIdle: !s.coachAsked,
+      askProtein: set({ coachAsked: true }),
+      coachProLine: "You're at " + pro + 'g of your ' + s.tPro + "g target — ahead of your usual pace for this time of day. " + (proLeft > 0 ? 'A typical dinner for you covers the remaining ' + proLeft + 'g.' : "You've already hit your target — anything else is a bonus."),
+      coachProPct: Math.min(100, Math.round(pro / s.tPro * 100)) + '%',
+
+      // settings / account
+      openDelete: set({ deleteSheet: true }), closeDelete: set({ deleteSheet: false }), deleteSheet: s.deleteSheet,
+      confirmDelete: () => this.setState({ deleteSheet: false, screen: 'reactivate' }),
+      openReact: set({ reactSheet: true }), reactSheet: s.reactSheet,
+      confirmReact: () => this.setState(Object.assign(this.resetCommon(), { screen: 'today', newUser: false })),
+    };
+  }
+  ord(n) { return n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : n + 'th'; }
+}
+</script>
+</body>
+</html>

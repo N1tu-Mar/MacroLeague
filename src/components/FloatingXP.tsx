@@ -8,7 +8,7 @@ import Animated, {
   Easing,
   runOnJS,
 } from 'react-native-reanimated';
-import { Colors, FontFamily } from '../theme';
+import { FontFamily, useTheme } from '../theme';
 
 interface FloatingXPProps {
   amount: number;
@@ -19,6 +19,7 @@ interface FloatingXPProps {
 }
 
 export default function FloatingXP({ amount, visible, onDone, animated = true }: FloatingXPProps) {
+  const { colors } = useTheme();
   const translateY = useSharedValue(0);
   const opacity = useSharedValue(0);
   const scale = useSharedValue(0.5);
@@ -57,7 +58,7 @@ export default function FloatingXP({ amount, visible, onDone, animated = true }:
   if (!visible) return null;
 
   return (
-    <Animated.Text style={[styles.text, animatedStyle]}>
+    <Animated.Text style={[styles.text, { color: colors.success }, animatedStyle]}>
       +{amount} XP
     </Animated.Text>
   );
@@ -68,12 +69,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     alignSelf: 'center',
     top: '40%',
-    fontFamily: FontFamily.displayBold,
-    fontSize: 28,
-    color: Colors.primary,
-    textShadowColor: Colors.primary + '66',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 12,
+    fontFamily: FontFamily.numBold,
+    fontSize: 34,
     zIndex: 999,
   },
 });

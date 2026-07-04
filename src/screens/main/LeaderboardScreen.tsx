@@ -1,20 +1,23 @@
 import React, { useCallback, useRef, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  TextInput,
-} from 'react-native';
+import { View, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import { Colors, FontFamily, FontSize, Spacing, Radius, alpha } from '../../theme';
+import { FontFamily, Radius, Spacing, alpha, useTheme } from '../../theme';
 import { useUserStore } from '../../store/userStore';
 import LeaderboardRow from '../../components/LeaderboardRow';
-import AppIcon from '../../components/ui/AppIcon';
-import Avatar from '../../components/ui/Avatar';
-import RotatingTrophy from '../../components/animations/RotatingTrophy';
+import {
+  Screen,
+  Card,
+  Text,
+  Button,
+  SegmentedControl,
+  Avatar,
+  StreakPill,
+  Sheet,
+  TextField,
+  IconButton,
+  AppIcon,
+  Divider,
+} from '../../components/ui';
 import {
   getLeaderboard,
   LeaderboardUser,
@@ -38,10 +41,22 @@ type Tab = 'global' | 'friends' | 'team';
 const TABS: { key: Tab; label: string }[] = [
   { key: 'global', label: 'Global' },
   { key: 'friends', label: 'Friends' },
-  { key: 'team', label: 'My Team' },
+  { key: 'team', label: 'Team' },
 ];
 
+/** Public profile shown in the friend sheet (public stats only). */
+type Profile = {
+  id: string;
+  name: string;
+  university: string | null;
+  streak: number;
+  lp: number;
+  avatarUrl: string | null;
+  isSelf: boolean;
+};
+
 export default function LeaderboardScreen() {
+  const { colors } = useTheme();
   const navigation = useNavigation<any>();
   const user = useUserStore((s) => s.user);
   const firstName = (user?.name ?? 'You').split(' ')[0];
@@ -50,6 +65,16 @@ export default function LeaderboardScreen() {
   // Pending incoming friend-request count, surfaced as a badge on the Friends
   // tab. Refreshed on screen focus (any tab) and after FriendsTab loads/acts.
   const [friendRequestCount, setFriendRequestCount] = useState(0);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [profile, setProfile] = useState<Profile | null>(null);
+
+  const openChallenge = useCallback(
+    (id: string, name: string) => {
+      setProfile(null);
+      navigation.navigate('Challenges', { inviteFriend: { id, name } });
+    },
+    [navigation],
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -96,104 +121,179 @@ export default function LeaderboardScreen() {
     }, [tab, windowDays]),
   );
 
-  const me = rows.find((r) => r.userId === user?.id) ?? null;
-  const top = rows.slice(0, 3);
-  const rest = rows.slice(3);
+  const meIdx = rows.findIndex((r) => r.userId === user?.id);
+  const me = meIdx >= 0 ? rows[meIdx] : null;
+  const above = meIdx > 0 ? rows[meIdx - 1] : null;
+  const below = meIdx >= 0 && meIdx < rows.length - 1 ? rows[meIdx + 1] : null;
+  const ptsToAbove = me && above ? above.score - me.score : null;
+  const ptsToBelow = me && below ? me.score - below.score : null;
+
+  const windowIndex = Math.max(
+    0,
+    LEADERBOARD_WINDOWS.findIndex((w) => w.days === windowDays),
+  );
+
+  const openProfile = (r: LeaderboardUser) => {
+    const isSelf = r.userId === user?.id;
+    setProfile({
+      id: r.userId,
+      name: isSelf ? firstName : publicLeaderboardName(r),
+      university: r.university,
+      streak: r.streakCount,
+      lp: r.score,
+      avatarUrl: r.avatarUrl,
+      isSelf,
+    });
+  };
 
   return (
-    <View style={styles.container}>
+    <Screen scroll bottomSpace={96}>
+      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>LEADERBOARD</Text>
+        <Text variant="heading" color={colors.ink}>
+          League
+        </Text>
+        <IconButton
+          icon="info"
+          onPress={() => setInfoOpen(true)}
+          size={40}
+          iconSize={20}
+          border
+          color={colors.textSecondary}
+          accessibilityLabel="How scoring works"
+        />
       </View>
 
-      {/* Tabs */}
+      {/* Global / Friends / Team text tabs with scarlet underline */}
       <View style={styles.tabsRow}>
-        {TABS.map((t) => (
-          <TouchableOpacity
-            key={t.key}
-            style={[styles.tab, tab === t.key && styles.tabActive]}
-            onPress={() => setTab(t.key)}
-          >
-            <Text style={[styles.tabText, tab === t.key && styles.tabTextActive]}>
-              {t.key === 'friends' && friendRequestCount > 0
-                ? `${t.label} (${friendRequestCount})`
-                : t.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
+        {TABS.map((t) => {
+          const active = tab === t.key;
+          const showBadge = t.key === 'friends' && friendRequestCount > 0;
+          return (
+            <Pressable key={t.key} style={styles.tab} onPress={() => setTab(t.key)}>
+              <View style={styles.tabLabelRow}>
+                <Text
+                  variant="subhead"
+                  color={active ? colors.ink : colors.textSecondary}
+                >
+                  {t.label}
+                </Text>
+                {showBadge ? (
+                  <View style={[styles.tabBadge, { backgroundColor: colors.scarlet }]}>
+                    <Text style={[styles.tabBadgeText, { color: colors.onPrimary }]}>
+                      {friendRequestCount}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+              <View
+                style={[
+                  styles.tabUnderline,
+                  { backgroundColor: active ? colors.scarlet : 'transparent' },
+                ]}
+              />
+            </Pressable>
+          );
+        })}
       </View>
 
       {tab === 'global' && (
         <>
-          {/* Window selector */}
-          <View style={styles.windowRow}>
-            {LEADERBOARD_WINDOWS.map((w) => (
-              <TouchableOpacity
-                key={w.days}
-                style={[styles.windowChip, windowDays === w.days && styles.windowChipActive]}
-                onPress={() => setWindowDays(w.days)}
-              >
-                <Text style={[styles.windowText, windowDays === w.days && styles.windowTextActive]}>
-                  {w.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          {/* Duration */}
+          <SegmentedControl
+            segments={LEADERBOARD_WINDOWS.map((w) => w.label)}
+            value={windowIndex}
+            onChange={(i) => setWindowDays(LEADERBOARD_WINDOWS[i].days)}
+            style={{ marginBottom: Spacing.base }}
+          />
 
+          {/* Dark rank summary card */}
+          {me && (
+            <View style={[styles.rankCard, { backgroundColor: colors.ink }]}>
+              <View style={styles.rankCardLeft}>
+                <Text variant="overline" color={alpha(colors.onPrimary, 0.6)}>
+                  Your Rank
+                </Text>
+                <Text
+                  color={colors.onPrimary}
+                  style={styles.rankBig}
+                  allowFontScaling={false}
+                >
+                  #{me.rank}
+                </Text>
+              </View>
+              <View style={[styles.rankDivider, { backgroundColor: alpha(colors.onPrimary, 0.14) }]} />
+              <View style={styles.rankCardRight}>
+                <View style={styles.rankStatRow}>
+                  <Text variant="labelSm" color={alpha(colors.onPrimary, 0.6)}>
+                    League Points
+                  </Text>
+                  <View style={styles.lpInline}>
+                    <Text color={colors.onPrimary} style={styles.lpInlineValue} allowFontScaling={false}>
+                      {me.score.toLocaleString()}
+                    </Text>
+                    <Text variant="labelSm" color={alpha(colors.onPrimary, 0.6)}>
+                      LP
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.deltaRow}>
+                  <AppIcon name="arrow-up" size={14} color={colors.success} />
+                  <Text variant="labelSm" color={alpha(colors.onPrimary, 0.75)} style={{ flex: 1 }}>
+                    To the rank above
+                  </Text>
+                  <Text color={colors.success} style={styles.deltaValue} allowFontScaling={false}>
+                    {ptsToAbove != null ? `+${ptsToAbove}` : '—'}
+                  </Text>
+                </View>
+                <View style={styles.deltaRow}>
+                  <AppIcon name="arrow-down" size={14} color={alpha(colors.onPrimary, 0.55)} />
+                  <Text variant="labelSm" color={alpha(colors.onPrimary, 0.75)} style={{ flex: 1 }}>
+                    Rank below
+                  </Text>
+                  <Text color={alpha(colors.onPrimary, 0.75)} style={styles.deltaValue} allowFontScaling={false}>
+                    {ptsToBelow != null ? `+${ptsToBelow}` : '—'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* Standings */}
           {isLoading ? (
             <View style={styles.center}>
-              <ActivityIndicator color={Colors.primary} />
+              <ActivityIndicator color={colors.scarlet} />
             </View>
           ) : error ? (
             <View style={styles.center}>
-              <Text style={styles.notice}>{error}</Text>
+              <Text variant="body" color={colors.textSecondary} center>
+                {error}
+              </Text>
             </View>
           ) : rows.length === 0 ? (
-            <View style={styles.center}>
-              <RotatingTrophy size={40} />
-              <Text style={styles.emptyTitle}>No rankings yet</Text>
-              <Text style={styles.notice}>Log meals to earn points and enter the leaderboard.</Text>
-            </View>
+            <EmptyState
+              icon="trophy"
+              title="No standings yet."
+              body="Log and confirm your first meal to enter this window. Every confirmed meal earns 10 LP."
+            />
           ) : (
-            <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-              {me && (
-                <View style={styles.youCard}>
-                  <Text style={styles.youLabel}>YOUR RANK</Text>
-                  <Text style={styles.youRank}>#{me.rank}</Text>
-                  <Text style={styles.youPts}>{me.score.toLocaleString()} pts</Text>
+            <Card padded={false} style={{ overflow: 'hidden' }}>
+              {rows.map((r, i) => (
+                <View key={r.userId}>
+                  {i > 0 && <Divider color={colors.rowDivider} />}
+                  <LeaderboardRow
+                    rank={r.rank}
+                    name={r.userId === user?.id ? firstName : publicLeaderboardName(r)}
+                    points={r.score}
+                    streak={r.streakCount}
+                    movement={0}
+                    isCurrentUser={r.userId === user?.id}
+                    avatarUrl={r.avatarUrl}
+                    onPress={() => openProfile(r)}
+                  />
                 </View>
-              )}
-
-              {top.map((r) => (
-                <LeaderboardRow
-                  key={r.userId}
-                  rank={r.rank}
-                  name={r.userId === user?.id ? firstName : publicLeaderboardName(r)}
-                  points={r.score}
-                  streak={r.streakCount}
-                  movement={0}
-                  isCurrentUser={r.userId === user?.id}
-                  avatarUrl={r.avatarUrl}
-                />
               ))}
-
-              {rest.length > 0 && <View style={styles.divider} />}
-
-              {rest.map((r) => (
-                <LeaderboardRow
-                  key={r.userId}
-                  rank={r.rank}
-                  name={r.userId === user?.id ? firstName : publicLeaderboardName(r)}
-                  points={r.score}
-                  streak={r.streakCount}
-                  movement={0}
-                  isCurrentUser={r.userId === user?.id}
-                  avatarUrl={r.avatarUrl}
-                />
-              ))}
-
-              <View style={{ height: Spacing.xxl }} />
-            </ScrollView>
+            </Card>
           )}
         </>
       )}
@@ -203,22 +303,89 @@ export default function LeaderboardScreen() {
           currentUserId={user?.id ?? null}
           firstName={firstName}
           onRequestsLoaded={setFriendRequestCount}
-          onChallengeFriend={(id, name) =>
-            navigation.navigate('Challenges', { inviteFriend: { id, name } })
+          onChallengeFriend={openChallenge}
+          onOpenProfile={(s) =>
+            setProfile({
+              id: s.userId,
+              name: s.userId === user?.id ? firstName : s.name,
+              university: s.university,
+              streak: s.streakCount,
+              lp: s.score,
+              avatarUrl: s.avatarUrl,
+              isSelf: s.userId === user?.id,
+            })
           }
         />
       )}
 
       {tab === 'team' && (
-        <View style={styles.center}>
-          <AppIcon name="challenges" size={40} color={Colors.textSecondary} />
-          <Text style={styles.emptyTitle}>Team leaderboard</Text>
-          <Text style={styles.notice}>
+        <Card style={styles.teamCard}>
+          <View style={[styles.iconTile, { backgroundColor: colors.track }]}>
+            <AppIcon name="challenges" size={26} color={colors.textSecondary} />
+          </View>
+          <Text variant="section" color={colors.ink} center>
+            Team leaderboard
+          </Text>
+          <Text variant="body" color={colors.textSecondary} center>
             Join a challenge to compete with your team. Per-team standings are coming soon.
           </Text>
-        </View>
+        </Card>
       )}
-    </View>
+
+      {/* How scoring works */}
+      <Sheet visible={infoOpen} onClose={() => setInfoOpen(false)} title="How scoring works" showClose>
+        <View style={styles.sheetBody}>
+          <Text variant="body" color={colors.textSecondary}>
+            Every confirmed meal earns 10 League Points (LP). Your rank is your total LP over the
+            selected window — 2 weeks, 3 weeks, or 1 month. Keep logging daily to climb the board and
+            protect your streak.
+          </Text>
+        </View>
+      </Sheet>
+
+      {/* Friend profile sheet */}
+      <Sheet visible={!!profile} onClose={() => setProfile(null)} showClose>
+        {profile && (
+          <View style={styles.sheetBody}>
+            <View style={styles.profileHead}>
+              <Avatar name={profile.name} url={profile.avatarUrl} size={64} />
+              <View style={{ flex: 1 }}>
+                <Text variant="section" color={colors.ink} numberOfLines={1}>
+                  {profile.name}
+                </Text>
+                {profile.university ? (
+                  <View style={styles.uniRow}>
+                    <AppIcon name="school" size={14} color={colors.textSecondary} />
+                    <Text variant="label" color={colors.textSecondary} numberOfLines={1}>
+                      {profile.university}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+            <View style={styles.profileStats}>
+              {profile.streak > 0 ? <StreakPill count={profile.streak} size={16} /> : null}
+              <View style={[styles.lpPill, { backgroundColor: colors.track }]}>
+                <Text color={colors.ink} style={styles.lpPillValue} allowFontScaling={false}>
+                  {profile.lp.toLocaleString()}
+                </Text>
+                <Text variant="labelSm" color={colors.textSecondary}>
+                  LP
+                </Text>
+              </View>
+            </View>
+            {!profile.isSelf && (
+              <Button
+                label={`Challenge ${profile.name}`}
+                icon="challenges"
+                onPress={() => openChallenge(profile.id, profile.name)}
+                style={{ marginTop: Spacing.base }}
+              />
+            )}
+          </View>
+        )}
+      </Sheet>
+    </Screen>
   );
 }
 
@@ -228,16 +395,20 @@ function FriendsTab({
   firstName,
   onChallengeFriend,
   onRequestsLoaded,
+  onOpenProfile,
 }: {
   currentUserId: string | null;
   firstName: string;
   onChallengeFriend: (friendId: string, friendName: string) => void;
   onRequestsLoaded?: (count: number) => void;
+  onOpenProfile: (s: FriendStanding) => void;
 }) {
+  const { colors } = useTheme();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<UserSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const latestSearchId = useRef(0);
+  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [requests, setRequests] = useState<FriendRequest[]>([]);
   const [standings, setStandings] = useState<FriendStanding[]>([]);
@@ -245,25 +416,28 @@ function FriendsTab({
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const load = useCallback(async (shouldApply: () => boolean = () => true) => {
-    if (shouldApply()) {
-      setLoading(true);
-      setError(null);
-    }
-    try {
-      const [reqs, board] = await Promise.all([getFriendRequests(), getFriendsLeaderboard(14)]);
-      if (!shouldApply()) return;
-      setRequests(reqs);
-      setStandings(board);
-      onRequestsLoaded?.(reqs.length);
-    } catch (e) {
+  const load = useCallback(
+    async (shouldApply: () => boolean = () => true) => {
       if (shouldApply()) {
-        setError(e instanceof Error ? e.message : 'Could not load friends.');
+        setLoading(true);
+        setError(null);
       }
-    } finally {
-      if (shouldApply()) setLoading(false);
-    }
-  }, [onRequestsLoaded]);
+      try {
+        const [reqs, board] = await Promise.all([getFriendRequests(), getFriendsLeaderboard(14)]);
+        if (!shouldApply()) return;
+        setRequests(reqs);
+        setStandings(board);
+        onRequestsLoaded?.(reqs.length);
+      } catch (e) {
+        if (shouldApply()) {
+          setError(e instanceof Error ? e.message : 'Could not load friends.');
+        }
+      } finally {
+        if (shouldApply()) setLoading(false);
+      }
+    },
+    [onRequestsLoaded],
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -277,7 +451,6 @@ function FriendsTab({
 
   const runSearch = useCallback(async (text: string) => {
     const searchId = ++latestSearchId.current;
-    setQuery(text);
     if (text.trim().length < 2) {
       setResults([]);
       setSearching(false);
@@ -295,6 +468,16 @@ function FriendsTab({
       if (searchId === latestSearchId.current) setSearching(false);
     }
   }, []);
+
+  // Debounce keystrokes so we don't fire a request per character.
+  const onChangeQuery = useCallback(
+    (text: string) => {
+      setQuery(text);
+      if (debounce.current) clearTimeout(debounce.current);
+      debounce.current = setTimeout(() => void runSearch(text), 220);
+    },
+    [runSearch],
+  );
 
   // Optimistically update a search result's status after an action.
   const setResultStatus = (userId: string, status: FriendshipStatus) =>
@@ -328,141 +511,162 @@ function FriendsTab({
   const showingSearch = query.trim().length >= 2;
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Search bar */}
-      <View style={styles.searchBar}>
-        <AppIcon name="search" size={18} color={Colors.textSecondary} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search by name or username"
-          placeholderTextColor={Colors.textSecondary}
-          value={query}
-          onChangeText={runSearch}
-          autoCapitalize="none"
-          autoCorrect={false}
-          returnKeyType="search"
-        />
-        {query.length > 0 && (
-          <TouchableOpacity onPress={() => runSearch('')}>
-            <Text style={styles.clearX}>✕</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+    <View>
+      {/* Search */}
+      <TextField
+        value={query}
+        onChangeText={onChangeQuery}
+        placeholder="Search by name or username"
+        rightIcon={query.length > 0 ? 'close' : 'search'}
+        onRightIconPress={query.length > 0 ? () => onChangeQuery('') : undefined}
+        autoCapitalize="none"
+        autoCorrect={false}
+        returnKeyType="search"
+        style={{ marginBottom: Spacing.base }}
+      />
 
-      {error && <Text style={[styles.notice, { marginBottom: Spacing.sm }]}>{error}</Text>}
+      {error && (
+        <Text variant="label" color={colors.error} style={{ marginBottom: Spacing.sm }}>
+          {error}
+        </Text>
+      )}
 
-      {/* Incoming friend requests — rendered above search results so an incoming
-          request stays discoverable whether or not the user is searching. The
-          empty-state copy shows only when not searching, to keep search clean. */}
-      {!loading && (requests.length > 0 || !showingSearch) && (
+      {/* Incoming friend requests — kept above search results so an incoming
+          request stays discoverable whether or not the user is searching. */}
+      {!loading && requests.length > 0 && (
         <>
-          <Text style={styles.sectionLabel}>FRIEND REQUESTS</Text>
-          {requests.length === 0 ? (
-            <Text style={[styles.notice, { textAlign: 'left', marginBottom: Spacing.md }]}>
-              No pending friend requests. Search above to add friends.
-            </Text>
-          ) : (
-            requests.map((req) => (
-              <View key={req.userId} style={styles.row}>
-                <Avatar name={req.name} url={req.avatarUrl} />
-                <View style={styles.rowMain}>
-                  <Text style={styles.rowName}>{req.name}</Text>
-                  <Text style={styles.rowSub}>wants to be friends</Text>
-                </View>
-                <View style={styles.actionsRow}>
-                  <TouchableOpacity
-                    style={[styles.smallBtn, styles.smallBtnPrimary]}
-                    disabled={busyId === req.userId}
-                    onPress={() => onRespond(req.userId, true)}
-                  >
-                    <Text style={styles.smallBtnPrimaryText}>Accept</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.smallBtn}
-                    disabled={busyId === req.userId}
-                    onPress={() => onRespond(req.userId, false)}
-                  >
-                    <Text style={styles.smallBtnText}>Decline</Text>
-                  </TouchableOpacity>
+          <Text variant="overline" color={colors.textSecondary} style={styles.sectionLabel}>
+            {`Friend Requests · ${requests.length}`}
+          </Text>
+          <Card padded={false} style={[styles.listCard, { overflow: 'hidden' }]}>
+            {requests.map((req, i) => (
+              <View key={req.userId}>
+                {i > 0 && <Divider color={colors.rowDivider} />}
+                <View style={styles.row}>
+                  <Avatar name={req.name} url={req.avatarUrl} size={40} />
+                  <View style={styles.rowMain}>
+                    <Text variant="cardTitle" color={colors.ink} numberOfLines={1}>
+                      {req.name}
+                    </Text>
+                    <Text variant="labelSm" color={colors.textSecondary} numberOfLines={1}>
+                      {req.university ?? 'wants to be friends'}
+                    </Text>
+                  </View>
+                  <View style={styles.actionsRow}>
+                    <Button
+                      label="Accept"
+                      size="md"
+                      fullWidth={false}
+                      loading={busyId === req.userId}
+                      loadingLabel="Accept"
+                      onPress={() => onRespond(req.userId, true)}
+                      style={styles.pillBtn}
+                    />
+                    <IconButton
+                      icon="close"
+                      size={40}
+                      iconSize={18}
+                      onPress={() => onRespond(req.userId, false)}
+                      color={colors.textSecondary}
+                      accessibilityLabel="Decline"
+                    />
+                  </View>
                 </View>
               </View>
-            ))
-          )}
+            ))}
+          </Card>
         </>
       )}
 
       {/* Search results */}
       {showingSearch ? (
         searching ? (
-          <ActivityIndicator color={Colors.primary} style={{ marginTop: Spacing.lg }} />
+          <ActivityIndicator color={colors.scarlet} style={{ marginTop: Spacing.lg }} />
         ) : results.length === 0 ? (
-          <Text style={[styles.notice, { marginTop: Spacing.lg }]}>No users found.</Text>
+          <Text variant="body" color={colors.textSecondary} center style={{ marginTop: Spacing.lg }}>
+            No users found.
+          </Text>
         ) : (
-          results.map((r) => (
-            <View key={r.userId} style={styles.row}>
-              <Avatar name={r.name} url={r.avatarUrl} />
-              <View style={styles.rowMain}>
-                <Text style={styles.rowName}>{r.name}</Text>
-                {r.university ? <Text style={styles.rowSub}>{r.university}</Text> : null}
+          <Card padded={false} style={{ overflow: 'hidden' }}>
+            {results.map((r, i) => (
+              <View key={r.userId}>
+                {i > 0 && <Divider color={colors.rowDivider} />}
+                <View style={styles.row}>
+                  <Avatar name={r.name} url={r.avatarUrl} size={40} />
+                  <View style={styles.rowMain}>
+                    <Text variant="cardTitle" color={colors.ink} numberOfLines={1}>
+                      {r.name}
+                    </Text>
+                    {r.university ? (
+                      <Text variant="labelSm" color={colors.textSecondary} numberOfLines={1}>
+                        {r.university}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <StatusButton
+                    status={r.status}
+                    busy={busyId === r.userId}
+                    onAdd={() => onAdd(r)}
+                    onAccept={() => onRespond(r.userId, true)}
+                  />
+                </View>
               </View>
-              <StatusButton
-                status={r.status}
-                busy={busyId === r.userId}
-                onAdd={() => onAdd(r)}
-                onAccept={() => onRespond(r.userId, true)}
-              />
-            </View>
-          ))
+            ))}
+          </Card>
         )
       ) : loading ? (
-        <ActivityIndicator color={Colors.primary} style={{ marginTop: Spacing.lg }} />
+        <ActivityIndicator color={colors.scarlet} style={{ marginTop: Spacing.lg }} />
       ) : (
         <>
-          {/* Friends leaderboard */}
-          <Text style={[styles.sectionLabel, { marginTop: requests.length ? Spacing.lg : 0 }]}>
-            FRIENDS LEADERBOARD
+          <Text
+            variant="overline"
+            color={colors.textSecondary}
+            style={[styles.sectionLabel, { marginTop: requests.length ? Spacing.lg : 0 }]}
+          >
+            This Week
           </Text>
           {standings.length <= 1 ? (
-            <View style={[styles.center, { paddingVertical: Spacing.xl }]}>
-              <AppIcon name="users" size={36} color={Colors.textSecondary} />
-              <Text style={styles.emptyTitle}>No friends yet</Text>
-              <Text style={styles.notice}>Search above to add friends and compete head-to-head.</Text>
-            </View>
+            <FriendsEmpty />
           ) : (
-            standings.map((s) => {
-              const isMe = s.userId === currentUserId;
-              return (
-                <View key={s.userId} style={[styles.row, isMe && styles.rowMe]}>
-                  <Text style={styles.rank}>#{s.rank}</Text>
-                  <Avatar name={isMe ? firstName : s.name} url={s.avatarUrl} />
-                  <View style={styles.rowMain}>
-                    <Text style={styles.rowName}>{isMe ? `${firstName} (you)` : s.name}</Text>
-                    <Text style={styles.rowSub}>
-                      {s.score.toLocaleString()} pts · 🔥 {s.streakCount}
-                    </Text>
+            <Card padded={false} style={{ overflow: 'hidden' }}>
+              {standings.map((s, i) => {
+                const isMe = s.userId === currentUserId;
+                return (
+                  <View key={s.userId}>
+                    {i > 0 && <Divider color={colors.rowDivider} />}
+                    <View style={styles.standingRow}>
+                      <View style={{ flex: 1 }}>
+                        <LeaderboardRow
+                          rank={s.rank}
+                          name={isMe ? firstName : s.name}
+                          points={s.score}
+                          streak={s.streakCount}
+                          movement={0}
+                          isCurrentUser={isMe}
+                          avatarUrl={s.avatarUrl}
+                          onPress={() => onOpenProfile(s)}
+                        />
+                      </View>
+                      {!isMe && (
+                        <Button
+                          label="Challenge"
+                          icon="challenges"
+                          size="md"
+                          fullWidth={false}
+                          variant="secondary"
+                          onPress={() => onChallengeFriend(s.userId, s.name)}
+                          style={[styles.pillBtn, { marginRight: Spacing.md }]}
+                        />
+                      )}
+                    </View>
                   </View>
-                  {!isMe && (
-                    <TouchableOpacity
-                      style={[styles.smallBtn, styles.smallBtnPrimary]}
-                      onPress={() => onChallengeFriend(s.userId, s.name)}
-                    >
-                      <AppIcon name="challenges" size={14} color={Colors.background} />
-                      <Text style={styles.smallBtnPrimaryText}>Challenge</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              );
-            })
+                );
+              })}
+            </Card>
           )}
         </>
       )}
-
-      <View style={{ height: Spacing.xxl }} />
-    </ScrollView>
+    </View>
   );
 }
 
@@ -477,142 +681,173 @@ function StatusButton({
   onAdd: () => void;
   onAccept: () => void;
 }) {
-  if (busy) return <ActivityIndicator color={Colors.primary} style={{ width: 84 }} />;
+  const { colors } = useTheme();
+  if (busy) return <ActivityIndicator color={colors.scarlet} style={{ width: 92 }} />;
   if (status === 'friends')
     return (
-      <View style={[styles.smallBtn, styles.smallBtnGhost]}>
-        <AppIcon name="checkmark" size={14} color={Colors.textSecondary} />
-        <Text style={styles.smallBtnText}>Friends</Text>
+      <View style={[styles.statusPill, { backgroundColor: colors.successTint }]}>
+        <AppIcon name="checkmark" size={14} color={colors.successDeep} />
+        <Text variant="label" color={colors.successDeep}>
+          Friends
+        </Text>
       </View>
     );
   if (status === 'outgoing')
     return (
-      <View style={[styles.smallBtn, styles.smallBtnGhost]}>
-        <Text style={styles.smallBtnText}>Requested</Text>
+      <View style={[styles.statusPill, { backgroundColor: colors.track }]}>
+        <Text variant="label" color={colors.textSecondary}>
+          Requested
+        </Text>
       </View>
     );
   if (status === 'incoming')
     return (
-      <TouchableOpacity style={[styles.smallBtn, styles.smallBtnPrimary]} onPress={onAccept}>
-        <Text style={styles.smallBtnPrimaryText}>Accept</Text>
-      </TouchableOpacity>
+      <Button label="Accept" size="md" fullWidth={false} onPress={onAccept} style={styles.pillBtn} />
     );
   return (
-    <TouchableOpacity style={[styles.smallBtn, styles.smallBtnPrimary]} onPress={onAdd}>
-      <AppIcon name="plus" size={14} color={Colors.background} />
-      <Text style={styles.smallBtnPrimaryText}>Add</Text>
-    </TouchableOpacity>
+    <Button
+      label="Add"
+      icon="plus"
+      size="md"
+      fullWidth={false}
+      variant="secondary"
+      onPress={onAdd}
+      style={styles.pillBtn}
+    />
+  );
+}
+
+function EmptyState({
+  icon,
+  title,
+  body,
+}: {
+  icon: React.ComponentProps<typeof AppIcon>['name'];
+  title: string;
+  body: string;
+}) {
+  const { colors } = useTheme();
+  return (
+    <Card style={styles.teamCard}>
+      <View style={[styles.iconTile, { backgroundColor: colors.track }]}>
+        <AppIcon name={icon} size={26} color={colors.textSecondary} />
+      </View>
+      <Text variant="section" color={colors.ink} center>
+        {title}
+      </Text>
+      <Text variant="body" color={colors.textSecondary} center>
+        {body}
+      </Text>
+    </Card>
+  );
+}
+
+function FriendsEmpty() {
+  const { colors } = useTheme();
+  const stack = ['Maya', 'Diego', 'Priya'];
+  return (
+    <Card style={styles.teamCard}>
+      <View style={styles.avatarStack}>
+        {stack.map((n, i) => (
+          <View key={n} style={{ marginLeft: i === 0 ? 0 : -12 }}>
+            <Avatar name={n} size={44} ring={colors.card} ringWidth={2} />
+          </View>
+        ))}
+      </View>
+      <Text variant="section" color={colors.ink} center>
+        Build your league.
+      </Text>
+      <Text variant="body" color={colors.textSecondary} center>
+        Add friends to compare progress and create challenges. Search by name or username above.
+      </Text>
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  header: { paddingTop: 60, paddingHorizontal: Spacing.lg, paddingBottom: Spacing.sm },
-  title: { fontFamily: FontFamily.displayBold, fontSize: FontSize.title, color: Colors.textPrimary, letterSpacing: 1 },
-
-  tabsRow: { flexDirection: 'row', gap: Spacing.sm, paddingHorizontal: Spacing.lg, marginBottom: Spacing.md },
-  tab: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: Spacing.sm,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  tabActive: { backgroundColor: alpha(Colors.primary, 0.12), borderColor: alpha(Colors.primary, 0.4) },
-  tabText: { fontFamily: FontFamily.bodyMedium, fontSize: FontSize.label, color: Colors.textSecondary },
-  tabTextActive: { color: Colors.primary },
-
-  windowRow: { flexDirection: 'row', gap: Spacing.sm, paddingHorizontal: Spacing.lg, marginBottom: Spacing.md },
-  windowChip: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 6,
-    borderRadius: Radius.pill,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  windowChipActive: { backgroundColor: alpha(Colors.primary, 0.12), borderColor: alpha(Colors.primary, 0.4) },
-  windowText: { fontFamily: FontFamily.bodyMedium, fontSize: FontSize.meta, color: Colors.textSecondary },
-  windowTextActive: { color: Colors.primary },
-
-  content: { paddingHorizontal: Spacing.lg },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl, gap: Spacing.sm },
-  notice: { fontFamily: FontFamily.body, fontSize: FontSize.label, color: Colors.textSecondary, textAlign: 'center' },
-  emptyTitle: { fontFamily: FontFamily.displayBold, fontSize: FontSize.subhead, color: Colors.textPrimary },
-
-  youCard: {
-    backgroundColor: alpha(Colors.primary, 0.1),
-    borderColor: alpha(Colors.primary, 0.4),
-    borderWidth: 1,
-    borderRadius: Radius.lg,
-    padding: Spacing.base,
-    alignItems: 'center',
-    marginBottom: Spacing.base,
-  },
-  youLabel: { fontFamily: FontFamily.displayBold, fontSize: FontSize.meta, color: Colors.textSecondary, letterSpacing: 1.4 },
-  youRank: { fontFamily: FontFamily.displayBold, fontSize: FontSize.display, color: Colors.primary },
-  youPts: { fontFamily: FontFamily.body, fontSize: FontSize.label, color: Colors.textSecondary },
-
-  divider: { height: 1, backgroundColor: Colors.border, marginVertical: Spacing.md },
-
-  // Friends tab
-  searchBar: {
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: Radius.md,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 10,
-    marginBottom: Spacing.md,
+    justifyContent: 'space-between',
+    marginBottom: Spacing.base,
   },
-  searchInput: { flex: 1, color: Colors.textPrimary, fontFamily: FontFamily.body, fontSize: FontSize.label, padding: 0 },
-  clearX: { color: Colors.textSecondary, fontSize: FontSize.label, paddingHorizontal: 4 },
 
-  sectionLabel: {
-    fontFamily: FontFamily.displayBold,
-    fontSize: FontSize.meta,
-    color: Colors.textSecondary,
-    letterSpacing: 1.2,
-    marginBottom: Spacing.sm,
+  tabsRow: { flexDirection: 'row', gap: Spacing.xl, marginBottom: Spacing.base },
+  tab: { alignItems: 'flex-start' },
+  tabLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingBottom: 6 },
+  tabBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  tabBadgeText: { fontFamily: FontFamily.semibold, fontSize: 11, lineHeight: 13 },
+  tabUnderline: { height: 2.5, alignSelf: 'stretch', borderRadius: 2 },
+
+  rankCard: {
+    flexDirection: 'row',
+    borderRadius: Radius.hero,
+    padding: 18,
+    marginBottom: Spacing.base,
+  },
+  rankCardLeft: { justifyContent: 'center', paddingRight: 18 },
+  rankBig: { fontFamily: FontFamily.numBold, fontSize: 44, lineHeight: 46, marginTop: 2 },
+  rankDivider: { width: 1, alignSelf: 'stretch' },
+  rankCardRight: { flex: 1, paddingLeft: 18, gap: 8, justifyContent: 'center' },
+  rankStatRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  lpInline: { flexDirection: 'row', alignItems: 'baseline', gap: 3 },
+  lpInlineValue: { fontFamily: FontFamily.numBold, fontSize: 20 },
+  deltaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  deltaValue: { fontFamily: FontFamily.numBold, fontSize: 15 },
+
+  center: { alignItems: 'center', justifyContent: 'center', paddingVertical: Spacing.xxl, gap: Spacing.sm },
+
+  teamCard: { alignItems: 'center', gap: Spacing.md, paddingVertical: Spacing.xl },
+  iconTile: {
+    width: 52,
+    height: 52,
+    borderRadius: Radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarStack: { flexDirection: 'row' },
+
+  sectionLabel: { marginBottom: Spacing.sm },
+  listCard: { marginBottom: Spacing.base },
 
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: Radius.md,
+    gap: Spacing.md,
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    marginBottom: Spacing.sm,
+    paddingVertical: Spacing.md,
   },
-  rowMe: { borderColor: alpha(Colors.primary, 0.4), backgroundColor: alpha(Colors.primary, 0.08) },
   rowMain: { flex: 1 },
-  rowName: { fontFamily: FontFamily.bodySemiBold, fontSize: FontSize.label, color: Colors.textPrimary },
-  rowSub: { fontFamily: FontFamily.body, fontSize: FontSize.meta, color: Colors.textSecondary, marginTop: 1 },
-  rank: { fontFamily: FontFamily.displayBold, fontSize: FontSize.label, color: Colors.textSecondary, width: 32 },
+  standingRow: { flexDirection: 'row', alignItems: 'center' },
+  actionsRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  pillBtn: { height: 40, borderRadius: Radius.pill, paddingHorizontal: 16 },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    height: 40,
+    paddingHorizontal: 14,
+    borderRadius: Radius.pill,
+  },
 
-  actionsRow: { flexDirection: 'row', gap: Spacing.xs },
-  smallBtn: {
+  sheetBody: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.md },
+  profileHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.base },
+  uniRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4 },
+  profileStats: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginTop: Spacing.base },
+  lpPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 7,
     borderRadius: Radius.pill,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surface,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
   },
-  smallBtnText: { fontFamily: FontFamily.bodyMedium, fontSize: FontSize.meta, color: Colors.textSecondary },
-  smallBtnPrimary: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  smallBtnPrimaryText: { fontFamily: FontFamily.bodySemiBold, fontSize: FontSize.meta, color: Colors.background },
-  smallBtnGhost: { backgroundColor: 'transparent' },
+  lpPillValue: { fontFamily: FontFamily.numBold, fontSize: 16 },
 });

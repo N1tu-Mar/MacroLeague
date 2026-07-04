@@ -162,8 +162,8 @@ export function useMealLogger(): {
       fatG: formatNumeric(serving.fatG),
       quantity: '1',
       // USDA fat breakdown goes into visible/editable fields. If total fat is
-      // later edited, these stay on screen for the user to reconcile (and the
-      // service rejects a breakdown that exceeds the new total).
+      // later edited, these stay on screen for the user to reconcile — a
+      // subtotal that exceeds total fat no longer blocks the save.
       saturatedFatG: formatNullableNumeric(serving.saturatedFatG),
       transFatG: formatNullableNumeric(serving.transFatG),
       unsaturatedFatG: formatNullableNumeric(serving.unsaturatedFatG),

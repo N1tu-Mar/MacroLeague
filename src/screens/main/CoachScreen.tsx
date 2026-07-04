@@ -1,18 +1,27 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   ScrollView,
   TextInput,
-  TouchableOpacity,
+  Pressable,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, FontFamily, FontSize, Spacing, Radius, Shadow, alpha } from '../../theme';
-import AppIcon from '../../components/ui/AppIcon';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withDelay,
+  withTiming,
+  interpolate,
+  Easing,
+} from 'react-native-reanimated';
+import { Type, Radius, Spacing, useTheme } from '../../theme';
+import type { ThemeColors } from '../../theme';
+import { Text, AppIcon } from '../../components/ui';
+import Chip from '../../components/ui/Chip';
 import { sendChatMessage, ChatMessage } from '../../services/chatService';
 
 const SUGGESTED_QUESTIONS = [
@@ -37,27 +46,47 @@ const WELCOME: Message = {
     "Hey! I'm MacroCoach — your personal nutrition guide. Ask me anything about macros, nutrients, and how to fuel better performance. What's on your mind?",
 };
 
-function TypingDots() {
-  const [frame, setFrame] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setFrame((f) => (f + 1) % 4), 400);
-    return () => clearInterval(id);
-  }, []);
-  const dots = '.'.repeat(frame);
+// ── Typing indicator (spec: `typing` 1.2s, dots staggered 0 / .2s / .4s,
+//    opacity .25↔1 + translateY 0↔-3). One triangle-wave cycle per dot.
+function TypingDot({ delay, color }: { delay: number; color: string }) {
+  const progress = useSharedValue(0);
+
+  React.useEffect(() => {
+    progress.value = withDelay(
+      delay,
+      withRepeat(
+        withTiming(1, { duration: 600, easing: Easing.inOut(Easing.ease) }),
+        -1,
+        true,
+      ),
+    );
+  }, [delay, progress]);
+
+  const style = useAnimatedStyle(
+    () => ({
+      opacity: interpolate(progress.value, [0, 1], [0.25, 1]),
+      transform: [{ translateY: interpolate(progress.value, [0, 1], [0, -3]) }],
+    }),
+    [],
+  );
+
   return (
-    <Text style={styles.typingText}>
-      {dots || ' '}
-    </Text>
+    <Animated.View
+      style={[{ width: 6, height: 6, borderRadius: 3, backgroundColor: color }, style]}
+    />
   );
 }
 
 export default function CoachScreen() {
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const styles = React.useMemo(() => makeStyles(colors), [colors]);
 
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [failedText, setFailedText] = useState('');
   const scrollRef = useRef<ScrollView>(null);
 
   const scrollToBottom = useCallback(() => {
@@ -79,6 +108,7 @@ export default function CoachScreen() {
       setInput('');
       setIsLoading(true);
       setError(null);
+      setFailedText('');
       scrollToBottom();
 
       // Build history excluding the static welcome message.
@@ -96,6 +126,7 @@ export default function CoachScreen() {
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : 'Something went wrong. Try again.';
         setError(msg);
+        setFailedText(trimmed);
       } finally {
         setIsLoading(false);
       }
@@ -113,12 +144,16 @@ export default function CoachScreen() {
     >
       {/* ── Header ── */}
       <View style={[styles.header, { paddingTop: insets.top + Spacing.md }]}>
-        <View style={styles.headerIconWrap}>
-          <AppIcon name="bolt" size={18} color={Colors.primary} strokeWidth={2.5} />
+        <View style={styles.headerIconTile}>
+          <AppIcon name="coach" size={18} color={colors.scarlet} strokeWidth={2.5} />
         </View>
-        <View>
-          <Text style={styles.headerTitle}>MacroCoach</Text>
-          <Text style={styles.headerSub}>AI nutrition guide</Text>
+        <View style={{ flex: 1 }}>
+          <Text variant="heading" color={colors.ink}>
+            MacroCoach
+          </Text>
+          <Text variant="label" color={colors.textSecondary}>
+            Your nutrition assistant
+          </Text>
         </View>
       </View>
 
@@ -140,17 +175,21 @@ export default function CoachScreen() {
             >
               {!isUser && (
                 <View style={styles.aiAvatar}>
-                  <AppIcon name="bolt" size={12} color={Colors.primary} strokeWidth={2.5} />
+                  <AppIcon name="coach" size={13} color={colors.scarlet} strokeWidth={2.5} />
                 </View>
               )}
               <View
                 style={[
                   styles.bubble,
                   isUser ? styles.bubbleUser : styles.bubbleAI,
-                  { maxWidth: isUser ? '78%' : '86%' },
+                  { maxWidth: isUser ? '80%' : '84%' },
                 ]}
               >
-                <Text style={isUser ? styles.bubbleTextUser : styles.bubbleTextAI}>
+                <Text
+                  variant="body"
+                  color={isUser ? colors.onPrimary : colors.ink}
+                  style={styles.bubbleText}
+                >
                   {msg.content}
                 </Text>
               </View>
@@ -162,10 +201,12 @@ export default function CoachScreen() {
         {isLoading && (
           <View style={[styles.bubbleRow, styles.bubbleRowAI]}>
             <View style={styles.aiAvatar}>
-              <AppIcon name="bolt" size={12} color={Colors.primary} strokeWidth={2.5} />
+              <AppIcon name="coach" size={13} color={colors.scarlet} strokeWidth={2.5} />
             </View>
             <View style={[styles.bubble, styles.bubbleAI, styles.bubbleTyping]}>
-              <TypingDots />
+              <TypingDot delay={0} color={colors.textTertiary} />
+              <TypingDot delay={200} color={colors.textTertiary} />
+              <TypingDot delay={400} color={colors.textTertiary} />
             </View>
           </View>
         )}
@@ -173,30 +214,48 @@ export default function CoachScreen() {
         {/* Error banner */}
         {error && (
           <View style={styles.errorBanner}>
-            <AppIcon name="warning" size={13} color={Colors.error} />
-            <Text style={styles.errorText}>{error}</Text>
-            <TouchableOpacity onPress={() => setError(null)}>
-              <Text style={styles.errorDismiss}>Dismiss</Text>
-            </TouchableOpacity>
+            <AppIcon name="circle-alert" size={16} color={colors.scarlet} strokeWidth={2.25} />
+            <View style={{ flex: 1 }}>
+              <Text variant="cardTitle" color={colors.ink}>
+                That didn&apos;t send.
+              </Text>
+              <Text variant="label" color={colors.textSecondary}>
+                {error}
+              </Text>
+            </View>
+            {failedText ? (
+              <Pressable
+                style={styles.retryBtn}
+                onPress={() => {
+                  const text = failedText;
+                  setError(null);
+                  sendMessage(text);
+                }}
+                hitSlop={8}
+              >
+                <AppIcon name="repeat" size={14} color={colors.onPrimary} strokeWidth={2.25} />
+                <Text variant="labelSm" color={colors.onPrimary}>
+                  Retry
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
         )}
 
         {/* Suggestion chips — shown only on the welcome screen */}
         {showSuggestions && (
           <View style={styles.suggestions}>
-            <Text style={styles.suggestionsLabel}>Try asking:</Text>
+            <Text variant="overline" color={colors.textSecondary}>
+              Try asking
+            </Text>
             <View style={styles.chipsWrap}>
               {SUGGESTED_QUESTIONS.map((q) => (
-                <TouchableOpacity
-                  key={q}
-                  style={styles.chip}
-                  onPress={() => sendMessage(q)}
-                  activeOpacity={0.72}
-                >
-                  <Text style={styles.chipText}>{q}</Text>
-                </TouchableOpacity>
+                <Chip key={q} label={q} onPress={() => sendMessage(q)} />
               ))}
             </View>
+            <Text variant="labelSm" color={colors.textTertiary} style={styles.privacyNote}>
+              Coach never sees your private meal details.
+            </Text>
           </View>
         )}
 
@@ -205,215 +264,179 @@ export default function CoachScreen() {
 
       {/* ── Input bar ── */}
       <View style={[styles.inputBar, { paddingBottom: insets.bottom + Spacing.sm }]}>
-        <TextInput
-          style={styles.input}
-          value={input}
-          onChangeText={setInput}
-          placeholder="Ask about nutrition..."
-          placeholderTextColor={Colors.textTertiary}
-          multiline
-          maxLength={500}
-          editable={!isLoading}
-          returnKeyType="default"
-        />
-        <TouchableOpacity
+        <View style={styles.inputField}>
+          <TextInput
+            style={styles.input}
+            value={input}
+            onChangeText={setInput}
+            placeholder="Ask about your nutrition…"
+            placeholderTextColor={colors.textTertiary}
+            multiline
+            maxLength={500}
+            editable={!isLoading}
+            returnKeyType="default"
+          />
+        </View>
+        <Pressable
           style={[styles.sendBtn, (!input.trim() || isLoading) && styles.sendBtnDisabled]}
           onPress={() => sendMessage(input)}
           disabled={!input.trim() || isLoading}
-          activeOpacity={0.8}
         >
-          {isLoading ? (
-            <ActivityIndicator size="small" color={Colors.textPrimary} />
-          ) : (
-            <AppIcon name="send" size={18} color={Colors.textPrimary} strokeWidth={2} />
-          )}
-        </TouchableOpacity>
+          <AppIcon
+            name="send"
+            size={18}
+            color={!input.trim() || isLoading ? colors.textDisabled : colors.onPrimary}
+            strokeWidth={2.25}
+          />
+        </Pressable>
       </View>
     </KeyboardAvoidingView>
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: colors.canvas },
 
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
-    backgroundColor: Colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  headerIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: Radius.md,
-    backgroundColor: alpha(Colors.primary, 0.15),
-    borderWidth: 1,
-    borderColor: alpha(Colors.primary, 0.3),
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    fontFamily: FontFamily.displayBold,
-    fontSize: FontSize.subhead,
-    color: Colors.textPrimary,
-  },
-  headerSub: {
-    fontFamily: FontFamily.body,
-    fontSize: FontSize.meta,
-    color: Colors.textSecondary,
-    marginTop: 1,
-  },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Spacing.md,
+      paddingHorizontal: Spacing.screen,
+      paddingBottom: Spacing.md,
+      backgroundColor: colors.card,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.borderCard,
+    },
+    headerIconTile: {
+      width: 40,
+      height: 40,
+      borderRadius: Radius.sm,
+      backgroundColor: colors.brandTint,
+      borderWidth: 1,
+      borderColor: colors.brandTintBorder,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
 
-  messageList: { flex: 1 },
-  messageContent: { paddingHorizontal: Spacing.base, paddingTop: Spacing.lg },
+    messageList: { flex: 1 },
+    messageContent: { paddingHorizontal: Spacing.screen, paddingTop: Spacing.lg },
 
-  bubbleRow: { flexDirection: 'row', marginBottom: Spacing.md, alignItems: 'flex-end', gap: Spacing.sm },
-  bubbleRowUser: { justifyContent: 'flex-end' },
-  bubbleRowAI: { justifyContent: 'flex-start' },
+    bubbleRow: {
+      flexDirection: 'row',
+      marginBottom: Spacing.md,
+      alignItems: 'flex-end',
+      gap: Spacing.sm,
+    },
+    bubbleRowUser: { justifyContent: 'flex-end' },
+    bubbleRowAI: { justifyContent: 'flex-start' },
 
-  aiAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: alpha(Colors.primary, 0.12),
-    borderWidth: 1,
-    borderColor: alpha(Colors.primary, 0.25),
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-    marginBottom: 2,
-  },
+    aiAvatar: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      backgroundColor: colors.brandTint,
+      borderWidth: 1,
+      borderColor: colors.brandTintBorder,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+      marginBottom: 2,
+    },
 
-  bubble: {
-    borderRadius: Radius.lg,
-    paddingHorizontal: Spacing.base,
-    paddingVertical: Spacing.md,
-  },
-  bubbleUser: {
-    backgroundColor: Colors.primary,
-    borderBottomRightRadius: Radius.sm,
-  },
-  bubbleAI: {
-    backgroundColor: Colors.surfaceElevated,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderBottomLeftRadius: Radius.sm,
-  },
-  bubbleTyping: {
-    paddingVertical: Spacing.sm,
-    minWidth: 52,
-    alignItems: 'center',
-  },
-  bubbleTextUser: {
-    fontFamily: FontFamily.bodyMedium,
-    fontSize: FontSize.body,
-    color: Colors.textPrimary,
-    lineHeight: FontSize.body * 1.5,
-  },
-  bubbleTextAI: {
-    fontFamily: FontFamily.body,
-    fontSize: FontSize.body,
-    color: Colors.textPrimary,
-    lineHeight: FontSize.body * 1.55,
-  },
-  typingText: {
-    fontFamily: FontFamily.displayBold,
-    fontSize: FontSize.subhead,
-    color: Colors.textSecondary,
-    letterSpacing: 3,
-    minWidth: 24,
-    textAlign: 'center',
-  },
+    bubble: {
+      borderRadius: Radius.lg,
+      paddingHorizontal: Spacing.base,
+      paddingVertical: Spacing.md,
+    },
+    bubbleUser: {
+      backgroundColor: colors.scarlet,
+      borderBottomRightRadius: Radius.sm - 5,
+    },
+    bubbleAI: {
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.borderCard,
+      borderBottomLeftRadius: Radius.sm - 5,
+    },
+    bubbleTyping: {
+      flexDirection: 'row',
+      gap: 5,
+      paddingVertical: Spacing.md,
+      alignItems: 'center',
+    },
+    bubbleText: {
+      lineHeight: Type.body.fontSize * 1.5,
+    },
 
-  errorBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    backgroundColor: alpha(Colors.error, 0.1),
-    borderWidth: 1,
-    borderColor: alpha(Colors.error, 0.3),
-    borderRadius: Radius.md,
-    paddingHorizontal: Spacing.base,
-    paddingVertical: Spacing.md,
-    marginBottom: Spacing.md,
-    flexWrap: 'wrap',
-  },
-  errorText: {
-    fontFamily: FontFamily.body,
-    fontSize: FontSize.label,
-    color: Colors.error,
-    flex: 1,
-  },
-  errorDismiss: {
-    fontFamily: FontFamily.bodySemiBold,
-    fontSize: FontSize.label,
-    color: Colors.textSecondary,
-  },
+    errorBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Spacing.md,
+      backgroundColor: colors.brandTint,
+      borderWidth: 1,
+      borderColor: colors.brandTintBorder,
+      borderRadius: Radius.card,
+      paddingHorizontal: Spacing.base,
+      paddingVertical: Spacing.md,
+      marginBottom: Spacing.md,
+    },
+    retryBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      backgroundColor: colors.scarlet,
+      borderRadius: Radius.pill,
+      paddingHorizontal: Spacing.md,
+      paddingVertical: 7,
+    },
 
-  suggestions: { marginTop: Spacing.base, marginBottom: Spacing.sm },
-  suggestionsLabel: {
-    fontFamily: FontFamily.displayBold,
-    fontSize: FontSize.label,
-    color: Colors.textSecondary,
-    letterSpacing: 1.2,
-    marginBottom: Spacing.md,
-  },
-  chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
-  chip: {
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: Radius.pill,
-    paddingHorizontal: Spacing.base,
-    paddingVertical: Spacing.sm,
-  },
-  chipText: {
-    fontFamily: FontFamily.bodyMedium,
-    fontSize: FontSize.label,
-    color: Colors.textSecondary,
-  },
+    suggestions: { marginTop: Spacing.base, marginBottom: Spacing.sm },
+    chipsWrap: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: Spacing.sm,
+      marginTop: Spacing.md,
+    },
+    privacyNote: { marginTop: Spacing.base },
 
-  inputBar: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: Spacing.sm,
-    paddingHorizontal: Spacing.base,
-    paddingTop: Spacing.md,
-    backgroundColor: Colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
-  input: {
-    flex: 1,
-    backgroundColor: Colors.surfaceElevated,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: Radius.lg,
-    paddingHorizontal: Spacing.base,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.md,
-    fontFamily: FontFamily.body,
-    fontSize: FontSize.body,
-    color: Colors.textPrimary,
-    maxHeight: 120,
-  },
-  sendBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-    ...Shadow.floating,
-  },
-  sendBtnDisabled: {
-    backgroundColor: Colors.track,
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-});
+    inputBar: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      gap: Spacing.sm,
+      paddingHorizontal: Spacing.screen,
+      paddingTop: Spacing.md,
+      backgroundColor: colors.card,
+      borderTopWidth: 1,
+      borderTopColor: colors.borderCard,
+    },
+    inputField: {
+      flex: 1,
+      backgroundColor: colors.canvas,
+      borderWidth: 1.5,
+      borderColor: colors.borderInput,
+      borderRadius: Radius.lg,
+      paddingHorizontal: Spacing.base,
+      paddingVertical: Platform.OS === 'ios' ? Spacing.md : Spacing.sm,
+      justifyContent: 'center',
+    },
+    input: {
+      ...Type.body,
+      color: colors.ink,
+      padding: 0,
+      maxHeight: 120,
+    },
+    sendBtn: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: colors.scarlet,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+    },
+    sendBtnDisabled: {
+      backgroundColor: colors.track,
+    },
+  });
+}

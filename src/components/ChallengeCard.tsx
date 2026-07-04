@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Colors, FontFamily } from '../theme';
+import { View } from 'react-native';
+import { useTheme } from '../theme';
 import { ChallengeStatus, ChallengeType } from '../services/challengeService';
-import AppIcon from './ui/AppIcon';
+import { Card, Text, AppIcon } from './ui';
 
 interface ChallengeCardProps {
   name: string;
@@ -36,6 +36,7 @@ export default function ChallengeCard({
   joined,
   onPress,
 }: ChallengeCardProps) {
+  const { colors } = useTheme();
   const [timeLeft, setTimeLeft] = useState(getTimeRemaining(endDate, status));
 
   useEffect(() => {
@@ -46,66 +47,78 @@ export default function ChallengeCard({
     return () => clearInterval(timer);
   }, [endDate, status]);
 
-  const typeBadge = type === 'solo' ? 'Solo' : 'Team';
-  const typeBadgeColor = type === 'solo' ? Colors.primary : Colors.accent;
+  // solo = scarlet tint · team = streak (momentum) tint
+  const soloType = type === 'solo';
+  const badgeBg = soloType ? colors.brandTint : colors.streakTint;
+  const badgeFg = soloType ? colors.scarlet : colors.streak;
+
+  const timeColor =
+    status === 'completed'
+      ? colors.textTertiary
+      : status === 'active'
+      ? colors.scarlet
+      : colors.textSecondary;
 
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.8}>
-      <View style={styles.header}>
-        <Text style={styles.name}>{name}</Text>
-        <View style={[styles.badge, { backgroundColor: typeBadgeColor + '22', borderColor: typeBadgeColor }]}>
-          <Text style={[styles.badgeText, { color: typeBadgeColor }]}>{typeBadge}</Text>
+    <Card onPress={onPress} style={{ marginBottom: 12 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+        <Text variant="subhead" color={colors.ink} style={{ flex: 1, marginRight: 8 }} numberOfLines={1}>
+          {name}
+        </Text>
+        <View
+          style={{
+            backgroundColor: badgeBg,
+            borderRadius: 6,
+            paddingHorizontal: 8,
+            paddingVertical: 3,
+          }}
+        >
+          <Text color={badgeFg} style={{ fontFamily: 'DMSans_600SemiBold', fontSize: 11, lineHeight: 14 }}>
+            {soloType ? 'Solo' : 'Team'}
+          </Text>
         </View>
       </View>
 
-      <View style={styles.metaRow}>
-        <Text style={styles.timeLeft}>{timeLeft}</Text>
-        <Text style={styles.stakes} numberOfLines={1}>{stakesText}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+        <AppIcon name="clock" size={13} color={timeColor} />
+        <Text variant="numInline" color={timeColor}>
+          {timeLeft}
+        </Text>
+        {stakesText ? (
+          <Text
+            variant="label"
+            color={colors.textSecondary}
+            numberOfLines={1}
+            style={{ flex: 1, textAlign: 'right' }}
+          >
+            {stakesText}
+          </Text>
+        ) : null}
       </View>
 
-      <View style={styles.footer}>
-        <Text style={styles.participants}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text variant="label" color={colors.textSecondary}>
           {participantCount} {participantCount === 1 ? 'player' : 'players'}
         </Text>
         {joined && (
-          <View style={styles.joinedPill}>
-            <AppIcon name="check" size={13} color={Colors.primary} />
-            <Text style={styles.joinedText}>Joined</Text>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 5,
+              backgroundColor: colors.successTint,
+              borderRadius: 99,
+              paddingHorizontal: 10,
+              paddingVertical: 3,
+            }}
+          >
+            <AppIcon name="check" size={13} color={colors.successDeep} />
+            <Text color={colors.successDeep} style={{ fontFamily: 'DMSans_600SemiBold', fontSize: 11 }}>
+              Joined
+            </Text>
           </View>
         )}
       </View>
-    </TouchableOpacity>
+    </Card>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: Colors.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 16,
-    marginBottom: 12,
-  },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  name: { fontFamily: FontFamily.displayBold, fontSize: 18, color: Colors.textPrimary, flex: 1, marginRight: 8 },
-  badge: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  badgeText: { fontFamily: FontFamily.bodySemiBold, fontSize: 11 },
-  metaRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
-  timeLeft: { fontFamily: FontFamily.bodyMedium, fontSize: 13, color: Colors.accent },
-  stakes: { fontFamily: FontFamily.body, fontSize: 12, color: Colors.textSecondary, maxWidth: '55%', textAlign: 'right' },
-  footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  participants: { fontFamily: FontFamily.bodyMedium, fontSize: 12, color: Colors.textSecondary },
-  joinedPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: Colors.primary + '14',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderWidth: 1,
-    borderColor: Colors.primary + '33',
-  },
-  joinedText: { fontFamily: FontFamily.bodySemiBold, fontSize: 11, color: Colors.primary },
-});

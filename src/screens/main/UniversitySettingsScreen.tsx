@@ -1,15 +1,13 @@
 import React, { useEffect, useState } from 'react';
+import { View, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { useTheme, Radius } from '../../theme';
 import {
-  View,
+  Screen,
+  ScreenHeader,
   Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
-import { Colors, FontFamily } from '../../theme';
-import AppIcon from '../../components/ui/AppIcon';
+  Button,
+  AppIcon,
+} from '../../components/ui';
 import { UNIVERSITIES, getDiningHallsForUniversity } from '../../data/universityDining';
 import { supabase } from '../../lib/supabase';
 import { getProfileIdentity, updateProfileUniversity } from '../../services/profileService';
@@ -23,6 +21,7 @@ function firstHallName(university: string): string {
 }
 
 export default function UniversitySettingsScreen({ navigation }: any) {
+  const { colors } = useTheme();
   const refreshStats = useUserStore((s) => s.refreshStats);
 
   const [selectedUni, setSelectedUni] = useState(DEFAULT_UNIVERSITY);
@@ -97,117 +96,106 @@ export default function UniversitySettingsScreen({ navigation }: any) {
 
   if (isLoading) {
     return (
-      <View style={[styles.container, styles.loadingBox]}>
-        <ActivityIndicator color={Colors.primary} size="large" />
-      </View>
+      <Screen>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator color={colors.scarlet} size="large" />
+        </View>
+      </Screen>
     );
   }
 
   const diningHalls = getDiningHallsForUniversity(selectedUni);
 
-  return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-        <AppIcon name="back" size={17} color={Colors.primary} />
-        <Text style={styles.backText}>Back</Text>
-      </TouchableOpacity>
-
-      <Text style={styles.title}>UNIVERSITY</Text>
-      <Text style={styles.subtitle}>Your university and dining preferences</Text>
-
-      {/* University */}
-      <Text style={styles.sectionTitle}>YOUR UNIVERSITY</Text>
-      {UNIVERSITIES.map((uni) => (
-        <TouchableOpacity
-          key={uni}
-          style={[styles.optionRow, selectedUni === uni && styles.optionRowActive]}
-          onPress={() => onSelectUniversity(uni)}
-        >
-          <Text style={[styles.optionText, selectedUni === uni && styles.optionTextActive]}>
-            {uni}
+  function SelectRow({
+    title,
+    subtitle,
+    active,
+    onPress,
+  }: {
+    title: string;
+    subtitle?: string;
+    active: boolean;
+    onPress: () => void;
+  }) {
+    return (
+      <Pressable
+        onPress={onPress}
+        style={{
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          backgroundColor: active ? colors.brandTint : colors.card,
+          borderRadius: Radius.card,
+          borderWidth: 1,
+          borderColor: active ? colors.brandTintBorder : colors.borderCard,
+          paddingVertical: 14,
+          paddingHorizontal: 16,
+          marginBottom: 8,
+        }}
+      >
+        <View style={{ flex: 1, marginRight: 12 }}>
+          <Text variant="subhead" color={active ? colors.scarlet : colors.ink}>
+            {title}
           </Text>
-          {selectedUni === uni && <AppIcon name="checkmark" size={18} color={Colors.primary} strokeWidth={3} />}
-        </TouchableOpacity>
+          {subtitle ? (
+            <Text variant="label" color={colors.textSecondary} style={{ marginTop: 2 }}>
+              {subtitle}
+            </Text>
+          ) : null}
+        </View>
+        {active ? (
+          <AppIcon name="checkmark" size={18} color={colors.scarlet} strokeWidth={3} />
+        ) : null}
+      </Pressable>
+    );
+  }
+
+  return (
+    <Screen scroll>
+      <ScreenHeader title="University & dining" onBack={() => navigation.goBack()} />
+
+      <Text variant="body" color={colors.textSecondary} style={{ marginTop: 4, marginBottom: 18 }}>
+        Your university and dining preferences.
+      </Text>
+
+      <Text variant="overline" color={colors.textSecondary} style={{ marginBottom: 10 }}>
+        Your university
+      </Text>
+      {UNIVERSITIES.map((uni) => (
+        <SelectRow
+          key={uni}
+          title={uni}
+          active={selectedUni === uni}
+          onPress={() => onSelectUniversity(uni)}
+        />
       ))}
 
-      {/* Dining Halls */}
-      <Text style={[styles.sectionTitle, { marginTop: 24 }]}>PREFERRED DINING HALL</Text>
+      <Text variant="overline" color={colors.textSecondary} style={{ marginTop: 18, marginBottom: 10 }}>
+        Preferred dining hall
+      </Text>
       {diningHalls.length === 0 ? (
-        <Text style={styles.notice}>No dining halls listed for this university.</Text>
+        <Text variant="body" color={colors.textSecondary} style={{ paddingVertical: 8 }}>
+          No dining halls listed for this university.
+        </Text>
       ) : (
         diningHalls.map((hall) => (
-          <TouchableOpacity
+          <SelectRow
             key={hall.name}
-            style={[styles.optionRow, selectedHall === hall.name && styles.optionRowActive]}
+            title={hall.name}
+            subtitle={hall.campus}
+            active={selectedHall === hall.name}
             onPress={() => setSelectedHall(hall.name)}
-          >
-            <View>
-              <Text style={[styles.optionText, selectedHall === hall.name && styles.optionTextActive]}>
-                {hall.name}
-              </Text>
-              <Text style={styles.optionSub}>{hall.campus}</Text>
-            </View>
-            {selectedHall === hall.name && <AppIcon name="checkmark" size={18} color={Colors.primary} strokeWidth={3} />}
-          </TouchableOpacity>
+          />
         ))
       )}
 
-      <TouchableOpacity
-        style={[styles.saveBtn, isSaving && styles.saveBtnDisabled]}
+      <Button
+        label="Save"
         onPress={save}
-        disabled={isSaving}
-      >
-        {isSaving ? (
-          <ActivityIndicator color={Colors.background} />
-        ) : (
-          <Text style={styles.saveBtnText}>SAVE</Text>
-        )}
-      </TouchableOpacity>
-    </ScrollView>
+        loading={isSaving}
+        loadingLabel="Saving…"
+        style={{ marginTop: 18 }}
+      />
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  content: { padding: 20, paddingTop: 60, paddingBottom: 40 },
-  loadingBox: { alignItems: 'center', justifyContent: 'center' },
-  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 16 },
-  backText: { fontFamily: FontFamily.bodyMedium, fontSize: 15, color: Colors.primary },
-  title: { fontFamily: FontFamily.displayBold, fontSize: 24, color: Colors.textPrimary, letterSpacing: 1, marginBottom: 4 },
-  subtitle: { fontFamily: FontFamily.body, fontSize: 14, color: Colors.textSecondary, marginBottom: 24 },
-  sectionTitle: {
-    fontFamily: FontFamily.displayBold,
-    fontSize: 13,
-    color: Colors.textSecondary,
-    letterSpacing: 1.5,
-    marginBottom: 10,
-  },
-  notice: { fontFamily: FontFamily.body, fontSize: 13, color: Colors.textSecondary, paddingVertical: 8 },
-  optionRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 16,
-    marginBottom: 6,
-  },
-  optionRowActive: {
-    borderColor: Colors.primary + '44',
-    backgroundColor: Colors.primary + '08',
-  },
-  optionText: { fontFamily: FontFamily.bodyMedium, fontSize: 14, color: Colors.textPrimary },
-  optionTextActive: { color: Colors.primary },
-  optionSub: { fontFamily: FontFamily.body, fontSize: 11, color: Colors.textSecondary, marginTop: 2 },
-  saveBtn: {
-    backgroundColor: Colors.primary,
-    borderRadius: 50,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 24,
-  },
-  saveBtnDisabled: { opacity: 0.6 },
-  saveBtnText: { fontFamily: FontFamily.displayBold, fontSize: 16, color: Colors.background },
-});
