@@ -7,5 +7,10 @@
     "allowSyntheticDefaultImports": true,
     "types": ["jest"]
   },
-  "exclude": ["node_modules", "supabase/functions"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "Meal tracking app design specs",
+    "supabase/functions"
+  ]
 }

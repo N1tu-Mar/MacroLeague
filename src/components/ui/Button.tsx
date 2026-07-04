@@ -17,7 +17,7 @@ import Text from './Text';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'google';
+type Variant = 'primary' | 'secondary' | 'ghost' | 'google' | 'apple';
 
 interface ButtonProps {
   label: string;
@@ -57,6 +57,18 @@ function GoogleGlyph({ size = 18 }: { size?: number }) {
   );
 }
 
+/** Official Apple logo mark for the "Continue with Apple" button (Guideline 4.8). */
+function AppleGlyph({ size = 18, color = '#FFFFFF' }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path
+        fill={color}
+        d="M17.05 12.04c-.03-2.6 2.12-3.85 2.22-3.91-1.21-1.77-3.09-2.01-3.76-2.04-1.6-.16-3.12.94-3.93.94-.81 0-2.06-.92-3.39-.9-1.74.03-3.35 1.01-4.25 2.57-1.81 3.14-.46 7.79 1.3 10.34.86 1.25 1.89 2.65 3.24 2.6 1.3-.05 1.79-.84 3.36-.84 1.57 0 2.01.84 3.39.81 1.4-.02 2.29-1.27 3.15-2.53.99-1.45 1.4-2.86 1.42-2.93-.03-.01-2.73-1.05-2.76-4.16zM14.47 4.5c.72-.87 1.2-2.08 1.07-3.29-1.03.04-2.28.69-3.02 1.56-.66.77-1.24 2-.98 3.19 1.15.09 2.24-.59 2.93-1.46z"
+      />
+    </Svg>
+  );
+}
+
 /**
  * Primary action button (spec F4). Scarlet fill by default with a press-scale
  * (0.97) + carmine-deep pressed color. `secondary`/`ghost`/`google` variants
@@ -76,7 +88,7 @@ export default function Button({
   size = 'lg',
   style,
 }: ButtonProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const scale = useSharedValue(1);
   const pressed = useSharedValue(0);
   const isDisabled = disabled || loading;
@@ -121,6 +133,10 @@ export default function Button({
   } else if (variant === 'ghost') {
     bg = 'transparent';
     labelColor = colors.scarlet;
+  } else if (variant === 'apple') {
+    // Apple HIG: black button on light backgrounds, white button on dark ones.
+    bg = isDark ? '#FFFFFF' : '#000000';
+    labelColor = isDark ? '#000000' : '#FFFFFF';
   }
   if (isDisabled && variant === 'primary') {
     bg = colors.track;
@@ -158,10 +174,16 @@ export default function Button({
       {loading ? (
         <ActivityIndicator
           size="small"
-          color={variant === 'primary' ? colors.onPrimary : colors.textSecondary}
+          color={
+            variant === 'primary' || variant === 'apple'
+              ? labelColor
+              : colors.textSecondary
+          }
         />
       ) : variant === 'google' ? (
         <GoogleGlyph />
+      ) : variant === 'apple' ? (
+        <AppleGlyph color={labelColor} />
       ) : icon ? (
         <AppIcon name={icon} size={19} color={iconColor ?? labelColor} />
       ) : null}

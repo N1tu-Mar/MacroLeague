@@ -9,6 +9,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.macroleague.app",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -29,6 +30,7 @@
     "plugins": [
       "expo-font",
       "expo-web-browser",
+      "expo-apple-authentication",
       "expo-dev-client",
       "expo-status-bar",
       "@sentry/react-native",
