@@ -65,11 +65,22 @@ EXPO_PUBLIC_SUPABASE_URL
 EXPO_PUBLIC_SUPABASE_ANON_KEY
 ```
 
-This one is optional:
+These are optional (each is a no-op when unset):
 
 ```text
-EXPO_PUBLIC_SENTRY_DSN
+EXPO_PUBLIC_SENTRY_DSN            # crash / error reporting (Sentry)
+EXPO_PUBLIC_AMPLITUDE_API_KEY     # product analytics (Amplitude)
+EXPO_PUBLIC_TELEMETRYDECK_APP_ID  # product analytics (TelemetryDeck App ID)
 ```
+
+Product analytics events (onboarding, first meal, return sessions, challenge
+participation, reward views — see `src/lib/analytics.ts`) fan out to **both**
+Amplitude and TelemetryDeck. Set either key, both, or neither: each provider is
+independently active only when its own key is present, and with no keys set
+tracking is fully disabled (events are logged to the console in dev only). Both
+are public client keys embedded in the bundle, exactly like the Sentry DSN and
+Supabase anon key — they only permit *sending* events. Users are identified by
+their opaque Supabase id only; no email/PII is ever sent.
 
 Create the required variables for every EAS environment used by its matching
 build profile:
@@ -107,6 +118,26 @@ the application:
 These redirects are used by both Google OAuth and password recovery. Test both on
 each platform before release; a web callback succeeding does not prove that a
 custom-scheme callback opens an installed mobile app.
+
+### Sign in with Apple provider
+
+Sign in with Apple is already implemented in the app (`signInWithApple` in
+`src/lib/auth.ts`, wired into the Welcome and Sign-in screens; `app.json` sets
+`ios.usesAppleSignIn: true` and includes the `expo-apple-authentication` plugin).
+On iOS it uses the native Apple sheet and exchanges the identity token via
+`supabase.auth.signInWithIdToken`; on web/Android it falls back to the Supabase
+Apple web-OAuth flow. Two things still have to be configured server-side before it
+works end to end:
+
+- **Supabase → Authentication → Providers → Apple:** enable the provider and add
+  the app bundle id `com.macroleague.app` as an authorized Client ID (the native
+  iOS flow authenticates against the bundle id, not a Services ID).
+- **Apple Developer:** the App ID `com.macroleague.app` must have the "Sign in with
+  Apple" capability enabled. EAS manages this with the other iOS credentials during
+  a build.
+
+Because the app already offers Google (a third-party login) for the primary
+account, App Store Review Guideline 4.8 requires this Apple option on iOS.
 
 ## 4. Web deployment
 
@@ -221,27 +252,38 @@ and "ready for the App Store / Google Play."
 
 ### Highest-priority launch gaps
 
-- **Sign in with Apple for iOS:** the app currently supports email/password and
-  Google OAuth. Because Google is a third-party login used for the primary
-  account, Apple review will likely expect an equivalent Apple login option.
-- **Hosted privacy policy and support URL:** both Apple and Google require
-  accurate privacy disclosures. The policy should explicitly cover account data,
-  nutrition/meal data, analytics/crash reporting, retention, and deletion.
+- **Sign in with Apple for iOS:** *Implemented in the app.* Email/password,
+  Google, and native Sign in with Apple are all wired (see `src/lib/auth.ts`).
+  What remains is server-side configuration — enable the Apple provider in
+  Supabase with `com.macroleague.app` as the Client ID — and verifying it on a
+  physical iOS build (see section 3 and the verification runbook in section 11).
+- **Hosted privacy policy and terms:** *Published.* The Privacy Policy and Terms
+  of Service are live at stable URLs (see section 11) and ship with the web export
+  as `public/privacy-policy.html` and `public/terms.html`. They are linked from
+  the app at sign-up and from Profile → About &amp; legal. Both cover account data,
+  nutrition/meal data, crash reporting (Sentry), product analytics (TelemetryDeck
+  and Amplitude), retention, and the 14-day soft-delete/reactivation flow. Apple and
+  Google also require these URLs in the store listing.
 - **Google Play Data safety form:** the store listing must accurately disclose
   what data is collected, whether it is shared, whether it is encrypted in
   transit, and how deletion requests work.
 - **Store metadata and review assets:** screenshots, app description, keywords,
-  category, age rating, support email, review notes, and a test account or
-  review path if the reviewer needs credentials.
+  category, age rating, support email (`nityanth.maramreddy@gmail.com`), review
+  notes, and a test account or review path if the reviewer needs credentials.
+  There is no separate support website — support is email-only, which both stores
+  accept (App Store Connect requires a support URL *or* a contact; Google Play
+  accepts an email as the support contact).
 - **Production-ready auth setup:** native Google OAuth redirects, password reset,
   and account lifecycle flows must be verified on actual preview/production
   builds, not just web or local dev.
 - **Production backend readiness:** Supabase production project, migrations,
   Edge Functions, secrets, cron jobs, and environment variables must all be
   aligned with the build that is going to testers.
-- **Product analytics beyond crash reporting:** Sentry is useful for failures,
-  but early product-market-fit work also needs funnel analytics so we can see
-  onboarding completion, first meal logging, challenge joins, and retention.
+- **Product analytics beyond crash reporting:** *Implemented.* Funnel analytics
+  (onboarding, first meal, return session, challenge participation, reward views)
+  ship via `src/lib/analytics.ts` to Amplitude and TelemetryDeck. What remains is
+  operational: set the provider keys per EAS environment, and disclose both
+  processors in the store privacy forms (see below).
 
 ### Current policy constraints to plan around
 
@@ -263,12 +305,18 @@ and "ready for the App Store / Google Play."
 
 Before external testing:
 
-1. Add Sign in with Apple on iOS.
-2. Publish the real privacy policy and terms pages on a stable URL.
+1. ~~Add Sign in with Apple on iOS.~~ **Done in app** — enable the Apple provider
+   in Supabase and verify on a physical iOS build (section 3, section 11).
+2. ~~Publish the real privacy policy and terms pages on a stable URL.~~ **Done** —
+   published and linked in-app (section 11).
 3. Verify Google OAuth, password reset, account deletion, and reactivation on
-   physical preview builds.
-4. Add product analytics events for onboarding, first meal logged, return
-   session, challenge participation, and reward views.
+   physical preview builds — follow the runbook in section 11.
+4. ~~Add product analytics events for onboarding, first meal logged, return
+   session, challenge participation, and reward views.~~ **Done in app** —
+   implemented in `src/lib/analytics.ts` (dual-provider Amplitude + TelemetryDeck,
+   no-op without keys) and wired into all five funnels. Set
+   `EXPO_PUBLIC_TELEMETRYDECK_APP_ID` / `EXPO_PUBLIC_AMPLITUDE_API_KEY` per
+   environment (section 2) to turn collection on.
 5. Create a review/demo account with safe seed data if the store reviewer needs
    to get past sign-in quickly.
 
@@ -380,10 +428,87 @@ At the end of the first wave, you should be able to answer:
    challenge creation in production-like preview builds on both platforms.
 6. Test the web export on the final HTTPS domain and add that origin to Supabase.
 7. Build Android/iOS preview binaries and perform physical-device QA.
-8. Prepare store icons, screenshots, descriptions, privacy policy, support URL,
-   data-safety/privacy answers, and an App Review test account if required.
+8. Prepare store icons, screenshots, descriptions, the privacy policy and terms
+   URLs (section 11), the support email (`nityanth.maramreddy@gmail.com`; no
+   support URL), data-safety/privacy answers, and an App Review test account if
+   required.
 9. Build production binaries, upload to internal Play testing/TestFlight, and only
    promote them publicly after that round passes.
 
 For later releases, EAS can combine build and upload with `--auto-submit`, but a
 manual promotion/review step remains for public store release.
+
+## 11. Support, legal links, and auth verification
+
+### Support and legal reference
+
+Store listings and the app itself point at a single support contact and two legal
+pages. These are the canonical values — reuse them everywhere (App Store Connect,
+Play Console, the app, and any marketing site):
+
+- **Support email:** `nityanth.maramreddy@gmail.com`
+- **Support URL:** none. Support is handled over email only. Enter the email as the
+  support contact; leave the support URL blank where the store allows it.
+- **Privacy Policy:** <https://claude.ai/code/artifact/35b8b983-747c-4d66-a7f0-d5576cbf8d63>
+- **Terms of Service:** <https://claude.ai/code/artifact/2ec780f9-c2d0-452a-aa02-bc2e6897f1a4>
+
+The same two pages also ship with the web export as `public/privacy-policy.html`
+and `public/terms.html`, so once the web app is deployed to its own domain they are
+also reachable at `https://<your-domain>/privacy-policy.html` and `/terms.html`. To
+switch the app and store listing to the domain-hosted copies, update `PRIVACY_URL`
+and `TERMS_URL` in `src/lib/legal.ts`. Everything auth-facing reads from that one
+file: the sign-up/Welcome consent line and Profile → **About & legal**.
+
+> The published Privacy/Terms links are private to the author by default. Before
+> submitting to Apple/Google (or sharing with reviewers), make each Artifact link
+> public, or replace both URLs with the domain-hosted copies above — a reviewer must
+> be able to open them without signing in.
+
+The Terms cover the usual consumer-app ground and, per product intent, make explicit
+that by accepting them the user consents to their app usage and analytics being used
+to operate and improve MacroLeague. Crash/error reporting runs through **Sentry** and
+product-usage analytics through **TelemetryDeck** and **Amplitude**. The Privacy Policy
+covers account data, nutrition/meal data, social/leaderboard data, crash reporting
+(Sentry) and product analytics (TelemetryDeck/Amplitude), retention, and the 14-day
+soft-delete + reactivation flow.
+
+> Note: when disclosing analytics processors in the App Store privacy labels and the
+> Google Play Data safety form, list **all three** (Sentry, TelemetryDeck, Amplitude),
+> matching the Privacy Policy above.
+
+### Auth verification runbook
+
+Run this on a **physical iOS and Android preview build** (`eas build --profile
+preview`) pointed at the production Supabase project, plus once on the web export.
+A web callback passing does not prove a native custom-scheme callback works. Before
+starting, confirm the Supabase redirect allowlist and the Google/Apple providers are
+configured (sections 3). Record pass/fail per platform.
+
+1. **Sign in with Apple (iOS).** Fresh install → Welcome → "Continue with Apple" →
+   complete the native Apple sheet. *Expect:* a session is created and the app lands
+   on onboarding (new user) or Home (returning). Repeat with **Hide My Email** and
+   confirm the account still works. If it errors with "provider not configured,"
+   the Supabase Apple provider or Client ID is missing (section 3).
+2. **Google OAuth.** Welcome/Sign-in → "Continue with Google" → complete Google in
+   the in-app browser. *Expect:* the browser returns to the app via `macroleague://auth`
+   and a session is established. On web, expect the full-page redirect back to the
+   origin to establish the session. A hang usually means the exact redirect URI is
+   not in the Supabase allowlist.
+3. **Password reset.** Sign-in → "Forgot password?" → submit the account email.
+   *Expect:* a recovery email arrives; opening the link reopens the app (native) or
+   site (web) in a `PASSWORD_RECOVERY` session; setting a new password succeeds and
+   the new password signs in. Confirm submitting an unknown email still resolves with
+   no error (we don't reveal whether an account exists).
+4. **Account deletion.** Signed in → Profile → **Delete account** → confirm.
+   *Expect:* `requestAccountDeletion` returns a scheduled-deletion time ~14 days out,
+   the user is signed out, and a heads-up email is sent. Confirm the account is
+   archived (App.tsx shows the reactivation gate on next sign-in, not the normal app).
+5. **Reactivation.** Within the 14-day window, sign back into the deleted account.
+   *Expect:* the reactivation gate appears; choosing to reactivate calls
+   `reactivateAccount`, clears the scheduled deletion, and restores full access with
+   data intact. Confirm the backend rejects reactivation after the window closes.
+
+These five flows are the ones flagged for verification. The Apple provider is the
+only piece still requiring server-side config; the other four are fully wired in the
+app (`src/lib/auth.ts`, `src/services/accountService.ts`, the `account-lifecycle`
+edge function) and just need to be exercised on real builds.

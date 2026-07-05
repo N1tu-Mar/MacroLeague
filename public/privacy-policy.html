@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MacroLeague Privacy Policy</title>
+<meta name="description" content="How MacroLeague collects, uses, retains, and deletes your data.">
+<meta name="robots" content="index,follow">
+<style>html,body{margin:0;padding:0}</style>
+</head>
+<body>
+<style>
+  :root {
+    --ground: #FBFAF9;
+    --raise: #FFFFFF;
+    --ink: #17181C;
+    --body: #5B5A61;
+    --muted: #8A8890;
+    --accent: #D9364A;
+    --accent-soft: #FBEBED;
+    --hairline: #EAE6E2;
+    --measure: 40rem;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #101014;
+      --raise: #17171C;
+      --ink: #F3F2F0;
+      --body: #ADABB3;
+      --muted: #75737B;
+      --accent: #F0576B;
+      --accent-soft: #241417;
+      --hairline: #26262D;
+    }
+  }
+  :root[data-theme="light"] {
+    --ground: #FBFAF9; --raise: #FFFFFF; --ink: #17181C; --body: #5B5A61;
+    --muted: #8A8890; --accent: #D9364A; --accent-soft: #FBEBED; --hairline: #EAE6E2;
+  }
+  :root[data-theme="dark"] {
+    --ground: #101014; --raise: #17171C; --ink: #F3F2F0; --body: #ADABB3;
+    --muted: #75737B; --accent: #F0576B; --accent-soft: #241417; --hairline: #26262D;
+  }
+
+  * { box-sizing: border-box; }
+  .doc {
+    background: var(--ground);
+    color: var(--body);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.65;
+    font-size: 16.5px;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+  .wrap { max-width: var(--measure); margin: 0 auto; padding: 0 22px 96px; }
+
+  header.brand {
+    border-bottom: 1px solid var(--hairline);
+    margin-bottom: 40px;
+    padding: 30px 0 26px;
+  }
+  .logo { display: flex; align-items: center; gap: 11px; }
+  .mark {
+    width: 30px; height: 30px; border-radius: 9px;
+    background: var(--accent);
+    display: grid; place-items: center;
+    color: #fff; font-weight: 800; font-size: 17px; letter-spacing: -0.5px;
+    flex: none;
+  }
+  .logo b { color: var(--ink); font-size: 16px; font-weight: 700; letter-spacing: -0.2px; }
+  .logo span { display: block; color: var(--muted); font-size: 11.5px; font-weight: 500; margin-top: 1px; }
+
+  .eyebrow {
+    text-transform: uppercase; letter-spacing: 0.14em; font-size: 11.5px;
+    font-weight: 700; color: var(--accent); margin: 30px 0 12px;
+  }
+  h1 {
+    color: var(--ink); font-size: clamp(30px, 6vw, 40px); line-height: 1.08;
+    font-weight: 800; letter-spacing: -0.02em; margin: 0 0 14px; text-wrap: balance;
+  }
+  .lede { font-size: 17.5px; color: var(--body); margin: 0; }
+  .meta { color: var(--muted); font-size: 13.5px; margin-top: 18px; }
+
+  nav.toc {
+    background: var(--raise); border: 1px solid var(--hairline); border-radius: 14px;
+    padding: 18px 20px; margin: 34px 0 44px;
+  }
+  nav.toc p { margin: 0 0 10px; text-transform: uppercase; letter-spacing: 0.1em;
+    font-size: 11px; font-weight: 700; color: var(--muted); }
+  nav.toc ol { margin: 0; padding: 0; list-style: none; counter-reset: toc;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; }
+  nav.toc li { counter-increment: toc; }
+  nav.toc a { color: var(--body); text-decoration: none; font-size: 14.5px;
+    display: flex; gap: 10px; padding: 4px 0; }
+  nav.toc a::before { content: counter(toc, decimal-leading-zero); color: var(--accent);
+    font-variant-numeric: tabular-nums; font-weight: 700; font-size: 12.5px; }
+  nav.toc a:hover { color: var(--accent); }
+  @media (max-width: 560px) { nav.toc ol { grid-template-columns: 1fr; } }
+
+  section { margin-bottom: 34px; scroll-margin-top: 20px; }
+  h2 {
+    color: var(--ink); font-size: 20px; font-weight: 750; letter-spacing: -0.01em;
+    margin: 0 0 12px; display: flex; align-items: baseline; gap: 12px;
+  }
+  h2 .n { color: var(--accent); font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em; flex: none; }
+  h3 { color: var(--ink); font-size: 15.5px; font-weight: 700; margin: 22px 0 6px; }
+  p { margin: 0 0 14px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  strong { color: var(--ink); font-weight: 650; }
+
+  ul { margin: 0 0 14px; padding: 0; list-style: none; }
+  ul li { position: relative; padding-left: 22px; margin-bottom: 9px; }
+  ul li::before { content: ""; position: absolute; left: 4px; top: 10px;
+    width: 6px; height: 6px; border-radius: 2px; background: var(--accent); }
+  ul li strong { display: block; }
+
+  .callout {
+    background: var(--accent-soft); border: 1px solid var(--hairline);
+    border-left: 3px solid var(--accent); border-radius: 12px;
+    padding: 16px 18px; margin: 22px 0; color: var(--ink); font-size: 15px;
+  }
+  .callout p { margin: 0; color: var(--body); }
+  .callout strong { color: var(--ink); }
+
+  footer {
+    border-top: 1px solid var(--hairline); margin-top: 52px; padding-top: 26px;
+    color: var(--muted); font-size: 14px;
+  }
+  footer .contact { color: var(--ink); font-weight: 650; font-size: 15px; margin-bottom: 4px; }
+  footer a:focus-visible, nav.toc a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
+</style>
+
+<div class="doc">
+  <div class="wrap">
+    <header class="brand">
+      <div class="logo">
+        <div class="mark">M</div>
+        <div>
+          <b>MacroLeague</b>
+          <span>Nutrition leagues for friends</span>
+        </div>
+      </div>
+    </header>
+
+    <p class="eyebrow">Privacy Policy</p>
+    <h1>How MacroLeague handles your data</h1>
+    <p class="lede">This policy explains what we collect when you use MacroLeague, why we
+      collect it, how long we keep it, and the control you have over it — including deleting
+      your account from inside the app.</p>
+    <p class="meta">Effective July 5, 2026 · Last updated July 5, 2026</p>
+
+    <nav class="toc" aria-label="Contents">
+      <p>Contents</p>
+      <ol>
+        <li><a href="#who">Who we are</a></li>
+        <li><a href="#collect">Information we collect</a></li>
+        <li><a href="#use">How we use it</a></li>
+        <li><a href="#analytics">Analytics &amp; crash reporting</a></li>
+        <li><a href="#sharing">When we share data</a></li>
+        <li><a href="#retention">Retention &amp; deletion</a></li>
+        <li><a href="#rights">Your choices &amp; rights</a></li>
+        <li><a href="#security">Security</a></li>
+        <li><a href="#children">Age requirement</a></li>
+        <li><a href="#changes">Changes &amp; contact</a></li>
+      </ol>
+    </nav>
+
+    <section id="who">
+      <h2><span class="n">01</span> Who we are</h2>
+      <p>MacroLeague is a mobile and web app that lets you log meals, track nutrition targets,
+        and compete with friends on leaderboards and challenges. This policy covers the
+        MacroLeague app on iOS, Android, and the web, along with the accounts and data behind it.</p>
+      <p>If you have any question about your privacy or want to exercise a right described
+        below, email us at <a href="mailto:nityanth.maramreddy@gmail.com">nityanth.maramreddy@gmail.com</a>.
+        That address is also our support contact.</p>
+    </section>
+
+    <section id="collect">
+      <h2><span class="n">02</span> Information we collect</h2>
+      <p>We only collect what the app needs to work and to get better. That falls into a few
+        groups:</p>
+      <ul>
+        <li><strong>Account information</strong>When you sign up we store your email address,
+          and — if you use Sign in with Apple or Google — the identifier and email that provider
+          returns. If you use Apple's Hide My Email, we only ever see the private relay address.
+          Your display name and profile avatar are stored when you set them.</li>
+        <li><strong>Profile &amp; goals</strong>Nutrition goals, macro targets, and preferences
+          you enter during onboarding and in settings.</li>
+        <li><strong>Nutrition &amp; meal data</strong>The meals you log, their estimated
+          nutrition, timestamps, and your resulting daily scores and streaks.</li>
+        <li><strong>Social &amp; league data</strong>Friend connections, challenge and league
+          participation, and the leaderboard standing that other members in your leagues can see.</li>
+        <li><strong>Usage &amp; diagnostics</strong>Anonymous or pseudonymous data about how
+          you use the app — screens visited, actions taken, performance, and crash reports —
+          collected to keep the app stable and to improve it. See section 4.</li>
+      </ul>
+    </section>
+
+    <section id="use">
+      <h2><span class="n">03</span> How we use your information</h2>
+      <p>We use the information above to:</p>
+      <ul>
+        <li>Create and secure your account and sign you in.</li>
+        <li>Run the core product — logging meals, calculating scores, and tracking progress.</li>
+        <li>Power social features, including friends, challenges, and leaderboards.</li>
+        <li>Send account-related messages such as password resets and deletion notices.</li>
+        <li>Understand how the product is used so we can fix problems and improve it over time.</li>
+      </ul>
+    </section>
+
+    <section id="analytics">
+      <h2><span class="n">04</span> Analytics &amp; crash reporting</h2>
+      <p>MacroLeague uses <strong>Sentry</strong> to record crashes and errors, and
+        <strong>TelemetryDeck</strong> and <strong>Amplitude</strong> to record product-usage
+        analytics. Together these tell us where the app breaks and how people actually move
+        through it — for example, how far new users get through onboarding, or where meal logging
+        slows down — so we can prioritize fixes and improvements. Product-analytics events include
+        actions such as completing onboarding, logging your first meal, starting a session, joining
+        a challenge, and viewing rewards.</p>
+      <div class="callout">
+        <p>By creating an account and accepting our Terms of Service, you consent to your usage
+          and analytics data being used to operate and improve MacroLeague as we keep building it.
+          This is a standard practice for consumer apps and is described in plain terms here and
+          in the Terms.</p>
+      </div>
+      <p>We aim to keep analytics tied to a pseudonymous identifier rather than to directly
+        identifying details, and we do not use it to sell you to anyone.</p>
+    </section>
+
+    <section id="sharing">
+      <h2><span class="n">05</span> When we share data</h2>
+      <p>We do <strong>not</strong> sell your personal data. We share it only in these limited ways:</p>
+      <ul>
+        <li><strong>Service providers</strong>We rely on infrastructure partners that process
+          data on our behalf under their own terms: Supabase (database, authentication, and
+          storage), Sentry (crash and error reporting), TelemetryDeck and Amplitude (product-usage
+          analytics), and Apple and Google (sign-in and app distribution).</li>
+        <li><strong>Other members</strong>Your display name, avatar, and league standing are
+          visible to other members of leagues and challenges you join. Your email and meal
+          details are never shown to them.</li>
+        <li><strong>Legal reasons</strong>If required by law, or to protect the rights, safety,
+          and security of our users and the service.</li>
+      </ul>
+    </section>
+
+    <section id="retention">
+      <h2><span class="n">06</span> Data retention &amp; deletion</h2>
+      <p>You can request deletion of your account at any time from inside the app, under
+        account settings. Deletion is designed to be reversible for a short window in case you
+        change your mind:</p>
+      <ul>
+        <li><strong>Soft delete</strong>When you request deletion, your account is immediately
+          archived and hidden, and we schedule it for permanent removal after a
+          <strong>14-day recovery window</strong>.</li>
+        <li><strong>Reactivation</strong>If you sign back in during that window, you can cancel
+          the deletion and restore your account and data.</li>
+        <li><strong>Permanent purge</strong>After the window passes, a scheduled server-side job
+          permanently deletes your account and associated data.</li>
+      </ul>
+      <p>We otherwise keep your data for as long as your account is active. You may also email
+        <a href="mailto:nityanth.maramreddy@gmail.com">nityanth.maramreddy@gmail.com</a> to
+        request deletion or ask a question about retention.</p>
+    </section>
+
+    <section id="rights">
+      <h2><span class="n">07</span> Your choices &amp; rights</h2>
+      <p>Depending on where you live, you may have rights to access, correct, export, or delete
+        your personal data. You can update most of your information directly in the app, delete
+        your account in settings, and contact us for anything else. We will not discriminate
+        against you for exercising these rights.</p>
+    </section>
+
+    <section id="security">
+      <h2><span class="n">08</span> Security</h2>
+      <p>Data is transmitted over encrypted connections (HTTPS/TLS). Access to your records is
+        enforced by row-level security so that, in normal operation, you can only read and change
+        your own data. No system is perfectly secure, but we work to protect your information and
+        to limit what any one party can access.</p>
+    </section>
+
+    <section id="children">
+      <h2><span class="n">09</span> Age requirement</h2>
+      <p>MacroLeague is intended for users aged 13 and older, and is built primarily for a
+        college and young-adult audience. It is not directed at children under 13, and we do not
+        knowingly collect their data. If you believe a child has created an account, contact us
+        and we will remove it.</p>
+    </section>
+
+    <section id="changes">
+      <h2><span class="n">10</span> Changes &amp; contact</h2>
+      <p>We may update this policy as the product evolves. When we make a material change, we will
+        update the effective date above and, where appropriate, notify you in the app. Continued
+        use after an update means you accept the revised policy.</p>
+      <footer>
+        <p class="contact">Questions about your privacy?</p>
+        <p>Email <a href="mailto:nityanth.maramreddy@gmail.com">nityanth.maramreddy@gmail.com</a> —
+          this is also MacroLeague's support address.</p>
+      </footer>
+    </section>
+  </div>
+</div>
+
+</body>
+</html>

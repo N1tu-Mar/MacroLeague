@@ -9,6 +9,7 @@ import { useMealLogger, MealLogFields } from '../../hooks/useMealLogger';
 import { useMealEstimate } from '../../hooks/useMealEstimate';
 import { MealEstimateCandidate } from '../../services/nutrition/types';
 import { useUserStore } from '../../store/userStore';
+import { analytics } from '../../lib/analytics';
 import { BASE_MEAL_XP, BASE_MEAL_POINTS } from '../../services/gamificationService';
 import FloatingXP from '../../components/FloatingXP';
 import {
@@ -92,10 +93,19 @@ export default function MealLoggerScreen() {
     const mealTrans = num(logger.fields.transFatG);
     const qty = num(logger.fields.quantity) || 1;
     const priorTrans = daily.totals.transFat.grams;
+    // Capture analytics inputs BEFORE submit() clears the form. Source reflects
+    // whether the macros came from a USDA estimate or manual entry; the prior
+    // backend meal count tells us if this is the user's very first logged meal.
+    const mealType = logger.mealType;
+    const source = logger.appliedEstimateName ? 'estimate' : 'manual';
+    const priorMealCount = useUserStore.getState().user?.totalMealsLogged ?? 0;
 
     const result = await logger.submit();
     daily.refresh();
     if (!result.logged) return;
+    const isFirst = priorMealCount === 0;
+    analytics.mealLogged({ isFirst, mealType, source });
+    if (isFirst) analytics.firstMealLogged({ mealType, source });
     setShowXp(true);
     setToast(`+${BASE_MEAL_XP} XP · +${BASE_MEAL_POINTS} LP`);
     await refreshStats();

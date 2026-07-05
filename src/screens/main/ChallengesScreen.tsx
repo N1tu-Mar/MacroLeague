@@ -38,6 +38,7 @@ import {
 } from '../../services/challengeService';
 import { publicLeaderboardName } from '../../services/leaderboardService';
 import { getFriends, Friend } from '../../services/friendService';
+import { analytics } from '../../lib/analytics';
 
 /** Friend passed from the Leaderboard "Challenge" button to pre-seed an invite. */
 type InviteFriendParam = { id: string; name: string } | undefined;
@@ -460,6 +461,8 @@ function CreateChallengeSheet({
         durationDays: duration,
         stakes: stakes.trim(),
       });
+      // Creating a challenge auto-enrolls the creator — a participation signal.
+      analytics.challengeCreated({ type, goalType, durationDays: duration });
       // If launched from a friend's "Challenge" button, invite them now.
       if (inviteFriend) {
         try {
@@ -614,6 +617,11 @@ function ChallengeDetail({ challengeId, onBack }: { challengeId: string; onBack:
     setJoining(true);
     try {
       await joinChallenge(challengeId, detail?.type === 'solo' ? 'Solo' : 'My Team');
+      analytics.challengeJoined({
+        challengeId,
+        type: detail?.type ?? 'unknown',
+        goalType: detail?.goalType ?? 'unknown',
+      });
       await load();
     } finally {
       setJoining(false);
@@ -625,6 +633,7 @@ function ChallengeDetail({ challengeId, onBack }: { challengeId: string; onBack:
     setDropError(null);
     try {
       await leaveChallenge(challengeId);
+      analytics.challengeLeft({ challengeId });
       // Dropping is a forfeit; return to the list, which reloads standings.
       setShowDrop(false);
       onBack();

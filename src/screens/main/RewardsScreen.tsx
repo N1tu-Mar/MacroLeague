@@ -10,6 +10,7 @@ import {
   RewardCatalogItem,
 } from '../../services/rewardService';
 import { getEarnRules, EarnRule } from '../../services/ruleSetService';
+import { analytics } from '../../lib/analytics';
 import {
   Screen,
   ScreenHeader,
@@ -79,6 +80,10 @@ export default function RewardsScreen({ navigation }: any) {
             setRewards(catalog);
             setRedeemed(redeemedIds);
             setEarnRules(rules);
+            analytics.rewardsViewed({
+              balance: user?.points ?? 0,
+              rewardCount: catalog.length,
+            });
           }
         } catch {
           // Leave whatever is already shown; the balance card still works.
@@ -99,6 +104,11 @@ export default function RewardsScreen({ navigation }: any) {
       // Ledger-backed, atomic spend on the backend. The authoritative new balance
       // comes back from the RPC; sync the cached store to it, then refresh.
       const { newBalance } = await redeemReward(reward.id);
+      analytics.rewardRedeemed({
+        rewardId: reward.id,
+        partnerName: reward.partnerName,
+        pointsCost: reward.pointsCost,
+      });
       adjustPointsLocally(newBalance - user.points);
       void refreshStats();
       setRedeemed((prev) => new Set(prev).add(reward.id));
@@ -174,7 +184,18 @@ export default function RewardsScreen({ navigation }: any) {
             return (
               <Card
                 key={reward.id}
-                onPress={isRedeemed ? undefined : () => setSelectedReward(reward)}
+                onPress={
+                  isRedeemed
+                    ? undefined
+                    : () => {
+                        analytics.rewardDetailViewed({
+                          rewardId: reward.id,
+                          partnerName: reward.partnerName,
+                          pointsCost: reward.pointsCost,
+                        });
+                        setSelectedReward(reward);
+                      }
+                }
                 style={[styles.rewardCard, isRedeemed && { opacity: 0.6 }]}
               >
                 <View style={[styles.rewardIcon, { backgroundColor: colors.goldTint }]}>

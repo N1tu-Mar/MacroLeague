@@ -18,6 +18,7 @@ import { calculateMacros, GoalType, validateMacroTargets } from '../../lib/macro
 import { updateOnboardingProfile, slugifyUsername } from '../../services/profileService';
 import { useUserStore } from '../../store/userStore';
 import { supabase } from '../../lib/supabase';
+import { analytics } from '../../lib/analytics';
 
 interface GoalOption {
   id: GoalType;
@@ -98,6 +99,7 @@ export default function OnboardingGoalsScreen() {
         goalCarbsG: macros.carbs,
         goalUnsaturatedFatG: macros.fats,
       });
+      analytics.onboardingGoalsCompleted(goalType);
       await refreshStats(); // sets needsOnboarding = false → App routes onward
     } catch (err: any) {
       Alert.alert('Could not save your goals', err?.message ?? 'Please try again.');
