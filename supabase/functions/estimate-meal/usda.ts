@@ -7,6 +7,13 @@
 // FDC `/foods/search` returns nutrient values per 100 g for all data types, so
 // we treat `foodNutrients[].value` as per-100g and scale to a serving here.
 
+import { MacroBundle, deriveUnsaturated, round, scale } from './shared.ts';
+// Re-exported so existing callers (composite.ts, index.ts) keep working
+// unchanged — MacroBundle/round/scale/normalizeQuery now live in shared.ts
+// since openFoodFacts.ts needs them too.
+export type { MacroBundle } from './shared.ts';
+export { round, scale, normalizeQuery } from './shared.ts';
+
 const FDC_SEARCH_URL = 'https://api.nal.usda.gov/fdc/v1/foods/search';
 
 // USDA nutrient numbers (stable string identifiers in the FDC payload).
@@ -22,18 +29,6 @@ const NUTRIENT = {
   fiber: '291',
   sodium: '307',
 } as const;
-
-export interface MacroBundle {
-  calories: number;
-  proteinG: number;
-  carbsG: number;
-  fatG: number;
-  saturatedFatG: number | null;
-  transFatG: number | null;
-  unsaturatedFatG: number | null;
-  fiberG: number | null;
-  sodiumMg: number | null;
-}
 
 export interface UsdaCandidate {
   source: 'usda_fdc';
@@ -68,20 +63,6 @@ interface FdcFood {
   foodNutrients?: FdcNutrient[];
 }
 
-/** Lowercase, strip punctuation, and collapse whitespace for cache + search. */
-export function normalizeQuery(raw: string): string {
-  return raw
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-export function round(value: number, decimals = 1): number {
-  const factor = 10 ** decimals;
-  return Math.round(value * factor) / factor;
-}
-
 function nutrientValue(food: FdcFood, number: string, preferUnit?: string): number | null {
   const matches = (food.foodNutrients ?? []).filter((n) => n.nutrientNumber === number);
   if (matches.length === 0) return null;
@@ -92,22 +73,6 @@ function nutrientValue(food: FdcFood, number: string, preferUnit?: string): numb
   const chosen = preferred ?? matches[0];
 
   return typeof chosen.value === 'number' ? chosen.value : null;
-}
-
-function deriveUnsaturated(
-  totalFat: number | null,
-  saturated: number | null,
-  trans: number | null,
-  mono: number | null,
-  poly: number | null,
-): number | null {
-  if (mono !== null || poly !== null) {
-    return round((mono ?? 0) + (poly ?? 0));
-  }
-  if (totalFat !== null && saturated !== null) {
-    return round(Math.max(0, totalFat - saturated - (trans ?? 0)));
-  }
-  return null;
 }
 
 function per100gMacros(food: FdcFood): MacroBundle {
@@ -127,24 +92,6 @@ function per100gMacros(food: FdcFood): MacroBundle {
     unsaturatedFatG: deriveUnsaturated(totalFat, saturated, trans, mono, poly),
     fiberG: ((v) => (v === null ? null : round(v)))(nutrientValue(food, NUTRIENT.fiber)),
     sodiumMg: ((v) => (v === null ? null : round(v)))(nutrientValue(food, NUTRIENT.sodium)),
-  };
-}
-
-/** Scale per-100g macros to an arbitrary gram amount. Exported so the composite
- *  estimator can reuse the exact same scaling the direct path uses. */
-export function scale(per100g: MacroBundle, grams: number): MacroBundle {
-  const factor = grams / 100;
-  const opt = (v: number | null) => (v === null ? null : round(v * factor));
-  return {
-    calories: round(per100g.calories * factor),
-    proteinG: round(per100g.proteinG * factor),
-    carbsG: round(per100g.carbsG * factor),
-    fatG: round(per100g.fatG * factor),
-    saturatedFatG: opt(per100g.saturatedFatG),
-    transFatG: opt(per100g.transFatG),
-    unsaturatedFatG: opt(per100g.unsaturatedFatG),
-    fiberG: opt(per100g.fiberG),
-    sodiumMg: opt(per100g.sodiumMg),
   };
 }
 

@@ -4,6 +4,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Type, Spacing, Radius, FontFamily, useTheme } from '../../theme';
 import { useUserStore } from '../../store/userStore';
 import { signOut } from '../../lib/auth';
+import { openPrivacyPolicy, openTerms, openSupportEmail, SUPPORT_EMAIL } from '../../lib/legal';
 import { requestAccountDeletion } from '../../services/accountService';
 import StreakFlame from '../../components/StreakFlame';
 import AvatarPickerSheet from '../../components/AvatarPickerSheet';
@@ -372,6 +373,39 @@ export default function ProfileScreen({ navigation }: any) {
           value={Math.max(0, APPEARANCE_MODES.indexOf(mode))}
           onChange={(idx) => setMode(APPEARANCE_MODES[idx])}
         />
+      </Card>
+
+      {/* About & legal */}
+      <Text variant="overline" color={colors.textSecondary} style={styles.sectionLabel}>
+        About &amp; legal
+      </Text>
+      <Card padded={false} style={styles.block}>
+        {[
+          { label: 'Privacy Policy', icon: 'eye' as AppIconName, onPress: openPrivacyPolicy },
+          { label: 'Terms of Service', icon: 'info' as AppIconName, onPress: openTerms },
+          { label: 'Contact support', icon: 'send' as AppIconName, sub: SUPPORT_EMAIL, onPress: openSupportEmail },
+        ].map((item, i) => (
+          <View key={item.label}>
+            {i > 0 && <Divider inset={Spacing.base} />}
+            <Pressable
+              onPress={item.onPress}
+              style={({ pressed }) => [styles.settingsRow, pressed && { opacity: 0.6 }]}
+            >
+              <AppIcon name={item.icon} size={19} color={colors.textSecondary} />
+              <View style={{ flex: 1, marginLeft: Spacing.md }}>
+                <Text variant="subhead" color={colors.ink}>
+                  {item.label}
+                </Text>
+                {item.sub && (
+                  <Text variant="labelSm" color={colors.textTertiary} style={{ marginTop: 1 }}>
+                    {item.sub}
+                  </Text>
+                )}
+              </View>
+              <AppIcon name="chevron-right" size={20} color={colors.textTertiary} />
+            </Pressable>
+          </View>
+        ))}
       </Card>
 
       {/* Sign out / Delete */}

@@ -1,7 +1,7 @@
 // Shared types for the natural-language meal estimate flow.
 // These mirror the response shape of the `estimate-meal` edge function.
 
-export type NutritionSourceKey = 'usda_fdc' | 'manual' | 'user_estimate';
+export type NutritionSourceKey = 'usda_fdc' | 'open_food_facts' | 'manual' | 'user_estimate';
 
 /** A bundle of macros for a specific amount of food. */
 export interface MacroBundle {
@@ -39,7 +39,7 @@ export interface ComponentEstimate {
 
 /** One candidate match the user can confirm/edit before logging. */
 export interface MealEstimateCandidate {
-  source: 'usda_fdc';
+  source: 'usda_fdc' | 'open_food_facts';
   externalId: string;
   /** Our cached `foods.id`, if the candidate was persisted server-side. */
   foodId: string | null;

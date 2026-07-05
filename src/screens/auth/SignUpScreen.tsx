@@ -11,6 +11,7 @@ import {
   AppIcon,
 } from '../../components/ui';
 import { signUpWithEmail } from '../../lib/auth';
+import LegalNotice from '../../components/LegalNotice';
 import type { SignUpScreenProps } from '../../navigation/types';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -174,9 +175,9 @@ export default function SignUpScreen({ navigation }: SignUpScreenProps) {
             <Text color={colors.scarlet} style={{ fontFamily: FontFamily.semibold }}>Sign in</Text>
           </Text>
         </Pressable>
-        <Text center variant="labelSm" color={colors.textTertiary} style={{ marginTop: 8 }}>
-          By continuing, you agree to the Terms and Privacy Policy.
-        </Text>
+        <View style={{ marginTop: 8 }}>
+          <LegalNotice />
+        </View>
       </Screen>
     </KeyboardAvoidingView>
   );

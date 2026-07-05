@@ -16,9 +16,15 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { corsHeaders } from '../_shared/cors.ts';
-import { normalizeQuery, round, searchUsda, type UsdaCandidate } from './usda.ts';
+import { normalizeQuery, round, searchUsda } from './usda.ts';
+import { searchOpenFoodFacts } from './openFoodFacts.ts';
+import { type SourceCandidate } from './shared.ts';
 import { createParser, validateParsedMeal, type ParsedMeal } from './parser.ts';
 import { buildComposite, type ComponentEstimate, type ResolvedFood } from './composite.ts';
+
+/** A source's search function: given a normalized query + page size, returns
+ *  candidates. Lets resolveCandidates stay identical for every provider. */
+type SearchFn = (normalizedQuery: string, pageSize: number) => Promise<SourceCandidate[]>;
 
 const CACHE_TTL_DAYS = 7;
 const DEFAULT_PAGE_SIZE = 6;
@@ -30,7 +36,7 @@ const COMPONENT_PAGE_SIZE = 4;
 const MAX_QUERY_LEN = 180;
 const PARSE_CACHE_PREFIX = 'parse::';
 
-interface EstimateCandidate extends Omit<UsdaCandidate, 'rawPayload'> {
+interface EstimateCandidate extends Omit<SourceCandidate, 'rawPayload'> {
   foodId: string | null;
   // --- Additive composite fields (optional; older clients ignore them). ---
   kind?: 'direct' | 'composite';
@@ -97,26 +103,57 @@ Deno.serve(async (req: Request) => {
     Math.max(1, Number(payload.pageSize) || DEFAULT_PAGE_SIZE),
   );
 
-  // Resolve the usda_fdc source row.
-  const { data: source, error: sourceError } = await admin
+  // Resolve nutrition source rows. usda_fdc is required (existing behavior);
+  // open_food_facts is optional — if its row isn't there yet (e.g. the
+  // migration hasn't reached this environment), OFF is silently skipped and
+  // the USDA path proceeds exactly as before.
+  const { data: sources, error: sourceError } = await admin
     .from('nutrition_sources')
-    .select('id')
-    .eq('key', 'usda_fdc')
-    .single();
+    .select('id, key')
+    .in('key', ['usda_fdc', 'open_food_facts']);
 
-  if (sourceError || !source) {
+  const usdaSourceId = (sources ?? []).find((s: { key: string }) => s.key === 'usda_fdc')?.id as
+    | string
+    | undefined;
+  const offSourceId = (sources ?? []).find((s: { key: string }) => s.key === 'open_food_facts')?.id as
+    | string
+    | undefined;
+
+  if (sourceError || !usdaSourceId) {
     return json({ error: 'usda_fdc nutrition source is not configured.' }, 500);
   }
-  const sourceId = source.id as string;
 
-  // 1. DIRECT candidates (whole-query search). This is also the fallback path.
-  let direct: { candidates: EstimateCandidate[]; cached: boolean };
-  try {
-    direct = await resolveCandidates(admin, sourceId, usdaApiKey, normalized, rawQuery, pageSize);
-  } catch (err) {
-    return json({ error: (err as Error).message }, 502);
+  const usdaSearch: SearchFn = (q, n) => searchUsda(usdaApiKey, q, n);
+
+  // 1. DIRECT candidates (whole-query search). USDA is required — a failure
+  //    here still fails the request, same as before. Open Food Facts is
+  //    additive and best-effort: Promise.allSettled means a rate-limit, network
+  //    blip, or missing source row there can never break the USDA path.
+  const [usdaResult, offResult] = await Promise.allSettled([
+    resolveCandidates(admin, usdaSourceId, normalized, rawQuery, pageSize, usdaSearch),
+    offSourceId
+      ? resolveCandidates(admin, offSourceId, normalized, rawQuery, pageSize, searchOpenFoodFacts)
+      : Promise.resolve(null),
+  ]);
+
+  if (usdaResult.status === 'rejected') {
+    return json({ error: (usdaResult.reason as Error).message }, 502);
   }
-  const directCandidates = direct.candidates.map((c) => ({ ...c, kind: 'direct' as const }));
+  const direct = usdaResult.value;
+
+  let offCandidates: EstimateCandidate[] = [];
+  if (offResult.status === 'fulfilled' && offResult.value) {
+    offCandidates = offResult.value.candidates;
+  } else if (offResult.status === 'rejected') {
+    console.error('[estimate-meal] Open Food Facts search failed', (offResult.reason as Error)?.message);
+  }
+
+  // Cap the merged list at the requested pageSize, USDA first — so a caller
+  // asking for N candidates still gets at most N, and existing USDA-only
+  // behavior is unchanged whenever USDA alone already fills every slot.
+  const directCandidates = [...direct.candidates, ...offCandidates]
+    .slice(0, pageSize)
+    .map((c) => ({ ...c, kind: 'direct' as const }));
 
   // 2. COMPOSITE candidate (optional). Any failure here is swallowed so the user
   //    still gets the direct candidates — composite is purely additive.
@@ -124,7 +161,7 @@ Deno.serve(async (req: Request) => {
   const parser = createParser();
   if (parser) {
     try {
-      const parsed = await getOrParse(admin, sourceId, normalized, rawQuery, parser);
+      const parsed = await getOrParse(admin, usdaSourceId, normalized, rawQuery, parser);
       if (parsed && parsed.isComposite && parsed.components.length >= 2) {
         const composite = await buildComposite(parsed, async (name): Promise<ResolvedFood | null> => {
           const componentQuery = normalizeQuery(name);
@@ -132,13 +169,17 @@ Deno.serve(async (req: Request) => {
           if (componentQuery.length < 2) {
             return null;
           }
+          // Composite ingredient resolution stays USDA-only: parsed components
+          // are generic ingredients ("2 eggs", "1 cup rice"), which USDA's
+          // Foundation/SR Legacy data already covers well, and doubling calls
+          // out to Open Food Facts per ingredient isn't worth it here.
           const resolved = await resolveCandidates(
             admin,
-            sourceId,
-            usdaApiKey,
+            usdaSourceId,
             componentQuery,
             name,
             COMPONENT_PAGE_SIZE,
+            usdaSearch,
           );
           const top = resolved.candidates[0];
           if (!top) return null;
@@ -194,19 +235,20 @@ Deno.serve(async (req: Request) => {
 });
 
 /**
- * Cache-or-search for one normalized query: returns mapped candidates (each with
- * its cached `foods.id`) and whether the result came from the search cache. Used
- * for both the whole-query search and each composite component, so repeated
- * ingredients reuse the cache and the USDA call count stays bounded.
+ * Cache-or-search for one normalized query against one provider: returns mapped
+ * candidates (each with its cached `foods.id`) and whether the result came from
+ * the search cache. `search` is injected so this same function backs USDA, Open
+ * Food Facts, and each composite component — repeated queries reuse the cache
+ * and the live-provider call count stays bounded, regardless of source.
  */
 async function resolveCandidates(
   // deno-lint-ignore no-explicit-any
   admin: any,
   sourceId: string,
-  usdaApiKey: string,
   normalized: string,
   rawQuery: string,
   pageSize: number,
+  search: SearchFn,
 ): Promise<{ candidates: EstimateCandidate[]; cached: boolean }> {
   // 1. Cache hit?
   const { data: cached } = await admin
@@ -220,11 +262,11 @@ async function resolveCandidates(
     return { candidates: cached.results as EstimateCandidate[], cached: true };
   }
 
-  // 2. Query USDA on demand.
-  const usdaCandidates = await searchUsda(usdaApiKey, normalized, pageSize);
+  // 2. Query the provider on demand.
+  const found = await search(normalized, pageSize);
 
   // 3. Cache each candidate food into `foods` (once per source+external_id).
-  const externalIds = usdaCandidates.map((c) => c.externalId);
+  const externalIds = found.map((c) => c.externalId);
   const idByExternal = new Map<string, string>();
 
   if (externalIds.length > 0) {
@@ -238,7 +280,7 @@ async function resolveCandidates(
       idByExternal.set(row.external_id as string, row.id as string);
     }
 
-    const missing = usdaCandidates.filter((c) => !idByExternal.has(c.externalId));
+    const missing = found.filter((c) => !idByExternal.has(c.externalId));
     if (missing.length > 0) {
       const now = new Date().toISOString();
       const rows = missing.map((c) => ({
@@ -282,7 +324,7 @@ async function resolveCandidates(
     }
   }
 
-  const candidates: EstimateCandidate[] = usdaCandidates.map((c) => ({
+  const candidates: EstimateCandidate[] = found.map((c) => ({
     source: c.source,
     externalId: c.externalId,
     foodId: idByExternal.get(c.externalId) ?? null,

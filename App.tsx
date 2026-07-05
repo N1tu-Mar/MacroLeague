@@ -20,6 +20,7 @@ import {
   BarlowCondensed_700Bold,
 } from '@expo-google-fonts/barlow-condensed';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AuthNavigator from './src/navigation/AuthNavigator';
 import MainNavigator from './src/navigation/MainNavigator';
 import ReactivateAccountScreen from './src/screens/main/ReactivateAccountScreen';
@@ -29,12 +30,31 @@ import TutorialScreen from './src/screens/onboarding/TutorialScreen';
 import { useUserStore } from './src/store/userStore';
 import { supabase } from './src/lib/supabase';
 import { setMonitoringUser } from './src/lib/monitoring';
+import { analytics } from './src/lib/analytics';
 import { ThemeProvider, useTheme } from './src/theme';
 
 // The tutorial (the "what is MacroLeague" intro slides) is shown exactly once
 // per account. We scope the seen-flag to the user id so it survives across
 // sessions for that account but a brand-new account always sees it once.
 const tutorialKeyFor = (userId: string) => `ml_tutorial_seen:${userId}`;
+
+// Fire the "return session" analytics event at most once per cold start,
+// whichever auth path (restored session or a fresh sign-in) reaches it first.
+// is_returning is false only the very first time this install ever opens signed
+// in; from then on the persisted flag marks the user as returning.
+let sessionEventFired = false;
+async function trackSessionStarted() {
+  if (sessionEventFired) return;
+  sessionEventFired = true;
+  const SEEN_KEY = 'ml_analytics_seen_before';
+  try {
+    const seenBefore = (await AsyncStorage.getItem(SEEN_KEY)) === 'true';
+    if (!seenBefore) await AsyncStorage.setItem(SEEN_KEY, 'true');
+    analytics.sessionStarted({ isReturning: seenBefore });
+  } catch {
+    analytics.sessionStarted({ isReturning: false });
+  }
+}
 
 export default function App() {
   const userId = useUserStore((s) => s.user?.id ?? null);
@@ -73,6 +93,8 @@ export default function App() {
 
       if (session?.user) {
         setMonitoringUser(session.user.id);
+        analytics.identify(session.user.id);
+        void trackSessionStarted();
         // Read the per-account tutorial flag now that we know who is signed in.
         const seenRaw = await AsyncStorage.getItem(tutorialKeyFor(session.user.id)).catch(() => null);
         if (!active) return;
@@ -122,6 +144,8 @@ export default function App() {
         }
         if (event === 'SIGNED_IN' && session?.user) {
           setMonitoringUser(session.user.id);
+          analytics.identify(session.user.id);
+          void trackSessionStarted();
           // Resolve the per-account tutorial flag for this user.
           AsyncStorage.getItem(tutorialKeyFor(session.user.id))
             .then((seenRaw) => {
@@ -152,6 +176,7 @@ export default function App() {
           void refreshAccountStatus();
         } else if (event === 'SIGNED_OUT') {
           setMonitoringUser(null);
+          analytics.reset();
           setPasswordRecovery(false);
           logout();
         }
@@ -165,6 +190,7 @@ export default function App() {
   }, []);
 
   async function markTutorialSeen() {
+    analytics.onboardingTutorialCompleted();
     try {
       if (userId) await AsyncStorage.setItem(tutorialKeyFor(userId), 'true');
     } catch {}
@@ -174,18 +200,25 @@ export default function App() {
   const notReady = !fontsLoaded || loading || tutorialSeen === null;
 
   return (
-    <ThemeProvider>
-      <AppRoot
-        notReady={notReady}
-        passwordRecovery={passwordRecovery}
-        isAuthenticated={isAuthenticated}
-        isDeactivated={isDeactivated}
-        needsOnboarding={needsOnboarding}
-        tutorialSeen={tutorialSeen === true}
-        onTutorialDone={markTutorialSeen}
-        onResetDone={() => setPasswordRecovery(false)}
-      />
-    </ThemeProvider>
+    // SafeAreaProvider must wrap the whole tree: Screen/Sheet/MainNavigator all
+    // call useSafeAreaInsets(), which throws ("No safe area value available")
+    // without a provider ancestor. We provide it explicitly rather than relying
+    // on NavigationContainer's compat shim (which doesn't cover the web here and
+    // wouldn't cover the loading screen rendered before navigation mounts).
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <AppRoot
+          notReady={notReady}
+          passwordRecovery={passwordRecovery}
+          isAuthenticated={isAuthenticated}
+          isDeactivated={isDeactivated}
+          needsOnboarding={needsOnboarding}
+          tutorialSeen={tutorialSeen === true}
+          onTutorialDone={markTutorialSeen}
+          onResetDone={() => setPasswordRecovery(false)}
+        />
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
 

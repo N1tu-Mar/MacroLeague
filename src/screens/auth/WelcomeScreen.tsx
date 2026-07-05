@@ -11,6 +11,7 @@ import {
   ProgressBar,
 } from '../../components/ui';
 import BrandMark from '../../components/BrandMark';
+import LegalNotice from '../../components/LegalNotice';
 import { signInWithGoogle, signInWithApple } from '../../lib/auth';
 import type { WelcomeScreenProps } from '../../navigation/types';
 
@@ -218,9 +219,7 @@ export default function WelcomeScreen({ navigation }: WelcomeScreenProps) {
             <Text color={colors.scarlet} style={{ fontFamily: FontFamily.semibold }}>Sign in</Text>
           </Text>
         </Pressable>
-        <Text center variant="labelSm" color={colors.textTertiary}>
-          By continuing, you agree to the Terms and Privacy Policy.
-        </Text>
+        <LegalNotice />
       </View>
     </Screen>
   );
