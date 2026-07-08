@@ -19,6 +19,7 @@ import RotatingTrophy from '../../components/animations/RotatingTrophy';
 import {
   listChallenges,
   getChallengeDetail,
+  finalizeChallenge,
   createChallenge,
   joinChallenge,
   inviteToChallenge,
@@ -26,6 +27,7 @@ import {
   getChallengeInvites,
   ChallengeSummary,
   ChallengeDetail as ChallengeDetailType,
+  ChallengeResult,
   ChallengeInvite,
   ChallengeType,
   ChallengeGoalType,
@@ -448,7 +450,9 @@ const createStyles = StyleSheet.create({
 
 function ChallengeDetail({ challengeId, onBack }: { challengeId: string; onBack: () => void }) {
   const userId = useUserStore((s) => s.user?.id);
+  const refreshStats = useUserStore((s) => s.refreshStats);
   const [detail, setDetail] = useState<ChallengeDetailType | null>(null);
+  const [results, setResults] = useState<ChallengeResult[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
@@ -458,13 +462,28 @@ function ChallengeDetail({ challengeId, onBack }: { challengeId: string; onBack:
     setIsLoading(true);
     setError(null);
     try {
-      setDetail(await getChallengeDetail(challengeId));
+      const loaded = await getChallengeDetail(challengeId);
+      setDetail(loaded);
+      // A completed challenge is finalized on open: this derives + stores the
+      // winner and awards challenges_won on the backend (idempotent, so calling
+      // it every open is safe). We then refresh our own stats in case we won.
+      if (loaded.status === 'completed') {
+        try {
+          setResults(await finalizeChallenge(challengeId));
+          void refreshStats();
+        } catch {
+          // Best-effort: standings still render even if finalization fails.
+          setResults(null);
+        }
+      } else {
+        setResults(null);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load this challenge.');
     } finally {
       setIsLoading(false);
     }
-  }, [challengeId]);
+  }, [challengeId, refreshStats]);
 
   useFocusEffect(
     useCallback(() => {
@@ -516,6 +535,16 @@ function ChallengeDetail({ challengeId, onBack }: { challengeId: string; onBack:
   }
   const teamEntries = Array.from(teams.entries());
 
+  // Winner(s) of a finalized challenge. May be empty (nobody scored) or hold
+  // multiple names on a genuine tie.
+  const winners = (results ?? []).filter((r) => r.isWinner);
+  const iWon = winners.some((w) => w.userId === userId);
+  const winnerLabel = iWon
+    ? 'You won!'
+    : winners.length === 1
+      ? `${publicLeaderboardName(winners[0])} won`
+      : `${winners.map((w) => publicLeaderboardName(w)).join(' & ')} tied for the win`;
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <TouchableOpacity onPress={onBack} style={styles.backBtn}>
@@ -528,6 +557,17 @@ function ChallengeDetail({ challengeId, onBack }: { challengeId: string; onBack:
         {detail.type === 'solo' ? 'Solo Challenge' : 'Team Challenge'} · {detail.status} · Ends{' '}
         {new Date(`${detail.endDate}T00:00:00`).toLocaleDateString()}
       </Text>
+
+      {/* Winner banner — only for finalized challenges that produced a winner */}
+      {winners.length > 0 && (
+        <View style={styles.winnerCard}>
+          <RotatingTrophy size={28} />
+          <View style={styles.winnerInfo}>
+            <Text style={styles.winnerLabel}>{winnerLabel}</Text>
+            <Text style={styles.winnerSub}>Final score {winners[0].score} pts</Text>
+          </View>
+        </View>
+      )}
 
       {/* Standings — derived scores from the ledger */}
       <Text style={styles.sectionTitle}>STANDINGS</Text>
@@ -838,6 +878,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   participatingText: { fontFamily: FontFamily.bodyMedium, fontSize: 14, color: Colors.primary },
+
+  // Winner banner
+  winnerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    backgroundColor: Colors.gold + '14',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.gold + '44',
+    padding: 18,
+    marginBottom: 20,
+  },
+  winnerInfo: { flex: 1 },
+  winnerLabel: { fontFamily: FontFamily.displayBold, fontSize: 20, color: Colors.gold },
+  winnerSub: { fontFamily: FontFamily.body, fontSize: 13, color: Colors.textSecondary, marginTop: 2 },
 
   // Invites
   inviteCard: {
