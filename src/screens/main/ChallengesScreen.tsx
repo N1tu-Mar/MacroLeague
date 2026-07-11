@@ -30,9 +30,11 @@ import {
   inviteToChallenge,
   respondChallengeInvite,
   getChallengeInvites,
+  finalizeChallenge,
   ChallengeSummary,
   ChallengeDetail as ChallengeDetailType,
   ChallengeInvite,
+  ChallengeResult,
   ChallengeType,
   ChallengeGoalType,
 } from '../../services/challengeService';
@@ -586,7 +588,9 @@ const RANK_ICON: Record<number, AppIconName> = { 1: 'crown', 2: 'medal', 3: 'med
 function ChallengeDetail({ challengeId, onBack }: { challengeId: string; onBack: () => void }) {
   const { colors } = useTheme();
   const userId = useUserStore((s) => s.user?.id);
+  const refreshStats = useUserStore((s) => s.refreshStats);
   const [detail, setDetail] = useState<ChallengeDetailType | null>(null);
+  const [result, setResult] = useState<ChallengeResult | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
@@ -599,13 +603,32 @@ function ChallengeDetail({ challengeId, onBack }: { challengeId: string; onBack:
     setIsLoading(true);
     setError(null);
     try {
-      setDetail(await getChallengeDetail(challengeId));
+      const d = await getChallengeDetail(challengeId);
+      setDetail(d);
+
+      // A completed challenge is finalized on open: the backend derives the
+      // winner from the trusted ledger and awards it exactly once (a repeat
+      // open just returns the already-frozen result — see finalize_challenge).
+      if (d.status === 'completed') {
+        try {
+          const r = await finalizeChallenge(challengeId);
+          setResult(r);
+          if (!r.alreadyFinalized && r.winnerUserId && r.winnerUserId === userId) {
+            void refreshStats();
+          }
+        } catch {
+          // Non-fatal: standings still render without the winner banner.
+          setResult(null);
+        }
+      } else {
+        setResult(null);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load this challenge.');
     } finally {
       setIsLoading(false);
     }
-  }, [challengeId]);
+  }, [challengeId, userId, refreshStats]);
 
   useFocusEffect(
     useCallback(() => {
@@ -715,6 +738,39 @@ function ChallengeDetail({ challengeId, onBack }: { challengeId: string; onBack:
           {detail.type === 'solo' ? 'Solo challenge' : 'Team challenge'} · {detail.status} · ends{' '}
           {new Date(`${detail.endDate}T00:00:00`).toLocaleDateString()}
         </Text>
+
+        {/* Winner banner (completed + finalized challenges only) */}
+        {result && (
+          <Card
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 14,
+              marginBottom: 24,
+              backgroundColor: colors.goldTint,
+            }}
+            accent={colors.goldTint}
+          >
+            <AppIcon name={result.isDraw ? 'medal' : 'crown'} size={26} color={colors.gold} />
+            <View style={{ flex: 1 }}>
+              <Text variant="overline" color={colors.gold}>
+                Final result
+              </Text>
+              <Text variant="subhead" color={colors.ink}>
+                {result.isDraw
+                  ? 'This challenge ended in a draw.'
+                  : `${
+                      result.winnerUserId === userId
+                        ? 'You'
+                        : publicLeaderboardName({
+                            displayName: result.winnerDisplayName,
+                            username: result.winnerUsername,
+                          })
+                    } won this challenge!`}
+              </Text>
+            </View>
+          </Card>
+        )}
 
         {/* Standings */}
         <SectionLabel>Standings</SectionLabel>

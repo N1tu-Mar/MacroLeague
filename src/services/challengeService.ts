@@ -237,6 +237,44 @@ export async function joinChallenge(challengeId: string, teamName = 'My Team'): 
  */
 export const CHALLENGE_DROP_PENALTY = 20;
 
+export interface ChallengeResult {
+  alreadyFinalized: boolean;
+  isDraw: boolean;
+  winnerUserId: string | null;
+  winnerUsername: string | null;
+  winnerDisplayName: string | null;
+  topScore: number;
+}
+
+/**
+ * Finalizes a COMPLETED challenge via the finalize_challenge RPC (migration 0019).
+ * The backend derives the winner from the same trusted ledger get_challenge_standings
+ * reads, freezes challenge_results, and awards the winner once. Safe to call every
+ * time a completed challenge is opened — it is idempotent (a repeat call returns
+ * the already-frozen result instead of recomputing/re-awarding). Throws if the
+ * challenge has not ended yet.
+ */
+export async function finalizeChallenge(challengeId: string): Promise<ChallengeResult> {
+  const { data, error } = await supabase.rpc('finalize_challenge', { p_challenge_id: challengeId });
+  if (error) throw error;
+  const row = (Array.isArray(data) ? data[0] : data) as {
+    already_finalized: boolean;
+    is_draw: boolean;
+    winner_user_id: string | null;
+    winner_username: string | null;
+    winner_display_name: string | null;
+    top_score: number | string;
+  };
+  return {
+    alreadyFinalized: row.already_finalized,
+    isDraw: row.is_draw,
+    winnerUserId: row.winner_user_id,
+    winnerUsername: row.winner_username,
+    winnerDisplayName: row.winner_display_name,
+    topScore: Number(row.top_score),
+  };
+}
+
 /**
  * Drops the signed-in user out of a challenge. Dropping a challenge that is still
  * active (or upcoming) is a FORFEIT: the backend removes your membership AND docks
