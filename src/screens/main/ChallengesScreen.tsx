@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { View, ActivityIndicator, Pressable } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { View, ActivityIndicator, Pressable, FlatList, ViewStyle } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { useTheme } from '../../theme';
 import { useUserStore } from '../../store/userStore';
@@ -18,6 +19,7 @@ import {
   IconButton,
   AppIcon,
   Divider,
+  CardListItem,
 } from '../../components/ui';
 import { AppIconName } from '../../components/ui/AppIcon';
 import {
@@ -30,21 +32,43 @@ import {
   inviteToChallenge,
   respondChallengeInvite,
   getChallengeInvites,
+  finalizeChallenge,
   ChallengeSummary,
   ChallengeDetail as ChallengeDetailType,
   ChallengeInvite,
+  ChallengeResult,
   ChallengeType,
   ChallengeGoalType,
 } from '../../services/challengeService';
 import { publicLeaderboardName } from '../../services/leaderboardService';
 import { getFriends, Friend } from '../../services/friendService';
 import { analytics } from '../../lib/analytics';
+import { toUserFacingMessage } from '../../lib/errors';
+
+/**
+ * Paddings the old `<Screen scroll bottomSpace={96}>` applied to its content
+ * container. Screens that drive their own FlatList pass this to
+ * `contentContainerStyle` instead, so nothing is nested inside a ScrollView.
+ */
+function useListContentStyle(): ViewStyle {
+  const insets = useSafeAreaInsets();
+  return useMemo(
+    () => ({ paddingTop: insets.top + 8, paddingHorizontal: 20, paddingBottom: 96 }),
+    [insets.top],
+  );
+}
 
 /** Friend passed from the Leaderboard "Challenge" button to pre-seed an invite. */
 type InviteFriendParam = { id: string; name: string } | undefined;
 
 /** A template can pre-seed the create sheet from the empty state. */
 type CreateSeed = { name?: string; goalType?: ChallengeGoalType } | undefined;
+
+/** One row of the flattened challenges list (labels + invites + challenges). */
+type ChallengeRow =
+  | { kind: 'label'; key: string; text: string; dim: boolean }
+  | { kind: 'invite'; key: string; invite: ChallengeInvite; last: boolean }
+  | { kind: 'challenge'; key: string; challenge: ChallengeSummary; dim: boolean; last: boolean };
 
 export default function ChallengesScreen() {
   const { colors } = useTheme();
@@ -60,6 +84,11 @@ export default function ChallengesScreen() {
   const [pendingInvite, setPendingInvite] = useState<InviteFriendParam>(undefined);
   const [seed, setSeed] = useState<CreateSeed>(undefined);
   const [respondingInvite, setRespondingInvite] = useState<string | null>(null);
+  // Failures from row-level actions (invite responses, post-create invites).
+  // Kept separate from `error`, which replaces the whole list — a single
+  // failed action must not blank out challenges that loaded fine.
+  const [actionError, setActionError] = useState<string | null>(null);
+  const listContent = useListContentStyle();
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -69,7 +98,7 @@ export default function ChallengesScreen() {
       setChallenges(list);
       setInvites(inv);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load challenges.');
+      setError(toUserFacingMessage(e, 'Could not load challenges.'));
     } finally {
       setIsLoading(false);
     }
@@ -95,9 +124,14 @@ export default function ChallengesScreen() {
 
   async function respondToInvite(inviteId: string, accept: boolean) {
     setRespondingInvite(inviteId);
+    setActionError(null);
     try {
       await respondChallengeInvite(inviteId, accept);
       await load();
+    } catch (e) {
+      // Without this, a failed response was an unhandled rejection: the spinner
+      // stopped and the card just sat there as if nothing had been tapped.
+      setActionError(toUserFacingMessage(e, 'Could not respond to that invite.'));
     } finally {
       setRespondingInvite(null);
     }
@@ -130,71 +164,155 @@ export default function ChallengesScreen() {
   const upcoming = challenges.filter((c) => c.status === 'upcoming');
   const completed = challenges.filter((c) => c.status === 'completed');
 
+  const header = (
+    <View style={{ marginBottom: 20 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <Text variant="heading" color={colors.ink} style={{ flex: 1 }}>
+          Challenges
+        </Text>
+        <IconButton
+          icon="plus"
+          onPress={() => openCreate()}
+          bg={colors.ink}
+          color={colors.onPrimary}
+          border={false}
+          accessibilityLabel="Create challenge"
+        />
+      </View>
+      {actionError && (
+        <Text variant="label" color={colors.error} style={{ marginTop: 8 }}>
+          {actionError}
+        </Text>
+      )}
+    </View>
+  );
+
+  // Invites and the three status sections are all unbounded, so they are
+  // flattened into a single virtualized list rather than nested lists.
+  const rows: ChallengeRow[] = [];
+  if (invites.length > 0) {
+    rows.push({
+      kind: 'label',
+      key: 'invites-label',
+      text: `Challenge invites · ${invites.length}`,
+      dim: false,
+    });
+    invites.forEach((inv, i) =>
+      rows.push({
+        kind: 'invite',
+        key: `invite-${inv.inviteId}`,
+        invite: inv,
+        last: i === invites.length - 1,
+      }),
+    );
+  }
+  const pushSection = (
+    id: string,
+    label: string,
+    items: ChallengeSummary[],
+    dim: boolean,
+  ) => {
+    if (items.length === 0) return;
+    rows.push({ kind: 'label', key: `${id}-label`, text: label, dim });
+    items.forEach((c, i) =>
+      rows.push({
+        kind: 'challenge',
+        key: `${id}-${c.id}`,
+        challenge: c,
+        dim,
+        last: i === items.length - 1,
+      }),
+    );
+  };
+  pushSection('active', `Active · ${active.length}`, active, false);
+  pushSection('upcoming', `Upcoming · ${upcoming.length}`, upcoming, false);
+  pushSection('completed', 'Completed', completed, true);
+
+  // Loading / error / first-run states are short, fixed content — a plain
+  // scroller is right for them; only the populated list gets virtualized.
+  const showList = !isLoading && !error && !(challenges.length === 0 && invites.length === 0);
+
   return (
     <>
-      <Screen scroll bottomSpace={96}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
-          <Text variant="heading" color={colors.ink} style={{ flex: 1 }}>
-            Challenges
-          </Text>
-          <IconButton
-            icon="plus"
-            onPress={() => openCreate()}
-            bg={colors.ink}
-            color={colors.onPrimary}
-            border={false}
-            accessibilityLabel="Create challenge"
-          />
-        </View>
-
-        {isLoading ? (
-          <View style={{ alignItems: 'center', paddingVertical: 48 }}>
-            <ActivityIndicator color={colors.scarlet} />
-          </View>
-        ) : error ? (
-          <Card
-            padded
-            accent={colors.brandTintBorder}
-            style={{ backgroundColor: colors.brandTint, marginBottom: 12 }}
-          >
-            <Text variant="label" color={colors.error}>
-              {error}
-            </Text>
-          </Card>
-        ) : challenges.length === 0 && invites.length === 0 ? (
-          <EmptyState onTemplate={(s) => openCreate(s)} onCreate={() => openCreate()} />
-        ) : (
-          <>
-            {invites.length > 0 && (
-              <View style={{ marginBottom: 24 }}>
-                <SectionLabel>{`Challenge invites · ${invites.length}`}</SectionLabel>
-                {invites.map((inv) => (
-                  <InviteCard
-                    key={inv.inviteId}
-                    invite={inv}
-                    busy={respondingInvite === inv.inviteId}
-                    onRespond={(accept) => respondToInvite(inv.inviteId, accept)}
+      {showList ? (
+        <Screen padded={false} topInset={false} bottomSpace={0}>
+          <FlatList
+            data={rows}
+            keyExtractor={(row) => row.key}
+            style={{ flex: 1 }}
+            contentContainerStyle={listContent}
+            showsVerticalScrollIndicator={false}
+            ListHeaderComponent={header}
+            ListFooterComponent={<CreateCTA onPress={() => openCreate()} />}
+            renderItem={({ item }) => {
+              if (item.kind === 'label') {
+                return (
+                  <View style={{ opacity: item.dim ? 0.8 : 1 }}>
+                    <SectionLabel>{item.text}</SectionLabel>
+                  </View>
+                );
+              }
+              if (item.kind === 'invite') {
+                return (
+                  <View style={{ marginBottom: item.last ? 24 : 0 }}>
+                    <InviteCard
+                      invite={item.invite}
+                      busy={respondingInvite === item.invite.inviteId}
+                      onRespond={(accept) => respondToInvite(item.invite.inviteId, accept)}
+                    />
+                  </View>
+                );
+              }
+              const c = item.challenge;
+              return (
+                <View style={{ opacity: item.dim ? 0.8 : 1, marginBottom: item.last ? 24 : 0 }}>
+                  <ChallengeCard
+                    name={c.name}
+                    type={c.type}
+                    stakesText={c.stakesText}
+                    endDate={c.endDate}
+                    status={c.status}
+                    participantCount={c.participantCount}
+                    joined={c.joined}
+                    onPress={() => setSelectedId(c.id)}
                   />
-                ))}
-              </View>
-            )}
+                </View>
+              );
+            }}
+          />
+        </Screen>
+      ) : (
+        <Screen scroll bottomSpace={96}>
+          {header}
 
-            <ChallengeSection label={`Active · ${active.length}`} items={active} onSelect={setSelectedId} />
-            <ChallengeSection label={`Upcoming · ${upcoming.length}`} items={upcoming} onSelect={setSelectedId} />
-            <ChallengeSection label="Completed" items={completed} onSelect={setSelectedId} dim />
-
-            <CreateCTA onPress={() => openCreate()} />
-          </>
-        )}
-      </Screen>
+          {isLoading ? (
+            <View style={{ alignItems: 'center', paddingVertical: 48 }}>
+              <ActivityIndicator color={colors.scarlet} />
+            </View>
+          ) : error ? (
+            <Card
+              padded
+              accent={colors.brandTintBorder}
+              style={{ backgroundColor: colors.brandTint, marginBottom: 12 }}
+            >
+              <Text variant="label" color={colors.error}>
+                {error}
+              </Text>
+            </Card>
+          ) : (
+            <EmptyState onTemplate={(s) => openCreate(s)} onCreate={() => openCreate()} />
+          )}
+        </Screen>
+      )}
 
       <CreateChallengeSheet
         visible={showCreate}
         inviteFriend={pendingInvite}
         seed={seed}
         onClose={closeCreate}
-        onCreated={() => {
+        onCreated={(warning) => {
           closeCreate();
+          setActionError(warning ?? null);
           void load();
         }}
       />
@@ -210,38 +328,6 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
     <Text variant="overline" color={colors.textSecondary} style={{ marginBottom: 12 }}>
       {children}
     </Text>
-  );
-}
-
-function ChallengeSection({
-  label,
-  items,
-  onSelect,
-  dim,
-}: {
-  label: string;
-  items: ChallengeSummary[];
-  onSelect: (id: string) => void;
-  dim?: boolean;
-}) {
-  if (items.length === 0) return null;
-  return (
-    <View style={{ marginBottom: 24, opacity: dim ? 0.8 : 1 }}>
-      <SectionLabel>{label}</SectionLabel>
-      {items.map((c) => (
-        <ChallengeCard
-          key={c.id}
-          name={c.name}
-          type={c.type}
-          stakesText={c.stakesText}
-          endDate={c.endDate}
-          status={c.status}
-          participantCount={c.participantCount}
-          joined={c.joined}
-          onPress={() => onSelect(c.id)}
-        />
-      ))}
-    </View>
   );
 }
 
@@ -422,7 +508,9 @@ function CreateChallengeSheet({
   inviteFriend?: InviteFriendParam;
   seed?: CreateSeed;
   onClose: () => void;
-  onCreated: () => void;
+  /** `warning` is set when the challenge was created but a follow-up (the
+   *  friend invite) failed — the parent shows it without undoing the create. */
+  onCreated: (warning?: string) => void;
 }) {
   const { colors } = useTheme();
   const [name, setName] = useState('');
@@ -468,9 +556,15 @@ function CreateChallengeSheet({
         try {
           await inviteToChallenge(challengeId, inviteFriend.id);
         } catch {
+          // The challenge exists and the creator is enrolled — closing is
+          // right (retapping Create would make a duplicate). But the invite
+          // was the entire point of this flow, so its failure must be said.
           setName('');
           setStakes('');
-          onCreated();
+          onCreated(
+            `Challenge created, but ${inviteFriend.name} could not be invited. ` +
+              'Invite them again from the challenge.',
+          );
           return;
         }
       }
@@ -478,7 +572,7 @@ function CreateChallengeSheet({
       setStakes('');
       onCreated();
     } catch (e) {
-      setNotice(e instanceof Error ? e.message : 'Could not create. Please try again.');
+      setNotice(toUserFacingMessage(e, 'Could not create. Please try again.'));
     } finally {
       setSaving(false);
     }
@@ -586,26 +680,49 @@ const RANK_ICON: Record<number, AppIconName> = { 1: 'crown', 2: 'medal', 3: 'med
 function ChallengeDetail({ challengeId, onBack }: { challengeId: string; onBack: () => void }) {
   const { colors } = useTheme();
   const userId = useUserStore((s) => s.user?.id);
+  const refreshStats = useUserStore((s) => s.refreshStats);
   const [detail, setDetail] = useState<ChallengeDetailType | null>(null);
+  const [result, setResult] = useState<ChallengeResult | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
   const [showInvite, setShowInvite] = useState(false);
   const [showDrop, setShowDrop] = useState(false);
   const [dropping, setDropping] = useState(false);
   const [dropError, setDropError] = useState<string | null>(null);
+  const listContent = useListContentStyle();
 
   const load = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      setDetail(await getChallengeDetail(challengeId));
+      const d = await getChallengeDetail(challengeId);
+      setDetail(d);
+
+      // A completed challenge is finalized on open: the backend derives the
+      // winner from the trusted ledger and awards it exactly once (a repeat
+      // open just returns the already-frozen result — see finalize_challenge).
+      if (d.status === 'completed') {
+        try {
+          const r = await finalizeChallenge(challengeId);
+          setResult(r);
+          if (!r.alreadyFinalized && r.winnerUserId && r.winnerUserId === userId) {
+            void refreshStats();
+          }
+        } catch {
+          // Non-fatal: standings still render without the winner banner.
+          setResult(null);
+        }
+      } else {
+        setResult(null);
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load this challenge.');
+      setError(toUserFacingMessage(e, 'Could not load this challenge.'));
     } finally {
       setIsLoading(false);
     }
-  }, [challengeId]);
+  }, [challengeId, userId, refreshStats]);
 
   useFocusEffect(
     useCallback(() => {
@@ -615,6 +732,7 @@ function ChallengeDetail({ challengeId, onBack }: { challengeId: string; onBack:
 
   async function handleJoin() {
     setJoining(true);
+    setJoinError(null);
     try {
       await joinChallenge(challengeId, detail?.type === 'solo' ? 'Solo' : 'My Team');
       analytics.challengeJoined({
@@ -623,6 +741,10 @@ function ChallengeDetail({ challengeId, onBack }: { challengeId: string; onBack:
         goalType: detail?.goalType ?? 'unknown',
       });
       await load();
+    } catch (e) {
+      // Without this, a refused join (challenge full/started, network blip)
+      // was an unhandled rejection and the button silently reverted.
+      setJoinError(toUserFacingMessage(e, 'Could not join this challenge.'));
     } finally {
       setJoining(false);
     }
@@ -638,7 +760,7 @@ function ChallengeDetail({ challengeId, onBack }: { challengeId: string; onBack:
       setShowDrop(false);
       onBack();
     } catch (e) {
-      setDropError(e instanceof Error ? e.message : 'Could not drop this challenge.');
+      setDropError(toUserFacingMessage(e, 'Could not drop this challenge.'));
     } finally {
       setDropping(false);
     }
@@ -680,161 +802,48 @@ function ChallengeDetail({ challengeId, onBack }: { challengeId: string; onBack:
   const teamEntries = Array.from(teams.entries());
   const headToHead = detail.type === 'team' && teamEntries.length >= 2;
 
-  return (
+  // Only the flat standings table is unbounded; the head-to-head VS card shows
+  // exactly two teams and the "no participants" card is a single tile, so those
+  // render in the list header instead.
+  const standings = headToHead ? [] : detail.standings;
+
+  const detailHeader = (
     <>
-      <Screen scroll bottomSpace={96}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
-          <IconButton icon="chevron-left" onPress={onBack} accessibilityLabel="Back" style={{ marginLeft: -4 }} />
-          <View style={{ flex: 1 }} />
-          {canInvite && (
-            <Pressable
-              onPress={() => setShowInvite(true)}
-              style={({ pressed }) => ({
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 6,
-                backgroundColor: colors.brandTint,
-                borderRadius: 99,
-                paddingHorizontal: 14,
-                paddingVertical: 8,
-                opacity: pressed ? 0.8 : 1,
-              })}
-            >
-              <AppIcon name="users" size={15} color={colors.scarlet} />
-              <Text variant="label" color={colors.scarlet}>
-                Invite
-              </Text>
-            </Pressable>
-          )}
-        </View>
-
-        <Text variant="heading" color={colors.ink} style={{ marginBottom: 4 }}>
-          {detail.name}
-        </Text>
-        <Text variant="label" color={colors.textSecondary} style={{ marginBottom: 20, textTransform: 'capitalize' }}>
-          {detail.type === 'solo' ? 'Solo challenge' : 'Team challenge'} · {detail.status} · ends{' '}
-          {new Date(`${detail.endDate}T00:00:00`).toLocaleDateString()}
-        </Text>
-
-        {/* Standings */}
-        <SectionLabel>Standings</SectionLabel>
-        {detail.standings.length === 0 ? (
-          <Card style={{ marginBottom: 24 }}>
-            <Text variant="body" color={colors.textSecondary}>
-              No participants yet.
-            </Text>
-          </Card>
-        ) : headToHead ? (
-          <Card style={{ marginBottom: 24 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              {teamEntries.slice(0, 2).map(([teamName, t], idx) => (
-                <React.Fragment key={teamName}>
-                  {idx === 1 && (
-                    <Text
-                      color={colors.textTertiary}
-                      style={{ fontFamily: 'BarlowCondensed_700Bold', fontSize: 22, letterSpacing: 2, paddingHorizontal: 8 }}
-                    >
-                      VS
-                    </Text>
-                  )}
-                  <View style={{ flex: 1, alignItems: 'center', gap: 8 }}>
-                    <Avatar name={t.members[0] ?? teamName} size={64} ring={idx === 0 ? colors.scarlet : undefined} />
-                    <Text variant="cardTitle" color={colors.ink} numberOfLines={1}>
-                      {teamName}
-                    </Text>
-                    <Text
-                      color={idx === 0 ? colors.scarlet : colors.ink}
-                      style={{ fontFamily: 'BarlowCondensed_700Bold', fontSize: 40, lineHeight: 40 }}
-                    >
-                      {t.score}
-                    </Text>
-                    {t.members.map((m, i) => (
-                      <Text key={i} variant="labelSm" color={colors.textSecondary} numberOfLines={1}>
-                        {m}
-                      </Text>
-                    ))}
-                  </View>
-                </React.Fragment>
-              ))}
-            </View>
-          </Card>
-        ) : (
-          <Card style={{ marginBottom: 24, paddingVertical: 4 }}>
-            {detail.standings.map((s, i) => {
-              const me = s.userId === userId;
-              const rankColor = me
-                ? colors.scarlet
-                : s.rank === 1
-                ? colors.gold
-                : s.rank === 2
-                ? colors.medalSilver
-                : s.rank === 3
-                ? colors.medalBronze
-                : colors.textSecondary;
-              return (
-                <View key={s.userId}>
-                  {i > 0 && <Divider />}
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 12,
-                      paddingVertical: 12,
-                      paddingHorizontal: 12,
-                      marginHorizontal: -4,
-                      borderRadius: 12,
-                      backgroundColor: me ? colors.brandTint : 'transparent',
-                    }}
-                  >
-                    <View style={{ width: 26, flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                      {RANK_ICON[s.rank] && (
-                        <AppIcon name={RANK_ICON[s.rank]} size={14} color={rankColor} />
-                      )}
-                      <Text color={rankColor} style={{ fontFamily: 'BarlowCondensed_700Bold', fontSize: 18 }}>
-                        {s.rank}
-                      </Text>
-                    </View>
-                    <Avatar name={publicLeaderboardName(s)} size={32} />
-                    <Text variant="cardTitle" color={colors.ink} style={{ flex: 1 }} numberOfLines={1}>
-                      {publicLeaderboardName(s)}
-                      {me ? ' (You)' : ''}
-                    </Text>
-                    <Text color={colors.ink} style={{ fontFamily: 'BarlowCondensed_700Bold', fontSize: 18 }}>
-                      {s.score}
-                    </Text>
-                  </View>
-                </View>
-              );
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
+        <IconButton icon="chevron-left" onPress={onBack} accessibilityLabel="Back" style={{ marginLeft: -4 }} />
+        <View style={{ flex: 1 }} />
+        {canInvite && (
+          <Pressable
+            onPress={() => setShowInvite(true)}
+            style={({ pressed }) => ({
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 6,
+              backgroundColor: colors.brandTint,
+              borderRadius: 99,
+              paddingHorizontal: 14,
+              paddingVertical: 8,
+              opacity: pressed ? 0.8 : 1,
             })}
-          </Card>
+          >
+            <AppIcon name="users" size={15} color={colors.scarlet} />
+            <Text variant="label" color={colors.scarlet}>
+              Invite
+            </Text>
+          </Pressable>
         )}
+      </View>
 
-        {/* Goals */}
-        {detail.goals.length > 0 && (
-          <>
-            <SectionLabel>Goals</SectionLabel>
-            <Card style={{ marginBottom: 24, paddingVertical: 4 }}>
-              {detail.goals.map((g, i) => (
-                <View key={g.id}>
-                  {i > 0 && <Divider />}
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 }}>
-                    <AppIcon name="target" size={18} color={colors.scarlet} />
-                    <Text variant="cardTitle" color={colors.ink} style={{ flex: 1 }}>
-                      {g.description}
-                    </Text>
-                    <View style={{ backgroundColor: colors.scarlet, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
-                      <Text color={colors.onPrimary} style={{ fontFamily: 'BarlowCondensed_700Bold', fontSize: 12 }}>
-                        +{g.pointsValue}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              ))}
-            </Card>
-          </>
-        )}
+      <Text variant="heading" color={colors.ink} style={{ marginBottom: 4 }}>
+        {detail.name}
+      </Text>
+      <Text variant="label" color={colors.textSecondary} style={{ marginBottom: 20, textTransform: 'capitalize' }}>
+        {detail.type === 'solo' ? 'Solo challenge' : 'Team challenge'} · {detail.status} · ends{' '}
+        {new Date(`${detail.endDate}T00:00:00`).toLocaleDateString()}
+      </Text>
 
-        {/* Stakes */}
+      {/* Winner banner (completed + finalized challenges only) */}
+      {result && (
         <Card
           style={{
             flexDirection: 'row',
@@ -845,79 +854,263 @@ function ChallengeDetail({ challengeId, onBack }: { challengeId: string; onBack:
           }}
           accent={colors.goldTint}
         >
-          <RotatingTrophy size={28} color={colors.gold} />
+          <AppIcon name={result.isDraw ? 'medal' : 'crown'} size={26} color={colors.gold} />
           <View style={{ flex: 1 }}>
             <Text variant="overline" color={colors.gold}>
-              Stakes
+              Final result
             </Text>
             <Text variant="subhead" color={colors.ink}>
-              {detail.stakesText || 'Winner takes bragging rights'}
+              {result.isDraw
+                ? 'This challenge ended in a draw.'
+                : `${
+                    result.winnerUserId === userId
+                      ? 'You'
+                      : publicLeaderboardName({
+                          displayName: result.winnerDisplayName,
+                          username: result.winnerUsername,
+                        })
+                  } won this challenge!`}
             </Text>
           </View>
         </Card>
+      )}
 
-        {/* Actions */}
-        {detail.joined ? (
-          <>
-            <View
-              style={{
-                flexDirection: 'row',
-                justifyContent: 'center',
-                alignItems: 'center',
-                gap: 8,
-                backgroundColor: colors.successTint,
-                borderRadius: 14,
-                paddingVertical: 14,
-              }}
-            >
-              <AppIcon name="check" size={17} color={colors.successDeep} />
-              <Text variant="cardTitle" color={colors.successDeep}>
-                You're in this challenge
-              </Text>
-            </View>
-            {detail.status !== 'completed' && (
-              <>
-                <Button
-                  label="Invite friends"
-                  variant="secondary"
-                  icon="users"
-                  onPress={() => setShowInvite(true)}
-                  style={{ marginTop: 12 }}
-                />
-                <Pressable
-                  onPress={() => {
-                    setDropError(null);
-                    setShowDrop(true);
-                  }}
-                  style={({ pressed }) => ({
-                    flexDirection: 'row',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    gap: 8,
-                    paddingVertical: 14,
-                    marginTop: 8,
-                    opacity: pressed ? 0.6 : 1,
-                  })}
-                  accessibilityRole="button"
-                  accessibilityLabel="Drop challenge"
-                >
-                  <AppIcon name="close" size={16} color={colors.error} />
-                  <Text variant="cardTitle" color={colors.error}>
-                    Drop challenge
+      {/* Standings */}
+      <SectionLabel>Standings</SectionLabel>
+      {detail.standings.length === 0 ? (
+        <Card style={{ marginBottom: 24 }}>
+          <Text variant="body" color={colors.textSecondary}>
+            No participants yet.
+          </Text>
+        </Card>
+      ) : headToHead ? (
+        <Card style={{ marginBottom: 24 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            {teamEntries.slice(0, 2).map(([teamName, t], idx) => (
+              <React.Fragment key={teamName}>
+                {idx === 1 && (
+                  <Text
+                    color={colors.textTertiary}
+                    style={{ fontFamily: 'BarlowCondensed_700Bold', fontSize: 22, letterSpacing: 2, paddingHorizontal: 8 }}
+                  >
+                    VS
                   </Text>
-                </Pressable>
-              </>
-            )}
-          </>
-        ) : detail.status !== 'completed' ? (
-          <Button label="Join challenge" onPress={handleJoin} loading={joining} loadingLabel="Joining…" />
-        ) : (
-          <View style={{ alignItems: 'center', paddingVertical: 14 }}>
-            <Text variant="cardTitle" color={colors.textSecondary}>
-              This challenge has ended
+                )}
+                <View style={{ flex: 1, alignItems: 'center', gap: 8 }}>
+                  <Avatar name={t.members[0] ?? teamName} size={64} ring={idx === 0 ? colors.scarlet : undefined} />
+                  <Text variant="cardTitle" color={colors.ink} numberOfLines={1}>
+                    {teamName}
+                  </Text>
+                  <Text
+                    color={idx === 0 ? colors.scarlet : colors.ink}
+                    style={{ fontFamily: 'BarlowCondensed_700Bold', fontSize: 40, lineHeight: 40 }}
+                  >
+                    {t.score}
+                  </Text>
+                  {t.members.map((m, i) => (
+                    <Text key={i} variant="labelSm" color={colors.textSecondary} numberOfLines={1}>
+                      {m}
+                    </Text>
+                  ))}
+                </View>
+              </React.Fragment>
+            ))}
+          </View>
+        </Card>
+      ) : null}
+    </>
+  );
+
+  // The flat standings table — the one list here that grows with participants.
+  // Each cell re-creates the surrounding Card's surface (see CardListItem) plus
+  // the Card's own 16px horizontal / 4px vertical padding.
+  const renderStanding = ({ item: s, index: i }: { item: (typeof standings)[number]; index: number }) => {
+    const me = s.userId === userId;
+    const rankColor = me
+      ? colors.scarlet
+      : s.rank === 1
+      ? colors.gold
+      : s.rank === 2
+      ? colors.medalSilver
+      : s.rank === 3
+      ? colors.medalBronze
+      : colors.textSecondary;
+    return (
+      <CardListItem
+        first={i === 0}
+        last={i === standings.length - 1}
+        style={[
+          { paddingHorizontal: 16 },
+          i === 0 && { paddingTop: 4 },
+          i === standings.length - 1 && { paddingBottom: 4, marginBottom: 24 },
+        ]}
+      >
+        {i > 0 && <Divider />}
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+            paddingVertical: 12,
+            paddingHorizontal: 12,
+            marginHorizontal: -4,
+            borderRadius: 12,
+            backgroundColor: me ? colors.brandTint : 'transparent',
+          }}
+        >
+          <View style={{ width: 26, flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+            {RANK_ICON[s.rank] && <AppIcon name={RANK_ICON[s.rank]} size={14} color={rankColor} />}
+            <Text color={rankColor} style={{ fontFamily: 'BarlowCondensed_700Bold', fontSize: 18 }}>
+              {s.rank}
             </Text>
           </View>
-        )}
+          <Avatar name={publicLeaderboardName(s)} size={32} />
+          <Text variant="cardTitle" color={colors.ink} style={{ flex: 1 }} numberOfLines={1}>
+            {publicLeaderboardName(s)}
+            {me ? ' (You)' : ''}
+          </Text>
+          <Text color={colors.ink} style={{ fontFamily: 'BarlowCondensed_700Bold', fontSize: 18 }}>
+            {s.score}
+          </Text>
+        </View>
+      </CardListItem>
+    );
+  };
+
+  const detailFooter = (
+    <>
+      {/* Goals — a challenge has a handful of fixed goals; not virtualized. */}
+      {detail.goals.length > 0 && (
+        <>
+          <SectionLabel>Goals</SectionLabel>
+          <Card style={{ marginBottom: 24, paddingVertical: 4 }}>
+            {detail.goals.map((g, i) => (
+              <View key={g.id}>
+                {i > 0 && <Divider />}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 }}>
+                  <AppIcon name="target" size={18} color={colors.scarlet} />
+                  <Text variant="cardTitle" color={colors.ink} style={{ flex: 1 }}>
+                    {g.description}
+                  </Text>
+                  <View style={{ backgroundColor: colors.scarlet, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
+                    <Text color={colors.onPrimary} style={{ fontFamily: 'BarlowCondensed_700Bold', fontSize: 12 }}>
+                      +{g.pointsValue}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            ))}
+          </Card>
+        </>
+      )}
+
+      {/* Stakes */}
+      <Card
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 14,
+          marginBottom: 24,
+          backgroundColor: colors.goldTint,
+        }}
+        accent={colors.goldTint}
+      >
+        <RotatingTrophy size={28} color={colors.gold} />
+        <View style={{ flex: 1 }}>
+          <Text variant="overline" color={colors.gold}>
+            Stakes
+          </Text>
+          <Text variant="subhead" color={colors.ink}>
+            {detail.stakesText || 'Winner takes bragging rights'}
+          </Text>
+        </View>
+      </Card>
+
+      {/* Actions */}
+      {detail.joined ? (
+        <>
+          <View
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'center',
+              alignItems: 'center',
+              gap: 8,
+              backgroundColor: colors.successTint,
+              borderRadius: 14,
+              paddingVertical: 14,
+            }}
+          >
+            <AppIcon name="check" size={17} color={colors.successDeep} />
+            <Text variant="cardTitle" color={colors.successDeep}>
+              You're in this challenge
+            </Text>
+          </View>
+          {detail.status !== 'completed' && (
+            <>
+              <Button
+                label="Invite friends"
+                variant="secondary"
+                icon="users"
+                onPress={() => setShowInvite(true)}
+                style={{ marginTop: 12 }}
+              />
+              <Pressable
+                onPress={() => {
+                  setDropError(null);
+                  setShowDrop(true);
+                }}
+                style={({ pressed }) => ({
+                  flexDirection: 'row',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  gap: 8,
+                  paddingVertical: 14,
+                  marginTop: 8,
+                  opacity: pressed ? 0.6 : 1,
+                })}
+                accessibilityRole="button"
+                accessibilityLabel="Drop challenge"
+              >
+                <AppIcon name="close" size={16} color={colors.error} />
+                <Text variant="cardTitle" color={colors.error}>
+                  Drop challenge
+                </Text>
+              </Pressable>
+            </>
+          )}
+        </>
+      ) : detail.status !== 'completed' ? (
+        <View style={{ gap: 8 }}>
+          {joinError && (
+            <Text variant="label" color={colors.error}>
+              {joinError}
+            </Text>
+          )}
+          <Button label="Join challenge" onPress={handleJoin} loading={joining} loadingLabel="Joining…" />
+        </View>
+      ) : (
+        <View style={{ alignItems: 'center', paddingVertical: 14 }}>
+          <Text variant="cardTitle" color={colors.textSecondary}>
+            This challenge has ended
+          </Text>
+        </View>
+      )}
+    </>
+  );
+
+  return (
+    <>
+      <Screen padded={false} topInset={false} bottomSpace={0}>
+        <FlatList
+          data={standings}
+          keyExtractor={(s) => s.userId}
+          renderItem={renderStanding}
+          style={{ flex: 1 }}
+          contentContainerStyle={listContent}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={detailHeader}
+          ListFooterComponent={detailFooter}
+        />
       </Screen>
 
       <InviteFriendsSheet

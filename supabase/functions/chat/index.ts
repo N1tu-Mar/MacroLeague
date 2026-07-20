@@ -14,27 +14,72 @@
 // supabase.functions.invoke on the client side).
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
-import { corsHeaders } from '../_shared/cors.ts';
+import { corsHeadersFor, preflightResponse, rejectDisallowedOrigin } from '../_shared/cors.ts';
+import { consumeQuotas, rateLimitedResponse, type QuotaWindow } from '../_shared/rateLimit.ts';
 
 const DEFAULT_MODEL = 'gpt-4o-mini';
 const MAX_TOKENS = 1024;
 const MAX_HISTORY = 20;
+
+// Input bounds. MAX_HISTORY alone caps message COUNT, not size — without a
+// length cap a caller could send 20 messages of 100KB each and burn ~500K input
+// tokens in a single request. These two together bound the input side the same
+// way MAX_TOKENS bounds the output side.
+const MAX_MESSAGE_CHARS = 2000;
+const MAX_TOTAL_CHARS = 12000;
+// Reject an oversized body before parsing it at all.
+const MAX_BODY_BYTES = 64 * 1024;
+
+// Per-user spend ceilings. The burst window stops a tight retry loop within
+// seconds; the daily window bounds total cost per account per day. Both are
+// generous relative to real conversational use (a heavy user sends well under
+// 100 coach messages a day) and are tunable via function secrets without a
+// redeploy of the migration.
+function quotaWindows(): QuotaWindow[] {
+  const daily = Number(Deno.env.get('CHAT_DAILY_LIMIT') ?? '100');
+  const burst = Number(Deno.env.get('CHAT_BURST_LIMIT') ?? '10');
+  return [
+    {
+      bucket: 'chat:burst',
+      limit: Number.isFinite(burst) && burst > 0 ? burst : 10,
+      windowSeconds: 60,
+      label: 'MacroCoach messages this minute',
+    },
+    {
+      bucket: 'chat:daily',
+      limit: Number.isFinite(daily) && daily > 0 ? daily : 100,
+      windowSeconds: 86400,
+      label: 'MacroCoach messages today',
+    },
+  ];
+}
 
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
 }
 
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  });
-}
-
 Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  const corsHeaders = corsHeadersFor(req);
+  const json = (body: unknown, status = 200): Response =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+
+  if (req.method === 'OPTIONS') return preflightResponse(req);
+  // Enforce the origin allow-list before ANY work — a blocked response is not
+  // enough on an endpoint that spends money (see _shared/cors.ts).
+  const originRejection = rejectDisallowedOrigin(req);
+  if (originRejection) return originRejection;
   if (req.method !== 'POST') return json({ error: 'Method not allowed.' }, 405);
+
+  // Cheapest possible rejection of an oversized payload: trust the declared
+  // length first, and re-check the real size after reading (below).
+  const declaredLength = Number(req.headers.get('Content-Length') ?? '0');
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
+    return json({ error: 'Message is too long.' }, 413);
+  }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -54,9 +99,15 @@ Deno.serve(async (req: Request) => {
   if (authError || !authData.user) return json({ error: 'Not authenticated.' }, 401);
   const userId = authData.user.id;
 
+  const rawBody = await req.text();
+  // Authoritative size check — Content-Length is client-supplied and may lie.
+  if (new TextEncoder().encode(rawBody).length > MAX_BODY_BYTES) {
+    return json({ error: 'Message is too long.' }, 413);
+  }
+
   let body: { messages?: unknown };
   try {
-    body = await req.json();
+    body = JSON.parse(rawBody);
   } catch {
     return json({ error: 'Invalid JSON body.' }, 400);
   }
@@ -71,11 +122,31 @@ Deno.serve(async (req: Request) => {
         typeof m.content === 'string' &&
         m.content.trim().length > 0,
     )
-    .slice(-MAX_HISTORY);
+    .slice(-MAX_HISTORY)
+    // Truncate rather than reject: a long paste should still get an answer,
+    // just a bounded one. The newest message is the one the user is asking
+    // about, so trimming the tail of each turn is the least surprising cut.
+    .map((m) => ({ role: m.role, content: m.content.slice(0, MAX_MESSAGE_CHARS) }));
 
   if (messages.length === 0 || messages[messages.length - 1].role !== 'user') {
     return json({ error: 'Last message must be from the user.' }, 400);
   }
+
+  // Belt-and-braces on aggregate size: drop the OLDEST turns until the whole
+  // history fits. The final user message is always preserved.
+  let totalChars = messages.reduce((n, m) => n + m.content.length, 0);
+  while (messages.length > 1 && totalChars > MAX_TOTAL_CHARS) {
+    totalChars -= messages[0].content.length;
+    messages.shift();
+  }
+
+  // Consume quota AFTER validation but BEFORE any paid work. Ordering matters:
+  // charging before validation would let a client bug (or a malformed retry
+  // loop) burn a real user's daily budget on requests that never reach OpenAI,
+  // while charging after the call would not bound spend at all. Body parsing is
+  // bounded by MAX_BODY_BYTES, so doing it first is cheap.
+  const quota = await consumeQuotas(admin, userId, quotaWindows());
+  if (!quota.allowed) return rateLimitedResponse(quota, corsHeaders);
 
   // Fetch user context in parallel — non-fatal if either fails.
   const today = new Date().toISOString().slice(0, 10);

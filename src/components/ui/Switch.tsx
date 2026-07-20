@@ -12,13 +12,23 @@ interface SwitchProps {
   value: boolean;
   onValueChange: (v: boolean) => void;
   disabled?: boolean;
+  /**
+   * Screen-reader name for the switch. Without it a toggle announces only its
+   * on/off state, which is meaningless when several sit in one list.
+   */
+  accessibilityLabel?: string;
 }
 
 /**
  * Custom 46×28 switch (spec F4). On = success track, off = neutral track, with
  * a 24px white knob that slides. Built so it looks identical on iOS/Android/web.
  */
-export default function Switch({ value, onValueChange, disabled }: SwitchProps) {
+export default function Switch({
+  value,
+  onValueChange,
+  disabled,
+  accessibilityLabel,
+}: SwitchProps) {
   const { colors } = useTheme();
   const t = useSharedValue(value ? 1 : 0);
 
@@ -47,6 +57,7 @@ export default function Switch({ value, onValueChange, disabled }: SwitchProps) 
       disabled={disabled}
       onPress={() => onValueChange(!value)}
       accessibilityRole="switch"
+      accessibilityLabel={accessibilityLabel}
       accessibilityState={{ checked: value, disabled }}
       style={{ opacity: disabled ? 0.5 : 1 }}
     >

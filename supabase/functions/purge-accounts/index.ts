@@ -14,6 +14,7 @@
 // Trigger header:  x-cron-secret: <ACCOUNT_PURGE_SECRET>
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
+import { verifyCronSecret } from '../_shared/secret.ts';
 
 const BATCH_LIMIT = 200;
 
@@ -35,9 +36,9 @@ Deno.serve(async (req: Request) => {
       headers: { 'Content-Type': 'application/json' },
     });
   }
-  // Refuse to run if the secret is not configured, so a misconfiguration can never
-  // leave the destructive endpoint open.
-  if (!purgeSecret || req.headers.get('x-cron-secret') !== purgeSecret) {
+  // Fail-closed (unset secret → deny) AND constant-time compare, so response
+  // latency can't be used to recover the secret byte-by-byte.
+  if (!verifyCronSecret(purgeSecret, req.headers.get('x-cron-secret'))) {
     return new Response(JSON.stringify({ error: 'Forbidden.' }), {
       status: 403,
       headers: { 'Content-Type': 'application/json' },

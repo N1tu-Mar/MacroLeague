@@ -11,6 +11,8 @@ import {
 } from '../services/mealLogService';
 import { MealEstimateCandidate } from '../services/nutrition/types';
 import { generateRequestId } from '../utils/clientRequestId';
+import { toUserFacingMessage } from '../lib/errors';
+import { reportError } from '../lib/monitoring';
 
 export interface MealLogFields {
   freeText: string;
@@ -75,12 +77,14 @@ function toUserFacingError(error: unknown): string {
   if (error instanceof DatabaseError) {
     // describeDbError already turned the Postgres failure into plain language,
     // so show it instead of an opaque "please try again" that hides the cause.
-    console.error('[useMealLogger] save failed', error.code, error.cause ?? error);
+    reportError(error, { context: 'useMealLogger.save', code: error.code });
     return error.message || 'We could not save that meal. Please try again.';
   }
 
   if (error instanceof Error) {
-    return error.message;
+    // Routed through the shared mapper so a dropped connection reads as
+    // "You're offline" rather than the raw "Network request failed".
+    return toUserFacingMessage(error, 'We could not save that meal. Please try again.');
   }
 
   return 'Something went wrong. Please try again.';

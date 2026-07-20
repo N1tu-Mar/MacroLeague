@@ -23,6 +23,7 @@ import type { ThemeColors } from '../../theme';
 import { Text, AppIcon } from '../../components/ui';
 import Chip from '../../components/ui/Chip';
 import { sendChatMessage, ChatMessage } from '../../services/chatService';
+import { toUserFacingMessage } from '../../lib/errors';
 
 const SUGGESTED_QUESTIONS = [
   'What do trans fats actually do to my body?',
@@ -124,7 +125,7 @@ export default function CoachScreen() {
         ]);
         scrollToBottom();
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : 'Something went wrong. Try again.';
+        const msg = toUserFacingMessage(err, 'Something went wrong. Try again.');
         setError(msg);
         setFailedText(trimmed);
       } finally {

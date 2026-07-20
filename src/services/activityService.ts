@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import type { AppIconName } from '../components/ui/AppIcon';
+import { describeOwnEvent, minutesSince } from '../lib/activityCopy';
 
 /**
  * Reads the signed-in user's OWN real activity (RLS restricts to own rows) for the
@@ -66,30 +67,6 @@ type EventRow = {
   metadata: Record<string, any> | null;
 };
 
-function describeEvent(row: EventRow): { icon: AppIconName | 'streak'; text: string } {
-  const m = row.metadata ?? {};
-  switch (row.event_type) {
-    case 'meal_logged':
-      return { icon: 'meal', text: `Logged a meal · +${row.points_delta} pts` };
-    case 'meal_count_goal_hit':
-      return { icon: 'meal-goal', text: `Hit your meal-count goal · +${row.points_delta} pts` };
-    case 'daily_protein_goal_hit':
-      return { icon: 'protein', text: `Locked your protein goal · +${row.points_delta} pts` };
-    case 'daily_macro_accuracy_hit':
-      return { icon: 'target', text: `Nailed your macro accuracy · +${row.points_delta} pts` };
-    case 'streak_milestone':
-      return { icon: 'streak', text: `Reached a ${m.streak ?? ''}-day streak · +${row.points_delta} pts` };
-    case 'streak_bonus':
-      return { icon: 'streak', text: `Streak bonus · +${row.points_delta} pts` };
-    case 'challenge_win':
-      return { icon: 'trophy', text: `Won a challenge · +${row.points_delta} pts` };
-    case 'reward_redemption':
-      return { icon: 'gift', text: `Redeemed a reward · ${row.points_delta} pts` };
-    default:
-      return { icon: 'star', text: `Earned ${row.points_delta} pts` };
-  }
-}
-
 /** The user's most recent gamification events, formatted for the activity feed. */
 export async function getRecentActivityFeed(limit = 6): Promise<ActivityFeedEntry[]> {
   const { data, error } = await supabase
@@ -102,13 +79,13 @@ export async function getRecentActivityFeed(limit = 6): Promise<ActivityFeedEntr
 
   const now = Date.now();
   return ((data ?? []) as EventRow[]).map((row) => {
-    const { icon, text } = describeEvent(row);
+    const { icon, text } = describeOwnEvent(row);
     return {
       id: row.id,
       icon,
       text,
       occurredAt: row.occurred_at,
-      minutesAgo: Math.max(0, Math.floor((now - new Date(row.occurred_at).getTime()) / 60000)),
+      minutesAgo: minutesSince(row.occurred_at, now),
     };
   });
 }

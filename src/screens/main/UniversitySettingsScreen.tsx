@@ -12,6 +12,7 @@ import { UNIVERSITIES, getDiningHallsForUniversity } from '../../data/university
 import { supabase } from '../../lib/supabase';
 import { getProfileIdentity, updateProfileUniversity } from '../../services/profileService';
 import { useUserStore } from '../../store/userStore';
+import { toUserFacingMessage } from '../../lib/errors';
 
 const DEFAULT_UNIVERSITY = 'Rutgers University';
 
@@ -87,7 +88,7 @@ export default function UniversitySettingsScreen({ navigation }: any) {
     } catch (caughtError) {
       Alert.alert(
         'Could not save',
-        caughtError instanceof Error ? caughtError.message : 'Please try again.',
+        toUserFacingMessage(caughtError, 'Please try again.'),
       );
     } finally {
       setIsSaving(false);

@@ -1,11 +1,12 @@
 import { supabase } from '../lib/supabase';
 
 /**
- * Supported individual leaderboard windows (days). 14/21/28 = 2/3/4 weeks and 30
- * = 1 month, matching the gamification plan and gamification_rule_sets duration
- * options. The default is the 2-week window.
+ * Supported individual leaderboard windows (days): 14/21 = 2/3 weeks, 30 =
+ * 1 month. The type mirrors LEADERBOARD_WINDOWS exactly — the UI maps over
+ * that array, so a value in the type but not the array is unreachable dead
+ * surface (28 used to be exactly that). The default is the 2-week window.
  */
-export type LeaderboardWindow = 14 | 21 | 28 | 30;
+export type LeaderboardWindow = 14 | 21 | 30;
 export const LEADERBOARD_WINDOWS: { days: LeaderboardWindow; label: string }[] = [
   { days: 14, label: '2 Weeks' },
   { days: 21, label: '3 Weeks' },

@@ -88,12 +88,35 @@ export interface EarnRule {
 }
 
 /**
+ * Static fallback for the Rewards "how to earn" list, matching the award trigger's
+ * documented default amounts (migration 0006's coalesce(...) fallbacks). Used only
+ * when the real active-rule-set lookup fails (no rule set configured, RLS hiccup,
+ * network error) so the Rewards screen still shows a sensible list instead of an
+ * empty one or tanking the whole screen load.
+ */
+export const DEFAULT_EARN_RULES: EarnRule[] = [
+  { action: 'Log a meal', points: 10 },
+  { action: 'Log 3 meals in a day', points: 15 },
+  { action: 'Hit your daily protein goal', points: 25 },
+  { action: 'Nail your macro accuracy', points: 30 },
+  { action: 'Reach a streak milestone', points: 100 },
+];
+
+/**
  * Builds the "how to earn" list from the ACTIVE rule set's real award amounts +
  * enabled modules, so the Rewards screen reflects what the award engine actually
  * grants (replaces the former hardcoded EARN_RULES). Disabled modules are omitted.
+ * Falls back to DEFAULT_EARN_RULES if the active rule set can't be loaded, so a
+ * missing rule set / transient error never blanks the whole Rewards screen.
  */
 export async function getEarnRules(userId: string): Promise<EarnRule[]> {
-  const active = await getActiveRuleSet(userId);
+  let active: ActiveRuleSet;
+  try {
+    active = await getActiveRuleSet(userId);
+  } catch {
+    return DEFAULT_EARN_RULES;
+  }
+
   const points = active.rules?.points ?? {};
   const m = active.modules;
   const rules: EarnRule[] = [];
@@ -118,7 +141,7 @@ export async function getEarnRules(userId: string): Promise<EarnRule[]> {
     });
   }
 
-  return rules;
+  return rules.length > 0 ? rules : DEFAULT_EARN_RULES;
 }
 
 /**

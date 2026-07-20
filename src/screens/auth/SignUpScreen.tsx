@@ -11,6 +11,7 @@ import {
   AppIcon,
 } from '../../components/ui';
 import { signUpWithEmail } from '../../lib/auth';
+import { checkAge } from '../../lib/ageGate';
 import LegalNotice from '../../components/LegalNotice';
 import type { SignUpScreenProps } from '../../navigation/types';
 
@@ -35,6 +36,12 @@ export default function SignUpScreen({ navigation }: SignUpScreenProps) {
   const [pwError, setPwError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [checkEmail, setCheckEmail] = useState(false);
+  // Neutral age screen — see src/lib/ageGate.ts for why the threshold is never
+  // shown to the user.
+  const [dobMonth, setDobMonth] = useState('');
+  const [dobDay, setDobDay] = useState('');
+  const [dobYear, setDobYear] = useState('');
+  const [dobError, setDobError] = useState<string | null>(null);
 
   const strength = scorePassword(password);
   const strengthColor =
@@ -51,6 +58,21 @@ export default function SignUpScreen({ navigation }: SignUpScreenProps) {
       setPwError('Use at least 6 characters.');
       ok = false;
     } else setPwError(null);
+
+    // Age gate. Runs BEFORE signUpWithEmail so an underage account is never
+    // created in the first place — rejecting after creation would leave an
+    // orphaned auth user behind.
+    const age = checkAge(dobMonth, dobDay, dobYear);
+    if (age.status === 'incomplete') {
+      setDobError('Enter your date of birth.');
+      ok = false;
+    } else if (age.status === 'invalid' || age.status === 'underage') {
+      setDobError(age.message);
+      ok = false;
+    } else {
+      setDobError(null);
+    }
+
     if (!ok) return;
 
     setLoading(true);
@@ -150,6 +172,58 @@ export default function SignUpScreen({ navigation }: SignUpScreenProps) {
                 ))}
                 <Text color={strengthColor} variant="labelSm" style={{ marginLeft: 4 }}>
                   {strength.label}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+
+          {/* Date of birth. Three short numeric fields rather than a date picker
+              so it behaves identically on iOS, Android and web, and so nothing
+              is pre-filled with a value that would pass the gate by default. */}
+          <View>
+            <Text variant="labelSm" color={colors.textSecondary} style={{ marginBottom: 6, paddingHorizontal: 2 }}>
+              Date of birth
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TextField
+                label="MM"
+                value={dobMonth}
+                onChangeText={(t) => {
+                  setDobMonth(t.replace(/[^0-9]/g, '').slice(0, 2));
+                  if (dobError) setDobError(null);
+                }}
+                keyboardType="number-pad"
+                accessibilityLabel="Birth month"
+                style={{ flex: 1 }}
+              />
+              <TextField
+                label="DD"
+                value={dobDay}
+                onChangeText={(t) => {
+                  setDobDay(t.replace(/[^0-9]/g, '').slice(0, 2));
+                  if (dobError) setDobError(null);
+                }}
+                keyboardType="number-pad"
+                accessibilityLabel="Birth day"
+                style={{ flex: 1 }}
+              />
+              <TextField
+                label="YYYY"
+                value={dobYear}
+                onChangeText={(t) => {
+                  setDobYear(t.replace(/[^0-9]/g, '').slice(0, 4));
+                  if (dobError) setDobError(null);
+                }}
+                keyboardType="number-pad"
+                accessibilityLabel="Birth year"
+                style={{ flex: 1.4 }}
+              />
+            </View>
+            {dobError ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6, paddingHorizontal: 2 }}>
+                <AppIcon name="circle-alert" size={14} color={colors.error} />
+                <Text variant="label" color={colors.error} style={{ flex: 1 }}>
+                  {dobError}
                 </Text>
               </View>
             ) : null}

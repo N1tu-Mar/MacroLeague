@@ -29,8 +29,13 @@ import OnboardingGoalsScreen from './src/screens/onboarding/OnboardingGoalsScree
 import TutorialScreen from './src/screens/onboarding/TutorialScreen';
 import { useUserStore } from './src/store/userStore';
 import { supabase } from './src/lib/supabase';
-import { setMonitoringUser } from './src/lib/monitoring';
+import { setMonitoringUser, reportError } from './src/lib/monitoring';
 import { analytics } from './src/lib/analytics';
+import {
+  initNotifications,
+  registerForPushNotifications,
+  unregisterPushNotifications,
+} from './src/services/notificationService';
 import { ThemeProvider, useTheme } from './src/theme';
 
 // The tutorial (the "what is MacroLeague" intro slides) is shown exactly once
@@ -87,6 +92,11 @@ export default function App() {
     let active = true;
 
     async function init() {
+      // Everything here is best-effort. A throw used to skip the `setLoading`
+      // below and strand the app on its spinner forever — a corrupt stored
+      // session or a captive-portal token refresh was enough to do it, and
+      // ErrorBoundary cannot catch a rejected promise in an effect. The catch
+      // degrades to the signed-out state, which is always recoverable.
       const { data: { session } } = await supabase.auth.getSession();
 
       if (!active) return;
@@ -95,6 +105,11 @@ export default function App() {
         setMonitoringUser(session.user.id);
         analytics.identify(session.user.id);
         void trackSessionStarted();
+        // Refresh this device's push token for the restored session. Fire-and-
+        // forget and never prompting: a permission dialog on cold start is how
+        // apps get permanently denied. See notificationService for the no-op
+        // paths (simulator, web, no EAS id, permission not granted).
+        void registerForPushNotifications();
         // Read the per-account tutorial flag now that we know who is signed in.
         const seenRaw = await AsyncStorage.getItem(tutorialKeyFor(session.user.id)).catch(() => null);
         if (!active) return;
@@ -131,7 +146,19 @@ export default function App() {
       setLoading(false);
     }
 
-    void init();
+    void init().catch((err) => {
+      reportError(err, { context: 'App.init' });
+      if (!active) return;
+      // Fall back to the signed-out shell rather than an endless spinner: the
+      // auth screen can retry, a spinner cannot.
+      setTutorialSeen(true);
+      setLoading(false);
+    });
+
+    // Foreground presentation + the Android notification channel every push
+    // targets. Must exist before the first notification arrives; a no-op where
+    // push is unavailable.
+    void initNotifications();
 
     // Listen for auth changes (login/logout/OAuth callback)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -146,6 +173,10 @@ export default function App() {
           setMonitoringUser(session.user.id);
           analytics.identify(session.user.id);
           void trackSessionStarted();
+          // Bind this device's push token to the account that just signed in.
+          // register_push_token() upserts on the token itself, so a shared
+          // device MOVES to the new owner instead of double-registering.
+          void registerForPushNotifications();
           // Resolve the per-account tutorial flag for this user.
           AsyncStorage.getItem(tutorialKeyFor(session.user.id))
             .then((seenRaw) => {
@@ -177,6 +208,9 @@ export default function App() {
         } else if (event === 'SIGNED_OUT') {
           setMonitoringUser(null);
           analytics.reset();
+          // Disable this device's token so the next person to sign in here does
+          // not receive the departing user's streak reminders.
+          void unregisterPushNotifications();
           setPasswordRecovery(false);
           logout();
         }

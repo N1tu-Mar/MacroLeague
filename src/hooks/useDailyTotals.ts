@@ -107,7 +107,11 @@ export function useDailyTotals(date: Date): {
   const [meals, setMeals] = useState<MealLog[]>([]);
   const [totals, setTotals] = useState<DailyTotals>(ZERO_TOTALS);
   const [isProfileLoading, setIsProfileLoading] = useState(true);
-  const [isMealsLoading, setIsMealsLoading] = useState(false);
+  // Starts TRUE, not false: meals can't load until the profile has, and if this
+  // started false there'd be one committed frame after the profile resolves
+  // where both flags are false but meals are still [] — Home flashed the
+  // "Log your first meal" hero on every open for users who have meals.
+  const [isMealsLoading, setIsMealsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -135,6 +139,10 @@ export function useDailyTotals(date: Date): {
           setMeals([]);
           setTotals(ZERO_TOTALS);
           setError(toError(caughtError));
+          // The meals effect never runs without a profile; if this stayed true
+          // the hook would report isLoading forever and the error would never
+          // render.
+          setIsMealsLoading(false);
         }
       } finally {
         if (active) {
