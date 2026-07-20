@@ -5,6 +5,7 @@ import { Screen, Text, Button, AppIcon } from '../../components/ui';
 import { useUserStore } from '../../store/userStore';
 import { reactivateAccount } from '../../services/accountService';
 import { signOut } from '../../lib/auth';
+import { toUserFacingMessage } from '../../lib/errors';
 
 /**
  * Full-screen gate shown (instead of the main app) when the signed-in account is
@@ -36,7 +37,7 @@ export default function ReactivateAccountScreen() {
     } catch (err) {
       Alert.alert(
         'Could not reactivate',
-        err instanceof Error ? err.message : 'Please try again.',
+        toUserFacingMessage(err, 'Please try again.'),
       );
     } finally {
       setBusy(false);

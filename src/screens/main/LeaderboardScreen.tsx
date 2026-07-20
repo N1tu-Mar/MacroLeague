@@ -1,5 +1,14 @@
-import React, { useCallback, useRef, useState } from 'react';
-import { View, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
+import {
+  View,
+  StyleSheet,
+  Pressable,
+  ActivityIndicator,
+  FlatList,
+  ScrollView,
+  ViewStyle,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { FontFamily, Radius, Spacing, alpha, useTheme } from '../../theme';
 import { useUserStore } from '../../store/userStore';
@@ -17,6 +26,7 @@ import {
   IconButton,
   AppIcon,
   Divider,
+  CardListItem,
 } from '../../components/ui';
 import {
   getLeaderboard,
@@ -36,6 +46,7 @@ import {
   FriendStanding,
   FriendshipStatus,
 } from '../../services/friendService';
+import { toUserFacingMessage } from '../../lib/errors';
 
 type Tab = 'global' | 'friends' | 'team';
 const TABS: { key: Tab; label: string }[] = [
@@ -110,7 +121,7 @@ export default function LeaderboardScreen() {
           const data = await getLeaderboard(windowDays);
           if (active) setRows(data);
         } catch (e) {
-          if (active) setError(e instanceof Error ? e.message : 'Could not load the leaderboard.');
+          if (active) setError(toUserFacingMessage(e, 'Could not load the leaderboard.'));
         } finally {
           if (active) setIsLoading(false);
         }
@@ -133,6 +144,19 @@ export default function LeaderboardScreen() {
     LEADERBOARD_WINDOWS.findIndex((w) => w.days === windowDays),
   );
 
+  // Each tab now owns its own (virtualized) scroller, so `Screen` no longer
+  // supplies the ScrollView. These are exactly the paddings the old
+  // `<Screen scroll bottomSpace={96}>` put on its content container.
+  const insets = useSafeAreaInsets();
+  const listContent = useMemo(
+    () => ({
+      paddingTop: insets.top + Spacing.sm,
+      paddingHorizontal: Spacing.screen,
+      paddingBottom: 96,
+    }),
+    [insets.top],
+  );
+
   const openProfile = (r: LeaderboardUser) => {
     const isSelf = r.userId === user?.id;
     setProfile({
@@ -146,8 +170,10 @@ export default function LeaderboardScreen() {
     });
   };
 
-  return (
-    <Screen scroll bottomSpace={96}>
+  // Title + tabs. Shared by every tab's list as its ListHeaderComponent so the
+  // header keeps scrolling with the content exactly as it did in the ScrollView.
+  const listHeader = (
+    <>
       {/* Header */}
       <View style={styles.header}>
         <Text variant="heading" color={colors.ink}>
@@ -197,109 +223,130 @@ export default function LeaderboardScreen() {
         })}
       </View>
 
-      {tab === 'global' && (
-        <>
-          {/* Duration */}
-          <SegmentedControl
-            segments={LEADERBOARD_WINDOWS.map((w) => w.label)}
-            value={windowIndex}
-            onChange={(i) => setWindowDays(LEADERBOARD_WINDOWS[i].days)}
-            style={{ marginBottom: Spacing.base }}
-          />
+    </>
+  );
 
-          {/* Dark rank summary card */}
-          {me && (
-            <View style={[styles.rankCard, { backgroundColor: colors.ink }]}>
-              <View style={styles.rankCardLeft}>
-                <Text variant="overline" color={alpha(colors.onPrimary, 0.6)}>
-                  Your Rank
+  const globalHeader = (
+    <>
+      {listHeader}
+
+      {/* Duration */}
+      <SegmentedControl
+        segments={LEADERBOARD_WINDOWS.map((w) => w.label)}
+        value={windowIndex}
+        onChange={(i) => setWindowDays(LEADERBOARD_WINDOWS[i].days)}
+        style={{ marginBottom: Spacing.base }}
+      />
+
+      {/* Dark rank summary card */}
+      {me && (
+        <View style={[styles.rankCard, { backgroundColor: colors.ink }]}>
+          <View style={styles.rankCardLeft}>
+            <Text variant="overline" color={alpha(colors.onPrimary, 0.6)}>
+              Your Rank
+            </Text>
+            <Text
+              color={colors.onPrimary}
+              style={styles.rankBig}
+              allowFontScaling={false}
+            >
+              #{me.rank}
+            </Text>
+          </View>
+          <View style={[styles.rankDivider, { backgroundColor: alpha(colors.onPrimary, 0.14) }]} />
+          <View style={styles.rankCardRight}>
+            <View style={styles.rankStatRow}>
+              <Text variant="labelSm" color={alpha(colors.onPrimary, 0.6)}>
+                League Points
+              </Text>
+              <View style={styles.lpInline}>
+                <Text color={colors.onPrimary} style={styles.lpInlineValue} allowFontScaling={false}>
+                  {me.score.toLocaleString()}
                 </Text>
-                <Text
-                  color={colors.onPrimary}
-                  style={styles.rankBig}
-                  allowFontScaling={false}
-                >
-                  #{me.rank}
+                <Text variant="labelSm" color={alpha(colors.onPrimary, 0.6)}>
+                  LP
                 </Text>
               </View>
-              <View style={[styles.rankDivider, { backgroundColor: alpha(colors.onPrimary, 0.14) }]} />
-              <View style={styles.rankCardRight}>
-                <View style={styles.rankStatRow}>
-                  <Text variant="labelSm" color={alpha(colors.onPrimary, 0.6)}>
-                    League Points
-                  </Text>
-                  <View style={styles.lpInline}>
-                    <Text color={colors.onPrimary} style={styles.lpInlineValue} allowFontScaling={false}>
-                      {me.score.toLocaleString()}
-                    </Text>
-                    <Text variant="labelSm" color={alpha(colors.onPrimary, 0.6)}>
-                      LP
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.deltaRow}>
-                  <AppIcon name="arrow-up" size={14} color={colors.success} />
-                  <Text variant="labelSm" color={alpha(colors.onPrimary, 0.75)} style={{ flex: 1 }}>
-                    To the rank above
-                  </Text>
-                  <Text color={colors.success} style={styles.deltaValue} allowFontScaling={false}>
-                    {ptsToAbove != null ? `+${ptsToAbove}` : '—'}
-                  </Text>
-                </View>
-                <View style={styles.deltaRow}>
-                  <AppIcon name="arrow-down" size={14} color={alpha(colors.onPrimary, 0.55)} />
-                  <Text variant="labelSm" color={alpha(colors.onPrimary, 0.75)} style={{ flex: 1 }}>
-                    Rank below
-                  </Text>
-                  <Text color={alpha(colors.onPrimary, 0.75)} style={styles.deltaValue} allowFontScaling={false}>
-                    {ptsToBelow != null ? `+${ptsToBelow}` : '—'}
-                  </Text>
-                </View>
-              </View>
             </View>
-          )}
-
-          {/* Standings */}
-          {isLoading ? (
-            <View style={styles.center}>
-              <ActivityIndicator color={colors.scarlet} />
-            </View>
-          ) : error ? (
-            <View style={styles.center}>
-              <Text variant="body" color={colors.textSecondary} center>
-                {error}
+            <View style={styles.deltaRow}>
+              <AppIcon name="arrow-up" size={14} color={colors.success} />
+              <Text variant="labelSm" color={alpha(colors.onPrimary, 0.75)} style={{ flex: 1 }}>
+                To the rank above
+              </Text>
+              <Text color={colors.success} style={styles.deltaValue} allowFontScaling={false}>
+                {ptsToAbove != null ? `+${ptsToAbove}` : '—'}
               </Text>
             </View>
-          ) : rows.length === 0 ? (
-            <EmptyState
-              icon="trophy"
-              title="No standings yet."
-              body="Log and confirm your first meal to enter this window. Every confirmed meal earns 10 LP."
-            />
-          ) : (
-            <Card padded={false} style={{ overflow: 'hidden' }}>
-              {rows.map((r, i) => (
-                <View key={r.userId}>
-                  {i > 0 && <Divider color={colors.rowDivider} />}
-                  <LeaderboardRow
-                    rank={r.rank}
-                    name={r.userId === user?.id ? firstName : publicLeaderboardName(r)}
-                    points={r.score}
-                    streak={r.streakCount}
-                    movement={0}
-                    isCurrentUser={r.userId === user?.id}
-                    avatarUrl={r.avatarUrl}
-                    onPress={() => openProfile(r)}
-                  />
-                </View>
-              ))}
-            </Card>
+            <View style={styles.deltaRow}>
+              <AppIcon name="arrow-down" size={14} color={alpha(colors.onPrimary, 0.55)} />
+              <Text variant="labelSm" color={alpha(colors.onPrimary, 0.75)} style={{ flex: 1 }}>
+                Rank below
+              </Text>
+              <Text color={alpha(colors.onPrimary, 0.75)} style={styles.deltaValue} allowFontScaling={false}>
+                {ptsToBelow != null ? `+${ptsToBelow}` : '—'}
+              </Text>
+            </View>
+          </View>
+        </View>
+      )}
+    </>
+  );
+
+  return (
+    // The tab bodies own their own scroller now, so Screen contributes only the
+    // canvas — its paddings moved onto each list's content container.
+    <Screen padded={false} topInset={false} bottomSpace={0}>
+      {tab === 'global' && (
+        /* Standings — virtualized: this list grows with the user base. */
+        <FlatList
+          data={isLoading || error ? [] : rows}
+          keyExtractor={(r) => r.userId}
+          style={styles.list}
+          contentContainerStyle={listContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          ListHeaderComponent={globalHeader}
+          ListEmptyComponent={
+            isLoading ? (
+              <View style={styles.center}>
+                <ActivityIndicator color={colors.scarlet} />
+              </View>
+            ) : error ? (
+              <View style={styles.center}>
+                <Text variant="body" color={colors.textSecondary} center>
+                  {error}
+                </Text>
+              </View>
+            ) : (
+              <EmptyState
+                icon="trophy"
+                title="No standings yet."
+                body="Log and confirm your first meal to enter this window. Every confirmed meal earns 10 LP."
+              />
+            )
+          }
+          renderItem={({ item: r, index: i }) => (
+            <CardListItem first={i === 0} last={i === rows.length - 1}>
+              {i > 0 && <Divider color={colors.rowDivider} />}
+              <LeaderboardRow
+                rank={r.rank}
+                name={r.userId === user?.id ? firstName : publicLeaderboardName(r)}
+                points={r.score}
+                streak={r.streakCount}
+                movement={0}
+                isCurrentUser={r.userId === user?.id}
+                avatarUrl={r.avatarUrl}
+                onPress={() => openProfile(r)}
+              />
+            </CardListItem>
           )}
-        </>
+        />
       )}
 
       {tab === 'friends' && (
         <FriendsTab
+          listHeader={listHeader}
+          contentContainerStyle={listContent}
           currentUserId={user?.id ?? null}
           firstName={firstName}
           onRequestsLoaded={setFriendRequestCount}
@@ -318,18 +365,26 @@ export default function LeaderboardScreen() {
         />
       )}
 
+      {/* Team is a single fixed card — a plain ScrollView, nothing to virtualize. */}
       {tab === 'team' && (
-        <Card style={styles.teamCard}>
-          <View style={[styles.iconTile, { backgroundColor: colors.track }]}>
-            <AppIcon name="challenges" size={26} color={colors.textSecondary} />
-          </View>
-          <Text variant="section" color={colors.ink} center>
-            Team leaderboard
-          </Text>
-          <Text variant="body" color={colors.textSecondary} center>
-            Join a challenge to compete with your team. Per-team standings are coming soon.
-          </Text>
-        </Card>
+        <ScrollView
+          style={styles.list}
+          contentContainerStyle={listContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {listHeader}
+          <Card style={styles.teamCard}>
+            <View style={[styles.iconTile, { backgroundColor: colors.track }]}>
+              <AppIcon name="challenges" size={26} color={colors.textSecondary} />
+            </View>
+            <Text variant="section" color={colors.ink} center>
+              Team leaderboard
+            </Text>
+            <Text variant="body" color={colors.textSecondary} center>
+              Join a challenge to compete with your team. Per-team standings are coming soon.
+            </Text>
+          </Card>
+        </ScrollView>
       )}
 
       {/* How scoring works */}
@@ -390,18 +445,33 @@ export default function LeaderboardScreen() {
 }
 
 // ── Friends tab ─────────────────────────────────────────────────────
+/**
+ * Row model for the Friends tab. Requests, search results and standings are all
+ * unbounded, so rather than nesting three lists (which a FlatList forbids) they
+ * are flattened into one virtualized list of tagged rows.
+ */
+type FriendsRow =
+  | { kind: 'label'; key: string; text: string; marginTop: number }
+  | { kind: 'request'; key: string; req: FriendRequest; first: boolean; last: boolean }
+  | { kind: 'result'; key: string; res: UserSearchResult; first: boolean; last: boolean }
+  | { kind: 'standing'; key: string; standing: FriendStanding; first: boolean; last: boolean };
+
 function FriendsTab({
   currentUserId,
   firstName,
   onChallengeFriend,
   onRequestsLoaded,
   onOpenProfile,
+  listHeader,
+  contentContainerStyle,
 }: {
   currentUserId: string | null;
   firstName: string;
   onChallengeFriend: (friendId: string, friendName: string) => void;
   onRequestsLoaded?: (count: number) => void;
   onOpenProfile: (s: FriendStanding) => void;
+  listHeader: React.ReactNode;
+  contentContainerStyle: ViewStyle;
 }) {
   const { colors } = useTheme();
   const [query, setQuery] = useState('');
@@ -430,7 +500,7 @@ function FriendsTab({
         onRequestsLoaded?.(reqs.length);
       } catch (e) {
         if (shouldApply()) {
-          setError(e instanceof Error ? e.message : 'Could not load friends.');
+          setError(toUserFacingMessage(e, 'Could not load friends.'));
         }
       } finally {
         if (shouldApply()) setLoading(false);
@@ -490,7 +560,7 @@ function FriendsTab({
       setResultStatus(r.userId, status);
       if (status === 'friends') await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not send request.');
+      setError(toUserFacingMessage(e, 'Could not send request.'));
     } finally {
       setBusyId(null);
     }
@@ -502,7 +572,7 @@ function FriendsTab({
       await respondFriendRequest(requesterId, accept);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not update request.');
+      setError(toUserFacingMessage(e, 'Could not update request.'));
     } finally {
       setBusyId(null);
     }
@@ -510,163 +580,232 @@ function FriendsTab({
 
   const showingSearch = query.trim().length >= 2;
 
-  return (
-    <View>
-      {/* Search */}
-      <TextField
-        value={query}
-        onChangeText={onChangeQuery}
-        placeholder="Search by name or username"
-        rightIcon={query.length > 0 ? 'close' : 'search'}
-        onRightIconPress={query.length > 0 ? () => onChangeQuery('') : undefined}
-        autoCapitalize="none"
-        autoCorrect={false}
-        returnKeyType="search"
-        style={{ marginBottom: Spacing.base }}
-      />
+  // Flatten every section into a single virtualized list, in the same order the
+  // ScrollView rendered them.
+  const data: FriendsRow[] = [];
 
-      {error && (
-        <Text variant="label" color={colors.error} style={{ marginBottom: Spacing.sm }}>
-          {error}
+  // Incoming friend requests — kept above search results so an incoming
+  // request stays discoverable whether or not the user is searching.
+  if (!loading && requests.length > 0) {
+    data.push({
+      kind: 'label',
+      key: 'requests-label',
+      text: `Friend Requests · ${requests.length}`,
+      marginTop: 0,
+    });
+    requests.forEach((req, i) =>
+      data.push({
+        kind: 'request',
+        key: `request-${req.userId}`,
+        req,
+        first: i === 0,
+        last: i === requests.length - 1,
+      }),
+    );
+  }
+
+  if (showingSearch) {
+    if (!searching) {
+      results.forEach((res, i) =>
+        data.push({
+          kind: 'result',
+          key: `result-${res.userId}`,
+          res,
+          first: i === 0,
+          last: i === results.length - 1,
+        }),
+      );
+    }
+  } else if (!loading) {
+    data.push({
+      kind: 'label',
+      key: 'week-label',
+      text: 'This Week',
+      marginTop: requests.length ? Spacing.lg : 0,
+    });
+    if (standings.length > 1) {
+      standings.forEach((standing, i) =>
+        data.push({
+          kind: 'standing',
+          key: `standing-${standing.userId}`,
+          standing,
+          first: i === 0,
+          last: i === standings.length - 1,
+        }),
+      );
+    }
+  }
+
+  // Loading spinners / empty copy trail the rows, so they live in the footer
+  // rather than ListEmptyComponent (the list is rarely fully empty — the
+  // requests section can be present while search results are still loading).
+  const footer = showingSearch ? (
+    searching ? (
+      <ActivityIndicator color={colors.scarlet} style={{ marginTop: Spacing.lg }} />
+    ) : results.length === 0 ? (
+      <Text variant="body" color={colors.textSecondary} center style={{ marginTop: Spacing.lg }}>
+        No users found.
+      </Text>
+    ) : null
+  ) : loading ? (
+    <ActivityIndicator color={colors.scarlet} style={{ marginTop: Spacing.lg }} />
+  ) : standings.length <= 1 ? (
+    <FriendsEmpty />
+  ) : null;
+
+  const renderRow = ({ item }: { item: FriendsRow }) => {
+    if (item.kind === 'label') {
+      return (
+        <Text
+          variant="overline"
+          color={colors.textSecondary}
+          style={[styles.sectionLabel, { marginTop: item.marginTop }]}
+        >
+          {item.text}
         </Text>
-      )}
+      );
+    }
 
-      {/* Incoming friend requests — kept above search results so an incoming
-          request stays discoverable whether or not the user is searching. */}
-      {!loading && requests.length > 0 && (
-        <>
-          <Text variant="overline" color={colors.textSecondary} style={styles.sectionLabel}>
-            {`Friend Requests · ${requests.length}`}
-          </Text>
-          <Card padded={false} style={[styles.listCard, { overflow: 'hidden' }]}>
-            {requests.map((req, i) => (
-              <View key={req.userId}>
-                {i > 0 && <Divider color={colors.rowDivider} />}
-                <View style={styles.row}>
-                  <Avatar name={req.name} url={req.avatarUrl} size={40} />
-                  <View style={styles.rowMain}>
-                    <Text variant="cardTitle" color={colors.ink} numberOfLines={1}>
-                      {req.name}
-                    </Text>
-                    <Text variant="labelSm" color={colors.textSecondary} numberOfLines={1}>
-                      {req.university ?? 'wants to be friends'}
-                    </Text>
-                  </View>
-                  <View style={styles.actionsRow}>
-                    <Button
-                      label="Accept"
-                      size="md"
-                      fullWidth={false}
-                      loading={busyId === req.userId}
-                      loadingLabel="Accept"
-                      onPress={() => onRespond(req.userId, true)}
-                      style={styles.pillBtn}
-                    />
-                    <IconButton
-                      icon="close"
-                      size={40}
-                      iconSize={18}
-                      onPress={() => onRespond(req.userId, false)}
-                      color={colors.textSecondary}
-                      accessibilityLabel="Decline"
-                    />
-                  </View>
-                </View>
-              </View>
-            ))}
-          </Card>
-        </>
-      )}
+    if (item.kind === 'request') {
+      const req = item.req;
+      return (
+        <CardListItem
+          first={item.first}
+          last={item.last}
+          style={item.last ? styles.listCard : undefined}
+        >
+          {!item.first && <Divider color={colors.rowDivider} />}
+          <View style={styles.row}>
+            <Avatar name={req.name} url={req.avatarUrl} size={40} />
+            <View style={styles.rowMain}>
+              <Text variant="cardTitle" color={colors.ink} numberOfLines={1}>
+                {req.name}
+              </Text>
+              <Text variant="labelSm" color={colors.textSecondary} numberOfLines={1}>
+                {req.university ?? 'wants to be friends'}
+              </Text>
+            </View>
+            <View style={styles.actionsRow}>
+              <Button
+                label="Accept"
+                size="md"
+                fullWidth={false}
+                loading={busyId === req.userId}
+                loadingLabel="Accept"
+                onPress={() => onRespond(req.userId, true)}
+                style={styles.pillBtn}
+              />
+              <IconButton
+                icon="close"
+                size={40}
+                iconSize={18}
+                onPress={() => onRespond(req.userId, false)}
+                color={colors.textSecondary}
+                accessibilityLabel="Decline"
+              />
+            </View>
+          </View>
+        </CardListItem>
+      );
+    }
 
-      {/* Search results */}
-      {showingSearch ? (
-        searching ? (
-          <ActivityIndicator color={colors.scarlet} style={{ marginTop: Spacing.lg }} />
-        ) : results.length === 0 ? (
-          <Text variant="body" color={colors.textSecondary} center style={{ marginTop: Spacing.lg }}>
-            No users found.
-          </Text>
-        ) : (
-          <Card padded={false} style={{ overflow: 'hidden' }}>
-            {results.map((r, i) => (
-              <View key={r.userId}>
-                {i > 0 && <Divider color={colors.rowDivider} />}
-                <View style={styles.row}>
-                  <Avatar name={r.name} url={r.avatarUrl} size={40} />
-                  <View style={styles.rowMain}>
-                    <Text variant="cardTitle" color={colors.ink} numberOfLines={1}>
-                      {r.name}
-                    </Text>
-                    {r.university ? (
-                      <Text variant="labelSm" color={colors.textSecondary} numberOfLines={1}>
-                        {r.university}
-                      </Text>
-                    ) : null}
-                  </View>
-                  <StatusButton
-                    status={r.status}
-                    busy={busyId === r.userId}
-                    onAdd={() => onAdd(r)}
-                    onAccept={() => onRespond(r.userId, true)}
-                  />
-                </View>
-              </View>
-            ))}
-          </Card>
-        )
-      ) : loading ? (
-        <ActivityIndicator color={colors.scarlet} style={{ marginTop: Spacing.lg }} />
-      ) : (
+    if (item.kind === 'result') {
+      const r = item.res;
+      return (
+        <CardListItem first={item.first} last={item.last}>
+          {!item.first && <Divider color={colors.rowDivider} />}
+          <View style={styles.row}>
+            <Avatar name={r.name} url={r.avatarUrl} size={40} />
+            <View style={styles.rowMain}>
+              <Text variant="cardTitle" color={colors.ink} numberOfLines={1}>
+                {r.name}
+              </Text>
+              {r.university ? (
+                <Text variant="labelSm" color={colors.textSecondary} numberOfLines={1}>
+                  {r.university}
+                </Text>
+              ) : null}
+            </View>
+            <StatusButton
+              status={r.status}
+              busy={busyId === r.userId}
+              onAdd={() => onAdd(r)}
+              onAccept={() => onRespond(r.userId, true)}
+            />
+          </View>
+        </CardListItem>
+      );
+    }
+
+    const s = item.standing;
+    const isMe = s.userId === currentUserId;
+    return (
+      <CardListItem first={item.first} last={item.last}>
+        {!item.first && <Divider color={colors.rowDivider} />}
+        <View style={styles.standingRow}>
+          <View style={{ flex: 1 }}>
+            <LeaderboardRow
+              rank={s.rank}
+              name={isMe ? firstName : s.name}
+              points={s.score}
+              streak={s.streakCount}
+              movement={0}
+              isCurrentUser={isMe}
+              avatarUrl={s.avatarUrl}
+              onPress={() => onOpenProfile(s)}
+            />
+          </View>
+          {!isMe && (
+            <Button
+              label="Challenge"
+              icon="challenges"
+              size="md"
+              fullWidth={false}
+              variant="secondary"
+              onPress={() => onChallengeFriend(s.userId, s.name)}
+              style={[styles.pillBtn, { marginRight: Spacing.md }]}
+            />
+          )}
+        </View>
+      </CardListItem>
+    );
+  };
+
+  return (
+    <FlatList
+      data={data}
+      keyExtractor={(item) => item.key}
+      renderItem={renderRow}
+      style={styles.list}
+      contentContainerStyle={contentContainerStyle}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      ListHeaderComponent={
         <>
-          <Text
-            variant="overline"
-            color={colors.textSecondary}
-            style={[styles.sectionLabel, { marginTop: requests.length ? Spacing.lg : 0 }]}
-          >
-            This Week
-          </Text>
-          {standings.length <= 1 ? (
-            <FriendsEmpty />
-          ) : (
-            <Card padded={false} style={{ overflow: 'hidden' }}>
-              {standings.map((s, i) => {
-                const isMe = s.userId === currentUserId;
-                return (
-                  <View key={s.userId}>
-                    {i > 0 && <Divider color={colors.rowDivider} />}
-                    <View style={styles.standingRow}>
-                      <View style={{ flex: 1 }}>
-                        <LeaderboardRow
-                          rank={s.rank}
-                          name={isMe ? firstName : s.name}
-                          points={s.score}
-                          streak={s.streakCount}
-                          movement={0}
-                          isCurrentUser={isMe}
-                          avatarUrl={s.avatarUrl}
-                          onPress={() => onOpenProfile(s)}
-                        />
-                      </View>
-                      {!isMe && (
-                        <Button
-                          label="Challenge"
-                          icon="challenges"
-                          size="md"
-                          fullWidth={false}
-                          variant="secondary"
-                          onPress={() => onChallengeFriend(s.userId, s.name)}
-                          style={[styles.pillBtn, { marginRight: Spacing.md }]}
-                        />
-                      )}
-                    </View>
-                  </View>
-                );
-              })}
-            </Card>
+          {listHeader}
+
+          {/* Search */}
+          <TextField
+            value={query}
+            onChangeText={onChangeQuery}
+            placeholder="Search by name or username"
+            rightIcon={query.length > 0 ? 'close' : 'search'}
+            onRightIconPress={query.length > 0 ? () => onChangeQuery('') : undefined}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+            style={{ marginBottom: Spacing.base }}
+          />
+
+          {error && (
+            <Text variant="label" color={colors.error} style={{ marginBottom: Spacing.sm }}>
+              {error}
+            </Text>
           )}
         </>
-      )}
-    </View>
+      }
+      ListFooterComponent={footer}
+    />
   );
 }
 
@@ -765,6 +904,8 @@ function FriendsEmpty() {
 }
 
 const styles = StyleSheet.create({
+  list: { flex: 1 },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',

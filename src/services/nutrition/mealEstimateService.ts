@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabase';
+import { withTimeout } from '../../lib/errors';
 import { DatabaseError } from '../mealLogService';
 import {
   MealEstimateCandidate,
@@ -10,6 +11,9 @@ import {
 // IMPORTANT: this service never calls USDA FoodData Central directly. It invokes
 // the `estimate-meal` Supabase edge function, which holds the USDA API key
 // server-side and caches results. Calling USDA from the app would leak the key.
+
+/** Upper bound on an estimate lookup before we surface a timeout. */
+const ESTIMATE_TIMEOUT_MS = 20_000;
 
 export class EstimateError extends Error {
   constructor(message: string) {
@@ -44,9 +48,16 @@ export async function estimateMeal(
     throw new EstimateError('Please describe your meal in at least 2 characters.');
   }
 
-  const { data, error } = await supabase.functions.invoke('estimate-meal', {
-    body: { query, pageSize: params.pageSize },
-  });
+  // Bounded so a stalled connection can't leave the meal logger stuck in its
+  // searching state forever. Shorter than the chat budget: this is a lookup
+  // against a cache-backed function, not an LLM completion.
+  const { data, error } = await withTimeout(
+    supabase.functions.invoke('estimate-meal', {
+      body: { query, pageSize: params.pageSize },
+    }),
+    ESTIMATE_TIMEOUT_MS,
+    'meal estimate request',
+  );
 
   if (error) {
     // FunctionsHttpError exposes the JSON body the function returned.

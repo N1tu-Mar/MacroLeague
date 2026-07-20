@@ -198,6 +198,110 @@ export async function updateProfileAvatar(
 }
 
 /**
+ * The user's own sharing settings: which social handles they've linked, and who
+ * can see their activity and links.
+ *
+ * `visibility` is 'friends' or 'private'. There is deliberately NO 'public'
+ * option — nothing in this app is ever visible to strangers or signed-out
+ * viewers, and adding that tier would need its own review of every read path.
+ */
+export interface SocialSettings {
+  instagram: string | null;
+  snapchat: string | null;
+  tiktok: string | null;
+  activityVisibility: SharingVisibility;
+  socialLinksVisibility: SharingVisibility;
+}
+
+export type SharingVisibility = 'friends' | 'private';
+
+function toVisibility(value: unknown): SharingVisibility {
+  return value === 'private' ? 'private' : 'friends';
+}
+
+/** Reads the signed-in user's own sharing settings (own row; RLS-scoped). */
+export async function getSocialSettings(userId: string): Promise<SocialSettings> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select(
+      'instagram_handle, snapchat_handle, tiktok_handle, activity_visibility, social_links_visibility',
+    )
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error(MISSING_PROFILE_MESSAGE);
+
+  return {
+    instagram: nonEmptyString(data.instagram_handle),
+    snapchat: nonEmptyString(data.snapchat_handle),
+    tiktok: nonEmptyString(data.tiktok_handle),
+    activityVisibility: toVisibility(data.activity_visibility),
+    socialLinksVisibility: toVisibility(data.social_links_visibility),
+  };
+}
+
+/**
+ * Persists linked social handles. Every field is optional — only the keys
+ * present are written, so a screen can save one platform without clearing the
+ * others. Pass an explicit `null` to unlink a platform.
+ *
+ * Handles must already be normalized to a bare handle (see
+ * socialFeedService.normalizeHandle) — the DB rejects anything carrying a scheme
+ * or path, which is what stops a stored value becoming an open redirect.
+ */
+export async function updateSocialHandles(
+  userId: string,
+  handles: Partial<Pick<SocialSettings, 'instagram' | 'snapchat' | 'tiktok'>>,
+): Promise<void> {
+  const update: Record<string, string | null> = {};
+  if ('instagram' in handles) update.instagram_handle = handles.instagram ?? null;
+  if ('snapchat' in handles) update.snapchat_handle = handles.snapchat ?? null;
+  if ('tiktok' in handles) update.tiktok_handle = handles.tiktok ?? null;
+
+  if (Object.keys(update).length === 0) return;
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .update(update)
+    .eq('id', userId)
+    .select('id')
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error(MISSING_PROFILE_MESSAGE);
+}
+
+/**
+ * Updates who can see the user's activity and/or their linked social accounts.
+ *
+ * Setting activityVisibility to 'private' removes the user from every friend's
+ * feed immediately, without unfriending anyone.
+ */
+export async function updateSharingVisibility(
+  userId: string,
+  update: Partial<Pick<SocialSettings, 'activityVisibility' | 'socialLinksVisibility'>>,
+): Promise<void> {
+  const patch: Record<string, string> = {};
+  if (update.activityVisibility) patch.activity_visibility = update.activityVisibility;
+  if (update.socialLinksVisibility) {
+    patch.social_links_visibility = update.socialLinksVisibility;
+  }
+
+  if (Object.keys(patch).length === 0) return;
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .update(patch)
+    .eq('id', userId)
+    .select('id')
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error(MISSING_PROFILE_MESSAGE);
+}
+
+/**
  * Backend-owned gamification snapshot for a user. Every field here is written
  * ONLY by the database (migration 0005's meal-award trigger / future RPCs); the
  * client can read these columns but column-level privileges forbid it from
@@ -269,6 +373,12 @@ export interface ProfileIdentity {
   /** Profile picture URL (migration 0006), or null if never set. */
   avatarUrl: string | null;
   /**
+   * IANA timezone the backend buckets this user's daily activity by
+   * (`user_daily_activity.activity_date`, streaks). Anything comparing
+   * device-side dates against those rows must use THIS zone, not the device's.
+   */
+  timezone: string | null;
+  /**
    * True only when the account has a real, user-chosen display name saved in the
    * DB (onboarding completed the name step). This is the RAW signal — it is NOT
    * affected by the auth-metadata fallback below that fills `displayName` for
@@ -295,7 +405,7 @@ function nonEmptyString(value: unknown): string | null {
 export async function getProfileIdentity(userId: string): Promise<ProfileIdentity> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('username, display_name, university, goal_type, preferred_dining_hall, avatar_url')
+    .select('username, display_name, university, goal_type, preferred_dining_hall, avatar_url, timezone')
     .eq('id', userId)
     .maybeSingle<{
       username: string | null;
@@ -304,6 +414,7 @@ export async function getProfileIdentity(userId: string): Promise<ProfileIdentit
       goal_type: string | null;
       preferred_dining_hall: string | null;
       avatar_url: string | null;
+      timezone: string | null;
     }>();
 
   if (error) throw error;
@@ -334,6 +445,7 @@ export async function getProfileIdentity(userId: string): Promise<ProfileIdentit
     goalType: data.goal_type,
     preferredDiningHall: data.preferred_dining_hall,
     avatarUrl: data.avatar_url,
+    timezone: data.timezone,
     hasName,
   };
 }

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Pressable, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import { FontFamily, Spacing, Type, useTheme } from '../../theme';
+import { FontFamily, Type, useTheme } from '../../theme';
 import {
   Screen,
   Text,

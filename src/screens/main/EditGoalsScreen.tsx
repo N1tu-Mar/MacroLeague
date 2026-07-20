@@ -13,6 +13,7 @@ import {
 import { useUserStore } from '../../store/userStore';
 import { supabase } from '../../lib/supabase';
 import { getProfileGoals, updateProfileGoals } from '../../services/profileService';
+import { toUserFacingMessage } from '../../lib/errors';
 
 /**
  * Mirrors the `profiles` macro-goal CHECK constraints so the user gets a clear
@@ -114,7 +115,7 @@ export default function EditGoalsScreen({ navigation }: any) {
     } catch (caughtError) {
       Alert.alert(
         'Could not save goals',
-        caughtError instanceof Error ? caughtError.message : 'Please try again.',
+        toUserFacingMessage(caughtError, 'Please try again.'),
       );
     } finally {
       setIsSaving(false);

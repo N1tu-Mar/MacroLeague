@@ -19,11 +19,14 @@ import ActivityFeedItem from '../../components/ActivityFeedItem';
 import { getLeaderboard, LeaderboardUser, publicLeaderboardName } from '../../services/leaderboardService';
 import { getProfileIdentity } from '../../services/profileService';
 import { getRecentDailyActivity, getRecentActivityFeed, ActivityFeedEntry } from '../../services/activityService';
+import {
+  getFriendActivityFeed,
+  reactToActivity,
+  type FriendActivityEntry,
+} from '../../services/socialFeedService';
 import { computeNutritionScore } from '../../lib/nutritionScore';
-
-function dateKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
+import { dateKeyInTimeZone, shiftDateKey } from '../../lib/dates';
+import { reportError } from '../../lib/monitoring';
 
 function getGreeting(): string {
   const h = new Date().getHours();
@@ -50,9 +53,15 @@ export default function HomeScreen({ navigation }: any) {
   const goals = daily.goals;
 
   const [leaderboard, setLeaderboard] = useState<LeaderboardUser[]>([]);
+  /** The viewer's OWN events. */
   const [feed, setFeed] = useState<ActivityFeedEntry[]>([]);
+  /** Accepted friends' events — the real cross-user feed (migration 0021). */
+  const [friendFeed, setFriendFeed] = useState<FriendActivityEntry[]>([]);
+  const [reactingTo, setReactingTo] = useState<string | null>(null);
   const [yesterdayScore, setYesterdayScore] = useState<number | null>(null);
   const [profileName, setProfileName] = useState<string | null>(null);
+  /** Set when a refresh fails, so a stale screen says so instead of lying. */
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -67,26 +76,62 @@ export default function HomeScreen({ navigation }: any) {
     };
   }, [user?.id]);
 
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
+  /**
+   * Loads everything on the screen.
+   *
+   * Extracted from the focus effect so pull-to-refresh runs the exact same path
+   * — a separate refresh implementation is how the two silently drift apart.
+   * `isActive` lets the focus effect cancel state updates after unmount.
+   */
+  const loadAll = useCallback(
+    async (isActive: () => boolean = () => true) => {
       const currentDate = new Date();
       setToday(currentDate);
       daily.refresh();
       void refreshStats();
-      (async () => {
-        try {
-          const [board, recent, activity] = await Promise.all([
+
+      try {
+          // allSettled, not all: one failing panel must not blank the others.
+          // The friend feed in particular is the newest surface here, and a
+          // failure in it should never cost the user their own day's data.
+          const [boardRes, recentRes, activityRes, friendRes] = await Promise.allSettled([
             getLeaderboard(14),
             getRecentActivityFeed(6),
             getRecentDailyActivity(2),
+            getFriendActivityFeed(10),
           ]);
-          if (!active) return;
-          setLeaderboard(board);
-          setFeed(recent);
-          const yesterday = new Date(currentDate);
-          yesterday.setDate(yesterday.getDate() - 1);
-          const yKey = dateKey(yesterday);
+          if (!isActive()) return;
+
+          const board = boardRes.status === 'fulfilled' ? boardRes.value : null;
+          const recent = recentRes.status === 'fulfilled' ? recentRes.value : null;
+          const activity = activityRes.status === 'fulfilled' ? activityRes.value : [];
+
+          if (board) setLeaderboard(board);
+          if (recent) setFeed(recent);
+          if (friendRes.status === 'fulfilled') {
+            setFriendFeed(friendRes.value.entries);
+          } else {
+            reportError(friendRes.reason, { where: 'HomeScreen.friendFeed' });
+          }
+
+          // Surface a failure instead of silently showing stale data.
+          const failures = [boardRes, recentRes, activityRes, friendRes].filter(
+            (r) => r.status === 'rejected',
+          );
+          if (failures.length > 0) {
+            setLoadError("Couldn't refresh everything. Pull down to try again.");
+            failures.forEach((f) =>
+              reportError((f as PromiseRejectedResult).reason, { where: 'HomeScreen.refresh' }),
+            );
+          } else {
+            setLoadError(null);
+          }
+
+          // Activity rows are bucketed by the PROFILE timezone, so "yesterday"
+          // must be resolved in that zone too — the device-local day is off by
+          // one around midnight whenever the two zones differ.
+          const profileTz = useUserStore.getState().user?.timezone;
+          const yKey = shiftDateKey(dateKeyInTimeZone(currentDate, profileTz), -1);
           const yRow = activity.find((a) => a.date === yKey);
           setYesterdayScore(
             yRow
@@ -96,15 +141,79 @@ export default function HomeScreen({ navigation }: any) {
                 ).score
               : null,
           );
-        } catch {
-          // keep last good data
-        }
-      })();
+      } catch (err) {
+        // Keep the last good data on screen, but never pretend it is current.
+        if (!isActive()) return;
+        setLoadError("Couldn't refresh. Pull down to try again.");
+        reportError(err, { where: 'HomeScreen.refresh' });
+      }
+    },
+    [daily.refresh, refreshStats, goals],
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      void loadAll(() => active);
       return () => {
         active = false;
       };
-    }, [daily.refresh, refreshStats, goals]),
+    }, [loadAll]),
   );
+
+  /** Pull-to-refresh. Runs the same load path as focus, with a spinner. */
+  const [refreshing, setRefreshing] = useState(false);
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await loadAll();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadAll]);
+
+  /**
+   * Toggle a reaction on a friend's activity.
+   *
+   * Optimistic: the row updates immediately and rolls back to the exact previous
+   * entry if the server refuses (unfriended mid-scroll, activity now private).
+   * The server is authoritative for the resulting count.
+   */
+  const handleReact = useCallback(async (entry: FriendActivityEntry) => {
+    setReactingTo(entry.eventId);
+    const wasReacted = entry.viewerReaction !== null;
+
+    setFriendFeed((prev) =>
+      prev.map((e) =>
+        e.eventId === entry.eventId
+          ? {
+              ...e,
+              viewerReaction: wasReacted ? null : 'fire',
+              reactionCount: Math.max(0, e.reactionCount + (wasReacted ? -1 : 1)),
+            }
+          : e,
+      ),
+    );
+
+    try {
+      const result = await reactToActivity(entry.eventId, 'fire');
+      setFriendFeed((prev) =>
+        prev.map((e) =>
+          e.eventId === entry.eventId
+            ? { ...e, viewerReaction: result.viewerReaction, reactionCount: result.reactionCount }
+            : e,
+        ),
+      );
+    } catch (err) {
+      // Roll back to the row exactly as it was before the optimistic update.
+      setFriendFeed((prev) =>
+        prev.map((e) => (e.eventId === entry.eventId ? entry : e)),
+      );
+      reportError(err, { where: 'HomeScreen.react' });
+    } finally {
+      setReactingTo(null);
+    }
+  }, []);
 
   const greeting = getGreeting();
   const resolvedName =
@@ -145,7 +254,36 @@ export default function HomeScreen({ navigation }: any) {
   const streak = user?.streakCount ?? 0;
 
   return (
-    <Screen scroll bottomSpace={96}>
+    <Screen scroll bottomSpace={96} onRefresh={handleRefresh} refreshing={refreshing}>
+      {/* A failed refresh must be visible. Previously every read on this screen
+          swallowed its error and left stale (or zeroed) data on screen with no
+          indication anything had gone wrong. */}
+      {loadError ? (
+        <Pressable
+          onPress={handleRefresh}
+          accessibilityRole="button"
+          accessibilityLabel={`${loadError} Tap to retry.`}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            marginBottom: 12,
+            paddingVertical: 10,
+            paddingHorizontal: 12,
+            borderRadius: 12,
+            backgroundColor: colors.canvas,
+            borderWidth: 1,
+            borderColor: colors.rowDivider,
+          }}
+        >
+          <AppIcon name="circle-alert" size={15} color={colors.textSecondary} />
+          <Text variant="labelSm" color={colors.textSecondary} style={{ flex: 1 }}>
+            {loadError}
+          </Text>
+          <Text variant="labelSm" color={colors.ink}>Retry</Text>
+        </Pressable>
+      ) : null}
+
       {/* Header */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
         <View style={{ flex: 1, minWidth: 0 }}>
@@ -257,10 +395,71 @@ export default function HomeScreen({ navigation }: any) {
         </Card>
       ) : null}
 
-      {/* Friend activity */}
+      {/* Friend activity — accepted friends' real events (migration 0021).
+          This section previously rendered the viewer's OWN events under a
+          "Friend activity" heading with the viewer's own name on every row. */}
+      <View style={{ marginTop: 18 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 2, marginBottom: 8 }}>
+          <Text variant="section" color={colors.ink}>Friend activity</Text>
+          {friendFeed.length > 0 ? (
+            <Pressable onPress={() => navigation.navigate('Leaderboard')}>
+              <Text variant="labelSm" color={colors.textSecondary}>See all</Text>
+            </Pressable>
+          ) : null}
+        </View>
+
+        {friendFeed.length > 0 ? (
+          <Card padded={false} style={{ overflow: 'hidden' }}>
+            {friendFeed.map((item, i) => (
+              <ActivityFeedItem
+                key={item.eventId}
+                name={item.actorName}
+                avatarUrl={item.actorAvatarUrl}
+                showName
+                icon={item.icon}
+                text={item.text}
+                minutesAgo={item.minutesAgo}
+                showDivider={i > 0}
+                reactionCount={item.reactionCount}
+                reacted={item.viewerReaction !== null}
+                reactionPending={reactingTo === item.eventId}
+                onReact={() => void handleReact(item)}
+              />
+            ))}
+          </Card>
+        ) : (
+          // A real empty state — the feed is genuinely empty until this user has
+          // friends who are logging, and saying so beats rendering nothing.
+          <Card style={{ alignItems: 'center', gap: 8, paddingVertical: 20 }}>
+            <AppIcon name="users" size={22} color={colors.textTertiary} />
+            <Text variant="cardTitle" color={colors.ink}>No friend activity yet</Text>
+            <Text
+              variant="labelSm"
+              color={colors.textSecondary}
+              style={{ textAlign: 'center', paddingHorizontal: 12 }}
+            >
+              Add friends to see when they log meals, hit goals and win challenges.
+            </Text>
+            <Pressable
+              onPress={() => navigation.navigate('Leaderboard')}
+              style={{
+                marginTop: 4,
+                paddingHorizontal: 14,
+                paddingVertical: 8,
+                borderRadius: 10,
+                backgroundColor: colors.canvas,
+              }}
+            >
+              <Text variant="labelSm" color={colors.ink}>Find friends</Text>
+            </Pressable>
+          </Card>
+        )}
+      </View>
+
+      {/* Your own recent activity — the feed that used to be mislabelled above. */}
       {feed.length > 0 ? (
         <View style={{ marginTop: 18 }}>
-          <Text variant="section" color={colors.ink} style={{ paddingHorizontal: 2, marginBottom: 8 }}>Friend activity</Text>
+          <Text variant="section" color={colors.ink} style={{ paddingHorizontal: 2, marginBottom: 8 }}>Your recent activity</Text>
           <Card padded={false} style={{ overflow: 'hidden' }}>
             {feed.map((item, i) => (
               <ActivityFeedItem

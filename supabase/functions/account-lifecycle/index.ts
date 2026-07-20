@@ -15,14 +15,7 @@
 // Body: { "action": "deactivate" | "reactivate" }
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
-import { corsHeaders } from '../_shared/cors.ts';
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  });
-}
+import { corsHeadersFor, preflightResponse, rejectDisallowedOrigin } from '../_shared/cors.ts';
 
 /**
  * Best-effort transactional email. Only sends when RESEND_API_KEY is configured;
@@ -51,9 +44,20 @@ async function notify(to: string, subject: string, html: string): Promise<void> 
 }
 
 Deno.serve(async (req: Request) => {
+  const corsHeaders = corsHeadersFor(req);
+  const json = (body: unknown, status = 200): Response =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return preflightResponse(req);
   }
+  // This endpoint deactivates and reactivates accounts. Refuse a cross-origin
+  // caller outright rather than merely hiding the response from it.
+  const originRejection = rejectDisallowedOrigin(req);
+  if (originRejection) return originRejection;
   if (req.method !== 'POST') {
     return json({ error: 'Method not allowed.' }, 405);
   }
@@ -94,7 +98,10 @@ Deno.serve(async (req: Request) => {
   if (action === 'deactivate') {
     const { data, error } = await userClient.rpc('request_account_deletion');
     if (error) {
-      return json({ error: error.message }, 400);
+      // Log the real cause server-side; never forward raw Postgres/RPC text
+      // (constraint names, function internals) to the client.
+      console.error('[account-lifecycle] deactivate failed:', error.message);
+      return json({ error: 'Could not deactivate your account. Please try again.' }, 400);
     }
     const scheduledAt = data as string; // timestamptz ISO string
     if (email) {
@@ -115,7 +122,8 @@ Deno.serve(async (req: Request) => {
   if (action === 'reactivate') {
     const { error } = await userClient.rpc('reactivate_account');
     if (error) {
-      return json({ error: error.message }, 400);
+      console.error('[account-lifecycle] reactivate failed:', error.message);
+      return json({ error: 'Could not reactivate your account. Please try again.' }, 400);
     }
     if (email) {
       await notify(

@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { fromZonedTime, toZonedTime } from 'date-fns-tz';
+import { reportError } from '../lib/monitoring';
 
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
@@ -513,7 +514,9 @@ export async function logMeal(params: LogMealParams): Promise<MealLog> {
       return mapMealLog(existingRow);
     }
 
-    console.error('[mealLogService] meal insert failed', error);
+    // Route through Sentry rather than console: a raw PostgrestError `details`
+    // string can echo row values (e.g. the meal free_text) into device logs.
+    reportError(error, { context: 'mealLogService.logMeal' });
     throw new DatabaseError(describeDbError(error), error);
   }
 

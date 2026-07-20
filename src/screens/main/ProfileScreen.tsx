@@ -4,6 +4,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Type, Spacing, Radius, FontFamily, useTheme } from '../../theme';
 import { useUserStore } from '../../store/userStore';
 import { signOut } from '../../lib/auth';
+import { dateKeyInTimeZone, shiftDateKey, weekdayOfDateKey } from '../../lib/dates';
 import { openPrivacyPolicy, openTerms, openSupportEmail, SUPPORT_EMAIL } from '../../lib/legal';
 import { requestAccountDeletion } from '../../services/accountService';
 import StreakFlame from '../../components/StreakFlame';
@@ -29,6 +30,7 @@ import {
   Divider,
   IconButton,
 } from '../../components/ui';
+import { toUserFacingMessage } from '../../lib/errors';
 
 interface WeeklyPoint {
   label: string;
@@ -38,15 +40,25 @@ interface WeeklyPoint {
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const APPEARANCE_MODES = ['light', 'dark', 'system'] as const;
 
-/** Builds the last 7 local days as {label, proteinG}, filling unlogged days with 0. */
-function buildWeeklyProtein(activity: { date: string; proteinG: number }[]): WeeklyPoint[] {
+/**
+ * Builds the last 7 days as {label, proteinG}, filling unlogged days with 0.
+ * "Day" means the PROFILE-timezone day — `user_daily_activity` is bucketed by
+ * that zone server-side, so device-local keys shift the whole chart by one
+ * near midnight whenever the two zones differ.
+ */
+function buildWeeklyProtein(
+  activity: { date: string; proteinG: number }[],
+  timezone: string | null | undefined,
+): WeeklyPoint[] {
   const byDate = new Map(activity.map((a) => [a.date, a.proteinG]));
+  const todayKey = dateKeyInTimeZone(new Date(), timezone);
   const out: WeeklyPoint[] = [];
   for (let i = 6; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    out.push({ label: WEEKDAY_LABELS[d.getDay()], value: Math.round(byDate.get(key) ?? 0) });
+    const key = shiftDateKey(todayKey, -i);
+    out.push({
+      label: WEEKDAY_LABELS[weekdayOfDateKey(key)],
+      value: Math.round(byDate.get(key) ?? 0),
+    });
   }
   return out;
 }
@@ -75,7 +87,7 @@ export default function ProfileScreen({ navigation }: any) {
       const scheduledAt = await requestAccountDeletion();
       setAccountLifecycle(true, scheduledAt);
     } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : 'Please try again.');
+      setDeleteError(toUserFacingMessage(err, 'Please try again.'));
     } finally {
       setIsDeleting(false);
     }
@@ -89,11 +101,14 @@ export default function ProfileScreen({ navigation }: any) {
       let active = true;
       void refreshStats();
       (async () => {
+        // Read the zone at call time (not render time): refreshStats above may
+        // hydrate it during this same focus pass.
+        const tz = () => useUserStore.getState().user?.timezone;
         try {
           const activity = await getRecentDailyActivity(7);
-          if (active) setWeekly(buildWeeklyProtein(activity));
+          if (active) setWeekly(buildWeeklyProtein(activity, tz()));
         } catch {
-          if (active) setWeekly(buildWeeklyProtein([]));
+          if (active) setWeekly(buildWeeklyProtein([], tz()));
         }
       })();
       return () => {
@@ -138,6 +153,8 @@ export default function ProfileScreen({ navigation }: any) {
     { label: 'Edit macro goals', icon: 'target', screen: 'EditGoals' },
     { label: 'Scoring rules', icon: 'medal', screen: 'RuleSettings' },
     { label: 'Notification preferences', icon: 'bell', screen: 'NotificationSettings' },
+    { label: 'Linked accounts', icon: 'instagram', screen: 'SocialAccounts' },
+    { label: 'Change password', icon: 'eye-off', screen: 'ChangePassword' },
     { label: 'Linked university', icon: 'school', screen: 'UniversitySettings' },
   ];
 

@@ -86,7 +86,6 @@ export function resetAnalytics(): void {
  * purely a dev-time visibility aid and a no-op in production.
  */
 export function initAnalytics(): void {
-  // eslint-disable-next-line no-console
   if (!__DEV__) return;
   if (!analyticsEnabled) {
     // eslint-disable-next-line no-console

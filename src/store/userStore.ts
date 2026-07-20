@@ -8,6 +8,7 @@ import {
   ProfileStats,
 } from '../services/profileService';
 import { getAccountStatus } from '../services/accountService';
+import { reportError } from '../lib/monitoring';
 
 // Until the real profile is hydrated, goals are zero (no goal set) rather than
 // inventing demo targets. refreshStats() fills these from the profiles row.
@@ -92,7 +93,7 @@ export const useUserStore = create<UserState>((set, get) => ({
     } catch (caughtError) {
       // If the 0009 columns aren't deployed yet, treat the account as active rather
       // than locking the user out of the app.
-      console.warn('[userStore] refreshAccountStatus failed', caughtError);
+      reportError(caughtError, { context: 'userStore.refreshAccountStatus' });
     }
   },
   applyStats: (stats: ProfileStats) =>
@@ -142,6 +143,7 @@ export const useUserStore = create<UserState>((set, get) => ({
                 preferredDiningHall: identity.preferredDiningHall ?? state.user.preferredDiningHall,
                 goalType: coerceGoalType(identity.goalType),
                 avatarUrl: identity.avatarUrl,
+                timezone: identity.timezone ?? state.user.timezone ?? null,
               },
             }
           : state,
@@ -161,7 +163,10 @@ export const useUserStore = create<UserState>((set, get) => ({
     } catch (caughtError) {
       // Don't crash the UI if a migration isn't deployed yet (columns missing):
       // keep the existing cache and log quietly.
-      console.warn('[userStore] refreshStats failed', caughtError);
+      // Reported, not swallowed: a silent failure here strands the user on the
+      // seeded zeros — a 0-day streak and 0 points read as data loss on a
+      // gamified app, so we need to see it in Sentry when it happens.
+      reportError(caughtError, { context: 'userStore.refreshStats' });
     }
   },
   adjustPointsLocally: (delta: number) =>

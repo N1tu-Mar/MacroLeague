@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  build:
-    name: Typecheck & test
+  check:
+    name: Lint, typecheck & test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,8 +23,119 @@ jobs:
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
 
+      # The tree is at 0 advisories via the documented `uuid` override (see
+      # docs/launch-checklist.md). Gate on high+ so a genuinely serious advisory
+      # fails the build, while a new moderate finding in Expo's build-time CLI
+      # tooling — which never ships in the app binary — does not block unrelated
+      # PRs. Never "fix" a failure here with `npm audit fix --force`.
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
+      - name: Lint
+        run: npm run lint
+
       - name: Typecheck
         run: npm run typecheck
 
       - name: Test
         run: npm run test:ci
+
+      # Applies every migration to a real Postgres (PGlite/WASM — no Docker, no
+      # server) and then exercises the SECURITY DEFINER functions: quota
+      # enforcement, rule-set economy locking, friend-feed visibility, challenge
+      # finalization authorization. Catches a broken migration at PR time rather
+      # than at `supabase db push`.
+      - name: Migration tests
+        run: npm run test:db
+
+  # Typechecking cannot catch a bundler break (a bad import path, a package that
+  # has no web build, a Babel/Metro config mistake). Actually exporting the web
+  # bundle does.
+  build:
+    name: Web bundle
+    runs-on: ubuntu-latest
+    # The `secrets` context cannot be read from a step-level `if:`, so the token
+    # is lifted into the job env where `if: env.… != ''` can see it. Absent
+    # secret ⇒ the upload step is skipped, never failed.
+    env:
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+      SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Export web bundle
+        # These are inlined into the bundle at export time and are what
+        # `releaseName()` reads at runtime — they must match the values used for
+        # the source-map upload below.
+        env:
+          EXPO_PUBLIC_RELEASE: ${{ vars.EXPO_PUBLIC_RELEASE }}
+          EXPO_PUBLIC_APP_VERSION: ${{ vars.EXPO_PUBLIC_APP_VERSION }}
+          EXPO_PUBLIC_BUILD_NUMBER: ${{ github.run_number }}
+        run: npx expo export --platform web
+
+      # ── Sentry source maps ────────────────────────────────────────────
+      #
+      # Production stack traces are unreadable unless the maps for a build are
+      # uploaded under the SAME release string the client reports. That string
+      # is produced by `releaseName()` in src/lib/monitoring.ts:
+      #
+      #   EXPO_PUBLIC_RELEASE, if set; otherwise
+      #   macroleague@$EXPO_PUBLIC_APP_VERSION(+$EXPO_PUBLIC_BUILD_NUMBER)
+      #
+      # and `dist` is EXPO_PUBLIC_BUILD_NUMBER. Both must be set at *export*
+      # time (they are inlined into the bundle) and passed to the upload below,
+      # or the maps will be filed under a release no event ever references.
+      #
+      # This step is env-gated: forks and PRs without access to the secret skip
+      # it rather than failing. Enable it by adding the SENTRY_AUTH_TOKEN,
+      # SENTRY_ORG and SENTRY_PROJECT secrets.
+      - name: Compute release name
+        id: release
+        run: |
+          VERSION="${EXPO_PUBLIC_APP_VERSION:-1.0.0}"
+          if [ -n "${EXPO_PUBLIC_RELEASE:-}" ]; then
+            RELEASE="$EXPO_PUBLIC_RELEASE"
+          elif [ -n "${EXPO_PUBLIC_BUILD_NUMBER:-}" ]; then
+            RELEASE="macroleague@${VERSION}+${EXPO_PUBLIC_BUILD_NUMBER}"
+          else
+            RELEASE="macroleague@${VERSION}"
+          fi
+          echo "name=$RELEASE" >> "$GITHUB_OUTPUT"
+        env:
+          EXPO_PUBLIC_RELEASE: ${{ vars.EXPO_PUBLIC_RELEASE }}
+          EXPO_PUBLIC_APP_VERSION: ${{ vars.EXPO_PUBLIC_APP_VERSION }}
+          EXPO_PUBLIC_BUILD_NUMBER: ${{ github.run_number }}
+
+      - name: Upload source maps to Sentry
+        if: ${{ env.SENTRY_AUTH_TOKEN != '' }}
+        run: |
+          npx @sentry/cli@2 releases new "${{ steps.release.outputs.name }}"
+          npx @sentry/cli@2 sourcemaps inject dist
+          npx @sentry/cli@2 sourcemaps upload dist \
+            --release "${{ steps.release.outputs.name }}" \
+            --dist "${{ github.run_number }}"
+          npx @sentry/cli@2 releases finalize "${{ steps.release.outputs.name }}"
+
+  # Supabase edge functions are Deno, not Node — they have their own test suite
+  # that npm/jest never sees.
+  deno:
+    name: Deno edge-function tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Test edge functions
+        run: deno test --allow-net --allow-env --no-lock supabase/functions/_shared/

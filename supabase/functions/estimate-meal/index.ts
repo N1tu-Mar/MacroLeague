@@ -15,7 +15,8 @@
 // or returned to the client.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
-import { corsHeaders } from '../_shared/cors.ts';
+import { corsHeadersFor, preflightResponse, rejectDisallowedOrigin } from '../_shared/cors.ts';
+import { consumeQuotas, rateLimitedResponse, type QuotaWindow } from '../_shared/rateLimit.ts';
 import { normalizeQuery, round, searchUsda } from './usda.ts';
 import { searchOpenFoodFacts } from './openFoodFacts.ts';
 import { type SourceCandidate } from './shared.ts';
@@ -34,6 +35,9 @@ const COMPONENT_PAGE_SIZE = 4;
 // Bound input so a normalized cache key stays under the 200-char column limit
 // (with the "parse::" prefix) and a hostile description can't fan out forever.
 const MAX_QUERY_LEN = 180;
+// The query is capped at 180 chars, so a legitimate body is tiny; 16KB is a
+// generous ceiling that still refuses a memory-exhaustion payload outright.
+const MAX_BODY_BYTES = 16 * 1024;
 const PARSE_CACHE_PREFIX = 'parse::';
 
 interface EstimateCandidate extends Omit<SourceCandidate, 'rawPayload'> {
@@ -47,17 +51,48 @@ interface EstimateCandidate extends Omit<SourceCandidate, 'rawPayload'> {
   confidenceRange?: { low: number; high: number } | null;
 }
 
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  });
+// Per-user spend ceilings. MAX_QUERY_LEN already bounds a single request's fan-out
+// and food_search_cache absorbs repeats, but a stream of UNIQUE queries misses the
+// cache every time and each miss costs a live USDA search plus (on the composite
+// path) an OpenAI parse and up to MAX_COMPONENTS more USDA searches. These bound
+// how many misses one account can generate.
+//
+// Limits are deliberately generous against real use — a heavy logger runs well
+// under 30 estimates a day — and are tunable via function secrets.
+function quotaWindows(): QuotaWindow[] {
+  const daily = Number(Deno.env.get('ESTIMATE_DAILY_LIMIT') ?? '200');
+  const burst = Number(Deno.env.get('ESTIMATE_BURST_LIMIT') ?? '20');
+  return [
+    {
+      bucket: 'estimate:burst',
+      limit: Number.isFinite(burst) && burst > 0 ? burst : 20,
+      windowSeconds: 60,
+      label: 'meal lookups this minute',
+    },
+    {
+      bucket: 'estimate:daily',
+      limit: Number.isFinite(daily) && daily > 0 ? daily : 200,
+      windowSeconds: 86400,
+      label: 'meal lookups today',
+    },
+  ];
 }
 
 Deno.serve(async (req: Request) => {
+  const corsHeaders = corsHeadersFor(req);
+  const json = (body: unknown, status = 200): Response =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return preflightResponse(req);
   }
+  // Enforce the origin allow-list before ANY work — a blocked response is not
+  // enough on an endpoint that spends money (see _shared/cors.ts).
+  const originRejection = rejectDisallowedOrigin(req);
+  if (originRejection) return originRejection;
   if (req.method !== 'POST') {
     return json({ error: 'Method not allowed.' }, 405);
   }
@@ -85,9 +120,17 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'Not authenticated.' }, 401);
   }
 
+  // Authoritative size check before buffering the JSON — mirrors `chat`.
+  // Without it an authenticated caller could force the function to buffer an
+  // arbitrarily large body before the query gets sliced to MAX_QUERY_LEN.
+  const rawBody = await req.text();
+  if (new TextEncoder().encode(rawBody).length > MAX_BODY_BYTES) {
+    return json({ error: 'Request is too large.' }, 413);
+  }
+
   let payload: { query?: unknown; pageSize?: unknown };
   try {
-    payload = await req.json();
+    payload = JSON.parse(rawBody);
   } catch {
     return json({ error: 'Invalid JSON body.' }, 400);
   }
@@ -102,6 +145,15 @@ Deno.serve(async (req: Request) => {
     MAX_PAGE_SIZE,
     Math.max(1, Number(payload.pageSize) || DEFAULT_PAGE_SIZE),
   );
+
+  // Bound per-user spend. Placed AFTER input validation so a malformed request
+  // never burns a real user's daily budget, and BEFORE every provider call
+  // below. Charged on cache hits too: the alternative is to run the cache lookup
+  // first and skip the charge on a hit, but a hostile caller controls the query
+  // string and can miss the cache at will, so that would only cheapen the exact
+  // traffic pattern this gate exists to stop.
+  const quota = await consumeQuotas(admin, userData.user.id, quotaWindows());
+  if (!quota.allowed) return rateLimitedResponse(quota, corsHeaders);
 
   // Resolve nutrition source rows. usda_fdc is required (existing behavior);
   // open_food_facts is optional — if its row isn't there yet (e.g. the
@@ -137,7 +189,11 @@ Deno.serve(async (req: Request) => {
   ]);
 
   if (usdaResult.status === 'rejected') {
-    return json({ error: (usdaResult.reason as Error).message }, 502);
+    // Log the upstream detail (status + body excerpt) server-side, but return a
+    // generic message — the raw USDA response body is upstream internals the
+    // client has no need to see.
+    console.error('[estimate-meal] USDA search failed:', (usdaResult.reason as Error).message);
+    return json({ error: 'Could not look up nutrition data right now. Please try again.' }, 502);
   }
   const direct = usdaResult.value;
 

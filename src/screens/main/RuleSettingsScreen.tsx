@@ -16,6 +16,7 @@ import {
   saveRuleModules,
   RuleModules,
 } from '../../services/ruleSetService';
+import { toUserFacingMessage } from '../../lib/errors';
 
 /**
  * Individual rule-settings surface. Lets a user enable/disable the scoring
@@ -45,7 +46,7 @@ export default function RuleSettingsScreen({ navigation }: any) {
         if (active) {
           Alert.alert(
             'Could not load rules',
-            caughtError instanceof Error ? caughtError.message : 'Please try again.',
+            toUserFacingMessage(caughtError, 'Please try again.'),
           );
         }
       } finally {
@@ -72,7 +73,7 @@ export default function RuleSettingsScreen({ navigation }: any) {
     } catch (caughtError) {
       Alert.alert(
         'Could not save',
-        caughtError instanceof Error ? caughtError.message : 'Please try again.',
+        toUserFacingMessage(caughtError, 'Please try again.'),
       );
     } finally {
       setIsSaving(false);

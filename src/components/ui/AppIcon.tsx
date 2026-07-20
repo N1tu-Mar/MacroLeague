@@ -2,6 +2,9 @@ import React from 'react';
 import {
   Apple,
   ArrowDown,
+  AtSign,
+  Ghost,
+  Music,
   ArrowLeft,
   ArrowUp,
   Bell,
@@ -72,6 +75,13 @@ import { Colors } from '../../theme';
 
 const ICONS = {
   apple: Apple,
+  // Linked-account icons. Lucide dropped its brand glyphs (there is no
+  // Instagram/TikTok icon to import), so these are the closest semantic stand-ins
+  // rather than logos — which also keeps us clear of each platform's trademark
+  // rules about using their marks in another app's UI.
+  instagram: AtSign,
+  snapchat: Ghost,
+  tiktok: Music,
   back: ArrowLeft,
   'arrow-down': ArrowDown,
   'arrow-up': ArrowUp,

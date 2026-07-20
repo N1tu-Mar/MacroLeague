@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Pressable, StyleProp, ViewStyle } from 'react-native';
-import { Radius, useTheme } from '../../theme';
+import { useTheme } from '../../theme';
 import Text from './Text';
 
 interface SegmentedControlProps {

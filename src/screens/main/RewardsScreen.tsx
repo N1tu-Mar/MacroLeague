@@ -7,10 +7,18 @@ import {
   listRewards,
   getRedeemedRewardIds,
   redeemReward,
+  listRewardPasses,
   RewardCatalogItem,
+  RewardPass,
 } from '../../services/rewardService';
 import { getEarnRules, EarnRule } from '../../services/ruleSetService';
 import { analytics } from '../../lib/analytics';
+import {
+  formatRewardCode,
+  describePassExpiry,
+  isPassActive,
+  RewardPassStatus,
+} from '../../lib/rewardPass';
 import {
   Screen,
   ScreenHeader,
@@ -23,7 +31,9 @@ import {
   AppIcon,
   AppIconName,
   Divider,
+  QRCode,
 } from '../../components/ui';
+import { toUserFacingMessage } from '../../lib/errors';
 
 function rewardIcon(reward: RewardCatalogItem): AppIconName {
   if (reward.category === 'Fitness') return 'protein';
@@ -35,12 +45,17 @@ function rewardIcon(reward: RewardCatalogItem): AppIconName {
   return 'gift';
 }
 
-/** A stable pseudo-code for the redemption pass placeholder (no real code before backend issue). */
-function passCode(reward: RewardCatalogItem): string {
-  const base = reward.id.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-  const a = (base.slice(0, 4) || 'RWD0').padEnd(4, '0');
-  const b = (base.slice(4, 6) || '00').padEnd(2, '0');
-  return `${reward.partnerName.slice(0, 4).toUpperCase().padEnd(4, 'X')}-${a}-${b}`;
+/**
+ * What the pass sheet is currently showing. The code and expiry are SERVER
+ * values from redeem_reward() — the screen no longer derives anything about
+ * the pass locally, because a locally-derived code is identical for every
+ * member and cannot be honoured by a partner.
+ */
+interface ActivePass {
+  reward: RewardCatalogItem;
+  code: string;
+  expiresAt: string;
+  status: RewardPassStatus;
 }
 
 export default function RewardsScreen({ navigation }: any) {
@@ -54,7 +69,10 @@ export default function RewardsScreen({ navigation }: any) {
   const [earnRules, setEarnRules] = useState<EarnRule[]>([]);
   const [redeemed, setRedeemed] = useState<Set<string>>(new Set());
   const [selectedReward, setSelectedReward] = useState<RewardCatalogItem | null>(null);
-  const [passReward, setPassReward] = useState<RewardCatalogItem | null>(null);
+  const [activePass, setActivePass] = useState<ActivePass | null>(null);
+  // Passes the member already holds, keyed by reward id, so tapping an
+  // already-redeemed card re-opens the real code instead of dead-ending.
+  const [passes, setPasses] = useState<Map<string, RewardPass>>(new Map());
   const [showConfetti, setShowConfetti] = useState(false);
   const [earnExpanded, setEarnExpanded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -71,15 +89,23 @@ export default function RewardsScreen({ navigation }: any) {
       const userId = user?.id;
       (async () => {
         try {
-          const [catalog, redeemedIds, rules] = await Promise.all([
+          const [catalog, redeemedIds, rules, ownedPasses] = await Promise.all([
             listRewards(),
             getRedeemedRewardIds(),
             userId ? getEarnRules(userId) : Promise.resolve([] as EarnRule[]),
+            listRewardPasses(),
           ]);
           if (active) {
             setRewards(catalog);
             setRedeemed(redeemedIds);
             setEarnRules(rules);
+            // Newest first from the service, so the first pass seen for a
+            // reward is the current one — later duplicates are superseded.
+            const byReward = new Map<string, RewardPass>();
+            for (const pass of ownedPasses) {
+              if (!byReward.has(pass.rewardId)) byReward.set(pass.rewardId, pass);
+            }
+            setPasses(byReward);
             analytics.rewardsViewed({
               balance: user?.points ?? 0,
               rewardCount: catalog.length,
@@ -97,28 +123,80 @@ export default function RewardsScreen({ navigation }: any) {
     }, [refreshStats, user?.id]),
   );
 
+  function showPass(pass: ActivePass) {
+    setActivePass(pass);
+    // Keep the cached map in step so re-opening the card later (before the
+    // next focus refetch) still shows the code without another round trip.
+    setPasses((prev) => {
+      const next = new Map(prev);
+      const existing = next.get(pass.reward.id);
+      next.set(pass.reward.id, {
+        id: existing?.id ?? pass.code,
+        rewardId: pass.reward.id,
+        partnerName: pass.reward.partnerName,
+        description: pass.reward.description,
+        code: pass.code,
+        status: pass.status,
+        issuedAt: existing?.issuedAt ?? new Date().toISOString(),
+        expiresAt: pass.expiresAt,
+        redeemedAt: existing?.redeemedAt ?? null,
+        pointsSpent: existing?.pointsSpent ?? pass.reward.pointsCost,
+      });
+      return next;
+    });
+  }
+
+  /**
+   * Re-opens the pass for an already-redeemed reward. If the pass is cached
+   * from the focus fetch it opens instantly; otherwise redeemReward() is
+   * called, which since migration 0022 is idempotent — it returns the existing
+   * pass and spends nothing, and also backfills a code for redemptions made
+   * before passes existed.
+   */
+  async function handleOpenExistingPass(reward: RewardCatalogItem) {
+    const cached = passes.get(reward.id);
+    if (cached) {
+      showPass({
+        reward,
+        code: cached.code,
+        expiresAt: cached.expiresAt,
+        status: cached.status,
+      });
+      return;
+    }
+    await handleRedeem(reward);
+  }
+
   async function handleRedeem(reward: RewardCatalogItem) {
     if (!user || isRedeeming) return;
     setIsRedeeming(true);
     try {
-      // Ledger-backed, atomic spend on the backend. The authoritative new balance
-      // comes back from the RPC; sync the cached store to it, then refresh.
-      const { newBalance } = await redeemReward(reward.id);
-      analytics.rewardRedeemed({
-        rewardId: reward.id,
-        partnerName: reward.partnerName,
-        pointsCost: reward.pointsCost,
-      });
-      adjustPointsLocally(newBalance - user.points);
-      void refreshStats();
+      // Ledger-backed, atomic spend on the backend, which also issues the pass
+      // code in the same transaction. The authoritative new balance comes back
+      // from the RPC; sync the cached store to it, then refresh.
+      const result = await redeemReward(reward.id);
+      const { newBalance, code, expiresAt, status, alreadyRedeemed } = result;
+
+      // A replay spends nothing, so it must not be counted as a redemption or
+      // celebrated — it is just the member re-opening a pass they already own.
+      if (!alreadyRedeemed) {
+        analytics.rewardRedeemed({
+          rewardId: reward.id,
+          partnerName: reward.partnerName,
+          pointsCost: reward.pointsCost,
+        });
+        adjustPointsLocally(newBalance - user.points);
+        void refreshStats();
+        setShowConfetti(true);
+        setTimeout(() => setShowConfetti(false), 2500);
+      }
+
       setRedeemed((prev) => new Set(prev).add(reward.id));
-      setPassReward(reward);
-      setShowConfetti(true);
-      setTimeout(() => setShowConfetti(false), 2500);
+      showPass({ reward, code, expiresAt, status });
     } catch (caughtError) {
       Alert.alert(
         'Could not redeem',
-        caughtError instanceof Error ? caughtError.message : 'Please try again.',
+        toUserFacingMessage(caughtError, 'Please try again.'),
       );
     } finally {
       setIsRedeeming(false);
@@ -127,6 +205,12 @@ export default function RewardsScreen({ navigation }: any) {
 
   const balanceAfter = selectedReward ? balance - selectedReward.pointsCost : 0;
   const canAffordSelected = selectedReward ? balance >= selectedReward.pointsCost : false;
+  // Folds the status column and the expires_at timestamp together, the same
+  // way validate_reward_code() does server-side, so the sheet cannot present
+  // a spent or aged-out pass as scannable.
+  const passIsActive = activePass
+    ? isPassActive(activePass.status, activePass.expiresAt)
+    : false;
 
   return (
     <Screen scroll>
@@ -186,7 +270,9 @@ export default function RewardsScreen({ navigation }: any) {
                 key={reward.id}
                 onPress={
                   isRedeemed
-                    ? undefined
+                    ? // Already paid for: re-open the real pass rather than
+                      // being inert, so the code is never stranded.
+                      () => void handleOpenExistingPass(reward)
                     : () => {
                         analytics.rewardDetailViewed({
                           rewardId: reward.id,
@@ -212,7 +298,7 @@ export default function RewardsScreen({ navigation }: any) {
                     <View style={styles.redeemedRow}>
                       <AppIcon name="check" size={14} color={colors.success} />
                       <Text variant="labelSm" color={colors.successDeep}>
-                        Redeemed
+                        View pass
                       </Text>
                     </View>
                   ) : (
@@ -341,47 +427,72 @@ export default function RewardsScreen({ navigation }: any) {
         )}
       </Sheet>
 
-      {/* Redemption pass (spec 22c) */}
-      <Sheet visible={!!passReward} onClose={() => setPassReward(null)}>
-        {passReward && (
+      {/* Redemption pass (spec 22c) — the code and expiry are SERVER values. */}
+      <Sheet visible={!!activePass} onClose={() => setActivePass(null)}>
+        {activePass && (
           <View style={styles.sheetBody}>
             <View style={styles.passHeader}>
               <View style={[styles.sheetIcon, { backgroundColor: colors.goldTint }]}>
-                <AppIcon name={rewardIcon(passReward)} size={28} color={colors.gold} />
+                <AppIcon name={rewardIcon(activePass.reward)} size={28} color={colors.gold} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text variant="subhead" color={colors.ink}>
-                  {passReward.partnerName}
+                  {activePass.reward.partnerName}
                 </Text>
                 <Text variant="labelSm" color={colors.textSecondary}>
-                  {passReward.description}
+                  {activePass.reward.description}
                 </Text>
               </View>
-              <View style={[styles.activeBadge, { backgroundColor: colors.goldActive }]}>
-                <Text variant="labelSm" color={colors.ink} style={{ fontWeight: '700' }}>
-                  ACTIVE
+              {/* The badge reflects the pass's REAL state: a burned or aged-out
+                  pass must never present itself as ACTIVE at a register. */}
+              <View
+                style={[
+                  styles.activeBadge,
+                  { backgroundColor: passIsActive ? colors.goldActive : colors.track },
+                ]}
+              >
+                <Text
+                  variant="labelSm"
+                  color={passIsActive ? colors.ink : colors.textSecondary}
+                  style={{ fontWeight: '700' }}
+                >
+                  {passIsActive ? 'ACTIVE' : activePass.status.toUpperCase()}
                 </Text>
               </View>
             </View>
 
             <View style={[styles.qrBox, { borderColor: colors.borderCard, backgroundColor: colors.card }]}>
-              <AppIcon name="qr" size={96} color={colors.ink} />
-              <Text style={[Type.numInline, { color: colors.ink, letterSpacing: 3, marginTop: 10 }]}>
-                {passCode(passReward)}
-              </Text>
+              {passIsActive ? (
+                <>
+                  {/* A real, scannable encoding of the code itself — white
+                      quiet zone and dark modules regardless of theme, because
+                      scanners need the contrast, not the palette. */}
+                  <QRCode value={activePass.code} size={180} color="#000000" backgroundColor="#FFFFFF" />
+                  <Text style={[Type.numInline, { color: colors.ink, letterSpacing: 3, marginTop: 12 }]}>
+                    {formatRewardCode(activePass.code)}
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <AppIcon name="qr" size={72} color={colors.textTertiary} />
+                  <Text variant="label" color={colors.textSecondary} center style={{ marginTop: 10 }}>
+                    This pass can no longer be scanned.
+                  </Text>
+                </>
+              )}
             </View>
 
-            {passReward.expiryDate && (
-              <Text variant="labelSm" color={colors.textTertiary} center style={{ marginTop: Spacing.md }}>
-                Expires {new Date(`${passReward.expiryDate}T00:00:00`).toLocaleDateString()}
+            <Text variant="labelSm" color={colors.textTertiary} center style={{ marginTop: Spacing.md }}>
+              {describePassExpiry(activePass.status, activePass.expiresAt)}
+            </Text>
+            {passIsActive && (
+              <Text variant="labelSm" color={colors.textTertiary} center style={{ marginTop: 4 }}>
+                Show this pass at the register. Staff will scan the code, or enter it by hand.
               </Text>
             )}
-            <Text variant="labelSm" color={colors.textTertiary} center style={{ marginTop: 4 }}>
-              Show this pass at the register. Staff will scan or enter the code.
-            </Text>
 
             <View style={{ marginTop: Spacing.base }}>
-              <Button label="Done" variant="secondary" icon="check" onPress={() => setPassReward(null)} />
+              <Button label="Done" variant="secondary" icon="check" onPress={() => setActivePass(null)} />
             </View>
           </View>
         )}

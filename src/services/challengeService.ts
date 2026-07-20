@@ -63,10 +63,18 @@ type ChallengeRow = {
   end_date: string;
 };
 
-/** Derives upcoming/active/completed from the challenge's date window (local today). */
+/**
+ * Derives upcoming/active/completed from the challenge's date window.
+ *
+ * "Today" is the UTC calendar day, deliberately: the server sets `start_date`/
+ * `end_date` with Postgres `current_date` (UTC) and `get_challenge_standings`
+ * scores over UTC-midnight boundaries. Using the device's LOCAL day here made
+ * the label disagree with the scoring window on boundary days — a challenge
+ * created at 8pm UTC-7 read "upcoming" to its own creator for hours, and a
+ * user east of UTC saw "completed" while the window was still open.
+ */
 export function deriveStatus(startDate: string, endDate: string): ChallengeStatus {
-  const today = new Date();
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const todayStr = new Date().toISOString().slice(0, 10);
   if (todayStr < startDate) return 'upcoming';
   if (todayStr > endDate) return 'completed';
   return 'active';
@@ -77,34 +85,29 @@ async function currentUserId(): Promise<string | null> {
   return data.user?.id ?? null;
 }
 
+type ChallengeListRow = ChallengeRow & {
+  participant_count: number;
+  joined: boolean;
+  finalized_at: string | null;
+};
+
 /**
  * Lists all discoverable challenges with participant counts and whether the
- * signed-in user has joined. Reads are RLS-open for challenges/participants;
- * we aggregate counts client-side from the participant rows.
+ * signed-in user has joined.
+ *
+ * Counts are aggregated IN THE DATABASE by list_challenges_with_counts()
+ * (migration 0024). This previously ran `select challenge_id, user_id from
+ * challenge_participants` with no filter and no limit and counted in JS, which
+ * had two problems: the payload grew with total app usage, and — much worse —
+ * PostgREST's max_rows = 1000 would SILENTLY truncate past 1000 participant
+ * rows, quietly returning wrong counts and a wrong `joined` flag with no error.
  */
 export async function listChallenges(): Promise<ChallengeSummary[]> {
-  const userId = await currentUserId();
+  const { data, error } = await supabase.rpc('list_challenges_with_counts');
 
-  const [{ data: challenges, error: cErr }, { data: parts, error: pErr }] = await Promise.all([
-    supabase
-      .from('challenges')
-      .select('id, created_by, name, type, goal_type, stakes_text, duration_days, start_date, end_date')
-      .order('start_date', { ascending: false }),
-    supabase.from('challenge_participants').select('challenge_id, user_id'),
-  ]);
+  if (error) throw error;
 
-  if (cErr) throw cErr;
-  if (pErr) throw pErr;
-
-  const partRows = (parts ?? []) as { challenge_id: string; user_id: string }[];
-  const counts = new Map<string, number>();
-  const mine = new Set<string>();
-  for (const row of partRows) {
-    counts.set(row.challenge_id, (counts.get(row.challenge_id) ?? 0) + 1);
-    if (userId && row.user_id === userId) mine.add(row.challenge_id);
-  }
-
-  return ((challenges ?? []) as ChallengeRow[]).map((c) => ({
+  return ((data ?? []) as ChallengeListRow[]).map((c) => ({
     id: c.id,
     name: c.name,
     type: c.type,
@@ -115,8 +118,8 @@ export async function listChallenges(): Promise<ChallengeSummary[]> {
     endDate: c.end_date,
     createdBy: c.created_by,
     status: deriveStatus(c.start_date, c.end_date),
-    participantCount: counts.get(c.id) ?? 0,
-    joined: mine.has(c.id),
+    participantCount: Number(c.participant_count) || 0,
+    joined: !!c.joined,
   }));
 }
 

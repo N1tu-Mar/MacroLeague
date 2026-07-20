@@ -11,7 +11,7 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
 } from 'react-native-reanimated';
-import { Type, Radius, useTheme } from '../../theme';
+import { Radius, useTheme } from '../../theme';
 import AppIcon, { AppIconName } from './AppIcon';
 import Text from './Text';
 

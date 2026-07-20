@@ -15,6 +15,8 @@ import RewardsScreen from '../screens/main/RewardsScreen';
 import EditGoalsScreen from '../screens/main/EditGoalsScreen';
 import NotificationsSettingsScreen from '../screens/main/NotificationsSettingsScreen';
 import UniversitySettingsScreen from '../screens/main/UniversitySettingsScreen';
+import SocialAccountsScreen from '../screens/main/SocialAccountsScreen';
+import ChangePasswordScreen from '../screens/main/ChangePasswordScreen';
 import RuleSettingsScreen from '../screens/main/RuleSettingsScreen';
 import AppIcon, { AppIconName } from '../components/ui/AppIcon';
 import RotatingTrophy from '../components/animations/RotatingTrophy';
@@ -119,6 +121,8 @@ export default function MainNavigator() {
       <Stack.Screen name="RuleSettings" component={RuleSettingsScreen} />
       <Stack.Screen name="NotificationSettings" component={NotificationsSettingsScreen} />
       <Stack.Screen name="UniversitySettings" component={UniversitySettingsScreen} />
+      <Stack.Screen name="SocialAccounts" component={SocialAccountsScreen} />
+      <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
     </Stack.Navigator>
   );
 }

@@ -31,6 +31,10 @@ interface TextFieldProps {
   onRightIconPress?: () => void;
   style?: StyleProp<ViewStyle>;
   autoFocus?: boolean;
+  /** Called when the field loses focus — e.g. to normalize a pasted value. */
+  onBlur?: () => void;
+  /** Screen-reader name. Falls back to `label` when omitted. */
+  accessibilityLabel?: string;
 }
 
 /**
@@ -57,6 +61,8 @@ export default function TextField({
   onRightIconPress,
   style,
   autoFocus,
+  onBlur,
+  accessibilityLabel,
 }: TextFieldProps) {
   const { colors } = useTheme();
   const [focused, setFocused] = useState(false);
@@ -124,7 +130,11 @@ export default function TextField({
             editable={editable}
             autoFocus={autoFocus}
             onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
+            onBlur={() => {
+              setFocused(false);
+              onBlur?.();
+            }}
+            accessibilityLabel={accessibilityLabel ?? label}
             style={[
               Type.subhead,
               {

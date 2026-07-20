@@ -29,7 +29,30 @@ export function initMonitoring(): void {
     // always captured regardless of this rate.
     tracesSampleRate: 0.2,
     environment: __DEV__ ? 'development' : 'production',
+    // RELEASE + DIST ARE WHAT MAKE PRODUCTION STACK TRACES READABLE.
+    //
+    // Without them Sentry cannot associate an event with the uploaded source
+    // maps for that build, so every production crash arrives as minified frames
+    // (`t.a is not a function` at bundle.js:1:284915) and is effectively
+    // undebuggable. CI must upload source maps under the SAME release string —
+    // see the sourcemap step in .github/workflows/ci.yml.
+    //
+    // EXPO_PUBLIC_RELEASE is set by the build (e.g. "macroleague@1.0.0+42").
+    // When it is absent we fall back to the app version so events are at least
+    // grouped by version rather than lumped together.
+    release: releaseName(),
+    dist: process.env.EXPO_PUBLIC_BUILD_NUMBER || undefined,
   });
+}
+
+/** Stable release identifier shared by the client and the CI sourcemap upload. */
+export function releaseName(): string {
+  const explicit = process.env.EXPO_PUBLIC_RELEASE;
+  if (explicit) return explicit;
+
+  const version = process.env.EXPO_PUBLIC_APP_VERSION ?? '1.0.0';
+  const build = process.env.EXPO_PUBLIC_BUILD_NUMBER;
+  return build ? `macroleague@${version}+${build}` : `macroleague@${version}`;
 }
 
 /** Associate subsequent events with a user (opaque id only — never email/PII). */

@@ -7,6 +7,8 @@ export interface UserProfile {
   preferredDiningHall?: string | null;
   goalType: 'muscle' | 'lose_weight' | 'eat_cleaner' | 'just_track';
   avatarUrl: string | null;
+  /** IANA zone the backend buckets daily activity by; null until hydrated. */
+  timezone?: string | null;
   xp: number;
   level: number;
   streakCount: number;

@@ -445,3 +445,11 @@ verify_jwt = true
 # driven by a schedule and authenticated with the ACCOUNT_PURGE_SECRET function
 # secret via the `x-cron-secret` header, so verify_jwt is OFF (no user JWT).
 verify_jwt = false
+
+[functions.send-notifications]
+# Push delivery. NOT user-facing: it is driven by the hourly schedule in
+# migration 0023 and authenticated with the PUSH_NOTIFICATIONS_SECRET function
+# secret via the `x-cron-secret` header, so verify_jwt is OFF (no user JWT) —
+# the same posture as purge-accounts. Optional: EXPO_ACCESS_TOKEN, needed only
+# if the Expo project has Enhanced Security for Push Notifications enabled.
+verify_jwt = false

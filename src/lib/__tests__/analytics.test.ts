@@ -33,7 +33,8 @@ function loadAnalytics(env: Record<string, string | undefined>) {
     if (v === undefined) delete process.env[k];
     else process.env[k] = v;
   }
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  // A fresh require() is the point here: the module reads its keys from
+  // process.env at import time, so each case needs a new module instance.
   return require('../analytics');
 }
 
