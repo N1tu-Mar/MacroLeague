@@ -120,6 +120,15 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'Not authenticated.' }, 401);
   }
 
+  // Cheapest possible rejection: trust the declared Content-Length first, so an
+  // oversized body is refused BEFORE it is buffered into the isolate's memory.
+  // Content-Length is client-supplied and may lie, hence the authoritative
+  // re-check after reading below. Mirrors `chat/index.ts`.
+  const declaredLength = Number(req.headers.get('Content-Length') ?? '0');
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
+    return json({ error: 'Request is too large.' }, 413);
+  }
+
   // Authoritative size check before buffering the JSON — mirrors `chat`.
   // Without it an authenticated caller could force the function to buffer an
   // arbitrarily large body before the query gets sliced to MAX_QUERY_LEN.

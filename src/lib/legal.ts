@@ -28,7 +28,7 @@ export const WEB_ORIGIN = (
 ).replace(/\/+$/, '');
 
 export const SUPPORT_EMAIL =
-  process.env.EXPO_PUBLIC_SUPPORT_EMAIL ?? 'support@macroleague.app';
+  process.env.EXPO_PUBLIC_SUPPORT_EMAIL ?? 'nityanth.maramreddy@gmail.com';
 
 export const PRIVACY_URL = `${WEB_ORIGIN}/privacy-policy.html`;
 

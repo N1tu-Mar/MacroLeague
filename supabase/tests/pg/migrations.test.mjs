@@ -182,6 +182,107 @@ try{
   again[0]?.already_finalized===true ? ok('finalization is idempotent') : bad('idempotency', JSON.stringify(again));
 }catch(e){bad('challenge suite threw', e.message);}
 
+console.log('\n== meal_logs insert guard (migration 0027) ==');
+try{
+  const dave = await mk('dave');
+  // The time expression is inlined (test-only, fixed values) so the DB evaluates
+  // it — binding it as a parameter would send a literal string, not an expr.
+  const insMeal = (uid, whenExpr) => q(
+    `insert into public.meal_logs(user_id,free_text,calories,protein_g,carbs_g,fat_g,quantity,meal_type,eaten_at,client_request_id)
+     values ($1,'chicken',300,40,10,5,1,'lunch', ${whenExpr}, gen_random_uuid())`,
+    [uid]);
+
+  // In-window inserts (now, and yesterday) succeed.
+  await insMeal(dave, 'now()');
+  ok('accepts a meal logged now');
+  try { await insMeal(dave, "now() - interval '1 day'"); ok('accepts a meal backdated to yesterday'); }
+  catch(e){ bad('rejected an in-window yesterday meal', e.message); }
+
+  // Out-of-window inserts are rejected (the fake-day farming vector).
+  try { await insMeal(dave, "now() + interval '3 days'"); bad('ACCEPTED a future-dated meal (streak-farming vector open)',''); }
+  catch(e){ /future/.test(e.message) ? ok('rejects a future-dated meal') : bad('future meal rejected for the wrong reason', e.message); }
+  try { await insMeal(dave, "now() - interval '5 days'"); bad('ACCEPTED a stale backdated meal (day-farming vector open)',''); }
+  catch(e){ /too far in the past/.test(e.message) ? ok('rejects a meal backdated beyond the window') : bad('stale meal rejected for the wrong reason', e.message); }
+
+  // Rolling-24h volume cap: a fresh user can log up to 40, the 41st is refused.
+  const eve = await mk('eve');
+  let capOk = true;
+  for (let i=0;i<40;i++){ try{ await insMeal(eve,'now()'); }catch(e){ capOk=false; bad(`cap rejected legit meal #${i+1}`, e.message); break; } }
+  if (capOk) ok('allows up to 40 meals in a rolling 24h');
+  try { await insMeal(eve,'now()'); bad('ACCEPTED a 41st meal (volume-farming vector open)',''); }
+  catch(e){ /daily meal log limit/.test(e.message) ? ok('rejects the 41st meal in 24h') : bad('41st rejected for the wrong reason', e.message); }
+}catch(e){bad('meal-guard suite threw', e.message);}
+
+console.log('\n== avatar_url host pinning (migration 0028) ==');
+try{
+  try { await q(`update public.profiles set avatar_url='https://api.dicebear.com/9.x/micah/png?seed=x' where id=$1`,[alice]);
+        ok('accepts a DiceBear avatar URL'); }
+  catch(e){ bad('rejected a legit DiceBear URL', e.message); }
+  try { await q(`update public.profiles set avatar_url='https://evil.example/px.gif' where id=$1`,[alice]);
+        bad('ACCEPTED an arbitrary-host avatar (tracking-pixel vector open)',''); }
+  catch(e){ /avatar_url_ok/.test(e.message) ? ok('rejects a non-DiceBear host') : bad('rejected for the wrong reason', e.message); }
+}catch(e){bad('avatar suite threw', e.message);}
+
+console.log('\n== deactivated-account freeze (migration 0028) ==');
+try{
+  const frank = await mk('frank');
+  const insFrank = (whenExpr) => q(
+    `insert into public.meal_logs(user_id,free_text,calories,protein_g,carbs_g,fat_g,quantity,meal_type,eaten_at,client_request_id)
+     values ($1,'x',300,40,10,5,1,'lunch', ${whenExpr}, gen_random_uuid())`,[frank]);
+  await insFrank('now()'); ok('active account can log a meal');
+  await q(`update public.profiles set deactivated_at=now() where id=$1`,[frank]);
+  try { await insFrank('now()'); bad('ACCEPTED a meal from a deactivated account',''); }
+  catch(e){ /deactivated/.test(e.message) ? ok('deactivated account cannot earn (meal insert blocked)') : bad('blocked for wrong reason', e.message); }
+
+  // redeem_reward refuses while deactivated.
+  const [{id:rw}] = await q(`insert into public.rewards(partner_name,description,points_cost) values ('P','desc',10) returning id`);
+  await q(`update public.profiles set points=1000, deactivated_at=now() where id=$1`,[frank]);
+  await as(frank);
+  try { await q(`select * from public.redeem_reward($1)`,[rw]); bad('deactivated account REDEEMED a reward',''); }
+  catch(e){ /deactivated/.test(e.message) ? ok('deactivated account cannot spend (redeem blocked)') : bad('redeem blocked for wrong reason', e.message); }
+}catch(e){bad('deactivated-freeze suite threw', e.message);}
+
+console.log('\n== challenge scoring bounded by join time (migration 0028) ==');
+try{
+  const grace = await mk('grace');
+  await as(alice);
+  const [{id:ch2}] = await q(`insert into public.challenges(created_by,name,type,goal_type,stakes_text,duration_days,start_date,end_date)
+    values ($1,'Scoped','solo','points','br',14,current_date-10,current_date+5) returning id`,[alice]);
+  // grace joins only recently (1h ago).
+  await q(`insert into public.challenge_participants(challenge_id,user_id,team_name,joined_at)
+           values ($1,$2,'A', now() - interval '1 hour')`,[ch2,grace]);
+  // One big delta BEFORE she joined (8 days ago), one small AFTER.
+  await q(`insert into public.gamification_events(user_id,event_type,source_type,leaderboard_delta,occurred_at)
+           values ($1,'meal_logged','meal_log',100, now() - interval '8 days')`,[grace]);
+  await q(`insert into public.gamification_events(user_id,event_type,source_type,leaderboard_delta,occurred_at)
+           values ($1,'meal_logged','meal_log',10, now())`,[grace]);
+  const st = await q(`select * from public.get_challenge_standings($1)`,[ch2]);
+  const g = st.find(r=>r.user_id===grace);
+  Number(g?.score)===10
+    ? ok('score counts only post-join activity (10, not 110)')
+    : bad('late-join credited with pre-join score', `score=${g?.score}`);
+}catch(e){bad('join-scoping suite threw', e.message);}
+
+console.log('\n== friend-feed metadata whitelist (migration 0028) ==');
+try{
+  // alice & bob are already accepted friends (feed suite above).
+  await q(`update public.profiles set activity_visibility='friends', deactivated_at=null where id=$1`,[bob]);
+  await q(`insert into public.gamification_events(user_id,event_type,source_type,points_delta,leaderboard_delta,metadata)
+           values ($1,'meal_logged','meal_log',25,25, $2::jsonb)`,
+    [bob, JSON.stringify({ protein_g: 150, calories: 2000, carbs_g: 200, goal_protein_g: 180, streak: 5 })]);
+  await as(alice);
+  const feed = await q(`select * from public.get_friend_activity_feed(50,null,null)`);
+  const row = feed.find(r=>r.metadata && r.metadata.streak===5);
+  if (!row) { bad('could not find the seeded event in the feed',''); }
+  else {
+    (row.metadata.protein_g===undefined && row.metadata.calories===undefined
+      && row.metadata.carbs_g===undefined && row.metadata.goal_protein_g===undefined)
+      ? ok('macro/goal numbers are stripped from feed metadata')
+      : bad('feed leaked diary macros', JSON.stringify(row.metadata));
+    row.metadata.streak===5 ? ok('display-safe keys (streak) are preserved') : bad('whitelist dropped a needed key', JSON.stringify(row.metadata));
+  }
+}catch(e){bad('feed-whitelist suite threw', e.message);}
+
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);
 // Non-zero exit so CI actually fails on a regression.
 if (fail > 0) process.exit(1);

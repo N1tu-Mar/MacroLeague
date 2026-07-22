@@ -58,7 +58,10 @@ Deno.serve(async (req: Request) => {
     .limit(BATCH_LIMIT);
 
   if (dueError) {
-    return new Response(JSON.stringify({ error: dueError.message }), {
+    // Log the real cause server-side only; never forward raw Postgres text
+    // (column/constraint names, internals) to the caller.
+    console.error('[purge-accounts] due-query failed:', dueError.message);
+    return new Response(JSON.stringify({ error: 'Internal error.' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });

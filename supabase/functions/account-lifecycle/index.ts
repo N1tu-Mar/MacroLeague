@@ -16,6 +16,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { corsHeadersFor, preflightResponse, rejectDisallowedOrigin } from '../_shared/cors.ts';
+import { consumeQuotas, rateLimitedResponse } from '../_shared/rateLimit.ts';
 
 /**
  * Best-effort transactional email. Only sends when RESEND_API_KEY is configured;
@@ -86,6 +87,24 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'Not authenticated.' }, 401);
   }
   const email = userData.user.email ?? null;
+
+  // Rate-limit BEFORE any account action — each deactivate/reactivate fires a
+  // real Resend email, so an unbounded loop burns email budget and, worse, can
+  // torch the sending domain's reputation for every user. The quota RPC
+  // (0020) is service-role only, so use a service-role client purely for that
+  // check; the lifecycle RPCs stay on the user-scoped client above.
+  // Fail-closed: consumeQuotas denies if the check itself errors.
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (serviceRoleKey) {
+    const admin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    const quota = await consumeQuotas(admin, userData.user.id, [
+      { bucket: 'lifecycle:daily', limit: 5, windowSeconds: 86400, label: 'account changes today' },
+      { bucket: 'lifecycle:burst', limit: 3, windowSeconds: 60, label: 'account changes this minute' },
+    ]);
+    if (!quota.allowed) return rateLimitedResponse(quota, corsHeaders);
+  }
 
   let payload: { action?: unknown };
   try {
